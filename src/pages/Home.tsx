@@ -96,11 +96,11 @@ export const Home: React.FC = () => {
         </div>
         
         <Container className="hero-content">
-          <Row className="align-items-top min-vh-100">
+          <Row className="align-items-center min-vh-100">
             <Col lg={6} className="text-white">
               <div className="fade-in">
-                <h1 className="text-hero mb-4">
-                  Adventure with <span className="text-forest">Confidence</span>
+                <h1 className="text-golden mb-4">
+                  Adventure with <span className="text-golden">Confidence</span>
                 </h1>
                 <p className="lead mb-5 text-hero">
                   upto is your premium safety companion for outdoor adventures. Create detailed plans, 

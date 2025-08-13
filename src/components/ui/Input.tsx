@@ -7,7 +7,7 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   inputGroupText?: string;
 }
 
-export const Input: React.FC<InputProps> = ({
+export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
   label,
   error,
   helperText,
@@ -15,12 +15,13 @@ export const Input: React.FC<InputProps> = ({
   className = '',
   id,
   ...props
-}) => {
+}, ref) => {
   const inputId = id || `input-${Math.random().toString(36).substr(2, 9)}`;
   const inputClasses = `form-control ${error ? 'is-invalid' : ''} ${className}`;
 
   const renderInput = () => (
     <input
+      ref={ref}
       id={inputId}
       className={inputClasses}
       {...props}
@@ -57,4 +58,6 @@ export const Input: React.FC<InputProps> = ({
       )}
     </div>
   );
-};
+});
+
+Input.displayName = 'Input';

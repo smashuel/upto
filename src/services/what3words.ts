@@ -3,21 +3,36 @@ import { What3WordsAddress, What3WordsLocation, What3WordsSuggestion, What3Words
 
 // Initialize What3words API
 // Note: In production, get API key from environment variables
-const W3W_API_KEY = import.meta.env.VITE_WHAT3WORDS_API_KEY || 'YOUR_API_KEY_HERE';
+const W3W_API_KEY = import.meta.env.VITE_WHAT3WORDS_API_KEY;
 
 class What3WordsService {
   private api: any;
   private cache: Map<string, any> = new Map();
   private readonly CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes
+  private isApiKeyValid: boolean = false;
+  private apiKeyChecked: boolean = false;
 
   constructor() {
-    this.api = what3words(W3W_API_KEY);
+    // Only initialize API if key is provided and not placeholder
+    if (W3W_API_KEY && W3W_API_KEY !== 'your_actual_api_key_here' && W3W_API_KEY.length > 10) {
+      this.api = what3words(W3W_API_KEY);
+      this.isApiKeyValid = true;
+    } else {
+      console.warn('What3Words API key not configured. Some features will be limited.');
+      this.isApiKeyValid = false;
+    }
   }
 
   /**
    * Convert coordinates to what3words address
    */
   async coordinatesToWords(lat: number, lng: number, language: string = 'en'): Promise<What3WordsAddress | null> {
+    // Return null gracefully if API key is not valid
+    if (!this.isApiKeyValid) {
+      console.debug('What3Words API not available - API key not configured');
+      return null;
+    }
+
     const cacheKey = `coords_${lat}_${lng}_${language}`;
     
     // Check cache first
@@ -37,6 +52,11 @@ class What3WordsService {
 
       if (response.error) {
         console.error('What3words API error:', response.error);
+        // If unauthorized, mark API key as invalid
+        if (response.error.code === 401) {
+          this.isApiKeyValid = false;
+          console.warn('What3Words API key is invalid or expired');
+        }
         return null;
       }
 
@@ -57,8 +77,12 @@ class What3WordsService {
       });
 
       return result;
-    } catch (error) {
-      console.error('Error converting coordinates to what3words:', error);
+    } catch (error: any) {
+      console.debug('What3Words service unavailable:', error.message);
+      // Mark API key as invalid on auth errors
+      if (error.message?.includes('Unauthorized') || error.message?.includes('401')) {
+        this.isApiKeyValid = false;
+      }
       return null;
     }
   }
@@ -67,6 +91,12 @@ class What3WordsService {
    * Convert what3words address to coordinates
    */
   async wordsToCoordinates(words: string, language: string = 'en'): Promise<What3WordsLocation | null> {
+    // Return null gracefully if API key is not valid
+    if (!this.isApiKeyValid) {
+      console.debug('What3Words API not available - API key not configured');
+      return null;
+    }
+
     const cacheKey = `words_${words}_${language}`;
     
     // Check cache first
@@ -103,8 +133,11 @@ class What3WordsService {
       });
 
       return result;
-    } catch (error) {
-      console.error('Error converting what3words to coordinates:', error);
+    } catch (error: any) {
+      console.debug('What3Words service unavailable:', error.message);
+      if (error.message?.includes('Unauthorized') || error.message?.includes('401')) {
+        this.isApiKeyValid = false;
+      }
       return null;
     }
   }
@@ -120,6 +153,12 @@ class What3WordsService {
     language?: string;
   }): Promise<What3WordsSuggestion[]> {
     if (!input || input.length < 3) return [];
+    
+    // Return empty array gracefully if API key is not valid
+    if (!this.isApiKeyValid) {
+      console.debug('What3Words API not available - API key not configured');
+      return [];
+    }
 
     try {
       const response = await this.api.autosuggest({
@@ -145,8 +184,11 @@ class What3WordsService {
         rank: suggestion.rank,
         language: suggestion.language
       }));
-    } catch (error) {
-      console.error('Error getting autosuggest:', error);
+    } catch (error: any) {
+      console.debug('What3Words service unavailable:', error.message);
+      if (error.message?.includes('Unauthorized') || error.message?.includes('401')) {
+        this.isApiKeyValid = false;
+      }
       return [];
     }
   }
@@ -252,19 +294,53 @@ class What3WordsService {
   }
 
   /**
-   * Check if API is available (for offline detection)
+   * Check if API is available and configured correctly
    */
   async isApiAvailable(): Promise<boolean> {
+    if (!this.isApiKeyValid) {
+      return false;
+    }
+
     try {
       // Try a simple API call
       const response = await this.api.convertTo3wa({
         coordinates: { lat: 51.521251, lng: -0.203586 },
         format: 'json'
       });
-      return !response.error;
-    } catch (error) {
+      
+      if (response.error) {
+        if (response.error.code === 401) {
+          this.isApiKeyValid = false;
+        }
+        return false;
+      }
+      
+      return true;
+    } catch (error: any) {
+      if (error.message?.includes('Unauthorized') || error.message?.includes('401')) {
+        this.isApiKeyValid = false;
+      }
       return false;
     }
+  }
+
+  /**
+   * Get API configuration status
+   */
+  getApiStatus(): { configured: boolean; available: boolean; message: string } {
+    if (!this.isApiKeyValid) {
+      return {
+        configured: false,
+        available: false,
+        message: 'What3Words API key is not configured or invalid. Location features will use coordinates only.'
+      };
+    }
+
+    return {
+      configured: true,
+      available: true,
+      message: 'What3Words API is configured and available.'
+    };
   }
 }
 

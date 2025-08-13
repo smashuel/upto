@@ -26,7 +26,7 @@ export const Header: React.FC = () => {
           <img 
             src="/Fresh Teal Logo for Upto with Aqua Accents (1).png" 
             alt="upto Logo" 
-            height="80"
+            height="160"
           />
         </Navbar.Brand>
 

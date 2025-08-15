@@ -1,8 +1,9 @@
 import React from 'react';
-import { Row, Col, Form } from 'react-bootstrap';
+import { Row, Col, Form, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { useFormContext } from 'react-hook-form';
-import { Mountain, Compass, AlertTriangle, MapPin } from 'lucide-react';
+import { Mountain, Compass, MapPin, Clock, Info, BookOpen } from 'lucide-react';
 import { Input, Card } from '../ui';
+import { GuidePaceEstimator } from '../guidepace/GuidePaceEstimator';
 
 const ACTIVITY_TYPES = [
   { value: 'hiking', label: 'Hiking', icon: Mountain },
@@ -13,18 +14,38 @@ const ACTIVITY_TYPES = [
   { value: 'other', label: 'Other', icon: MapPin },
 ];
 
-const DIFFICULTY_LEVELS = [
-  { value: 'easy', label: 'Easy', description: 'Suitable for beginners, low risk', color: 'success' },
-  { value: 'moderate', label: 'Moderate', description: 'Some experience required, moderate risk', color: 'warning' },
-  { value: 'difficult', label: 'Difficult', description: 'Experienced adventurers, higher risk', color: 'danger' },
-  { value: 'extreme', label: 'Extreme', description: 'Experts only, very high risk', color: 'dark' },
-];
 
 export const AdventureBasicsStep: React.FC = () => {
   const { register, watch, formState: { errors } } = useFormContext();
   
   const activityType = watch('activityType');
-  const difficulty = watch('difficulty');
+  const useGuidePace = watch('useGuidePace');
+
+  const guidePaceTooltip = (
+    <Tooltip id="guidepace-tooltip" className="custom-tooltip">
+      <div style={{ textAlign: 'left', maxWidth: '320px' }}>
+        <div className="fw-bold mb-2">
+          <Mountain size={16} className="me-2" />
+          Professional Time Estimation
+        </div>
+        <div className="small mb-2">
+          Based on proven mountain guide methodology
+        </div>
+        <div className="small mb-2">
+          <div>✓ Munter Method - hiking & skiing terrain</div>
+          <div>✓ Chauvin System - scrambling & snow climbing</div>
+          <div>✓ Technical System - roped climbing</div>
+        </div>
+        <div className="small mb-2">
+          Used by IFMGA guides worldwide for accurate time planning and safety management.
+        </div>
+        <div className="small text-decoration-underline d-flex align-items-center">
+          <BookOpen size={14} className="me-1" />
+          Learn more about GuidePace
+        </div>
+      </div>
+    </Tooltip>
+  );
 
   return (
     <div>
@@ -74,7 +95,7 @@ export const AdventureBasicsStep: React.FC = () => {
 
         <Col md={6}>
           <Card variant="step" className="h-100">
-            <h5 className="h6 mb-3">Activity & Risk Level</h5>
+            <h5 className="h6 mb-3">Activity Type</h5>
             
             <div className="mb-3">
               <Form.Label>Activity Type</Form.Label>
@@ -108,42 +129,46 @@ export const AdventureBasicsStep: React.FC = () => {
               </div>
             </div>
 
-            <div className="mb-3">
-              <Form.Label>Difficulty Level</Form.Label>
-              <div className="d-grid gap-2">
-                {DIFFICULTY_LEVELS.map((level) => (
-                  <div key={level.value}>
-                    <Form.Check
-                      type="radio"
-                      id={`difficulty-${level.value}`}
-                      value={level.value}
-                      {...register('difficulty')}
-                      className="d-none"
-                    />
-                    <Form.Label
-                      htmlFor={`difficulty-${level.value}`}
-                      className={`card p-3 cursor-pointer border transition-all ${
-                        difficulty === level.value 
-                          ? `border-${level.color} bg-${level.color} text-white shadow-sm` 
-                          : 'border-light bg-light text-dark'
-                      }`}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <div className="d-flex align-items-center">
-                        <AlertTriangle size={16} className="me-2" />
-                        <div>
-                          <div className="fw-medium">{level.label}</div>
-                          <div className="small opacity-75">{level.description}</div>
-                        </div>
-                      </div>
-                    </Form.Label>
-                  </div>
-                ))}
+          </Card>
+        </Col>
+      </Row>
+
+      {/* GuidePace Professional Time Estimation */}
+      <Row className="mt-4">
+        <Col>
+          <Card variant="step">
+            <div className="d-flex align-items-start">
+              <Form.Check
+                type="checkbox"
+                id="useGuidePace"
+                {...register('useGuidePace')}
+                className="me-3 mt-1"
+              />
+              <div className="flex-grow-1">
+                <div className="d-flex align-items-center mb-2">
+                  <Form.Label htmlFor="useGuidePace" className="fw-medium mb-0 cursor-pointer d-flex align-items-center" style={{ cursor: 'pointer' }}>
+                    <Clock size={20} className="me-2 text-primary" />
+                    Use Professional Time Estimation (GuidePace)
+                  </Form.Label>
+                  <OverlayTrigger
+                    placement="top"
+                    delay={{ show: 250, hide: 400 }}
+                    overlay={guidePaceTooltip}
+                  >
+                    <Info size={16} className="ms-2 text-muted cursor-pointer" style={{ cursor: 'pointer' }} />
+                  </OverlayTrigger>
+                </div>
+                <p className="text-muted mb-0 small">
+                  Get guide-quality time estimates based on terrain analysis. Perfect for planning realistic schedules and sharing accurate ETAs with your safety contacts.
+                </p>
               </div>
             </div>
           </Card>
         </Col>
       </Row>
+
+      {/* GuidePace Professional Time Estimation System */}
+      <GuidePaceEstimator isVisible={useGuidePace} />
     </div>
   );
 };

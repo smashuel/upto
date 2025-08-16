@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Form, InputGroup, Button, Dropdown, Alert, Spinner } from 'react-bootstrap';
+import { Form, InputGroup, Button, Alert, Spinner } from 'react-bootstrap';
 import { MapPin, Copy, CheckCircle, AlertTriangle, Navigation, Globe } from 'lucide-react';
 import what3wordsService from '../../services/what3words';
 import { What3WordsLocation, What3WordsSuggestion, LocationInputType } from '../../types/what3words';
@@ -232,8 +232,8 @@ export const What3wordsInput: React.FC<What3wordsInputProps> = ({
 
   const getInputTypeIcon = () => {
     return inputType === 'what3words' ? 
-      <Globe className="text-primary" size={16} title="what3words address" /> :
-      <Navigation className="text-secondary" size={16} title="GPS coordinates" />;
+      <Globe className="text-primary" size={16} /> :
+      <Navigation className="text-secondary" size={16} />;
   };
 
   return (

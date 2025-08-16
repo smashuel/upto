@@ -1,5 +1,5 @@
 import what3words from '@what3words/api';
-import { What3WordsAddress, What3WordsLocation, What3WordsSuggestion, What3WordsError } from '../types/what3words';
+import { What3WordsAddress, What3WordsLocation, What3WordsSuggestion } from '../types/what3words';
 
 // Initialize What3words API
 // Note: In production, get API key from environment variables
@@ -10,7 +10,6 @@ class What3WordsService {
   private cache: Map<string, any> = new Map();
   private readonly CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes
   private isApiKeyValid: boolean = false;
-  private apiKeyChecked: boolean = false;
 
   constructor() {
     // Only initialize API if key is provided and not placeholder

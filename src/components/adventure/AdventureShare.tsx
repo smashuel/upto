@@ -210,7 +210,7 @@ export const AdventureShare: React.FC<AdventureShareProps> = ({ adventure, onClo
                   <Button variant="highland" icon={Mail} onClick={handleEmailShare}>
                     Email
                   </Button>
-                  <Button variant="forest" icon={MessageSquare} onClick={handleWhatsAppShare}>
+                  <Button variant="success" icon={MessageSquare} onClick={handleWhatsAppShare}>
                     WhatsApp
                   </Button>
                   <Button variant="sky" icon={Smartphone} onClick={handleSMSShare}>

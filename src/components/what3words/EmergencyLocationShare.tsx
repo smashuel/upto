@@ -176,9 +176,9 @@ export const EmergencyLocationShare: React.FC<EmergencyLocationShareProps> = ({
         </Modal.Title>
         <div className="ms-auto d-flex align-items-center">
           {apiAvailable ? (
-            <Wifi size={20} className="text-success" title="Online" />
+            <Wifi size={20} className="text-success" />
           ) : (
-            <WifiOff size={20} className="text-warning" title="Offline" />
+            <WifiOff size={20} className="text-warning" />
           )}
         </div>
       </Modal.Header>
@@ -186,7 +186,7 @@ export const EmergencyLocationShare: React.FC<EmergencyLocationShareProps> = ({
       <Modal.Body className="p-4">
         {isLoading ? (
           <div className="text-center py-5">
-            <Spinner animation="border" size="lg" className="text-danger" />
+            <Spinner animation="border" size="sm" className="text-danger" />
             <div className="mt-3">
               <h5>Getting your current location...</h5>
               <p className="text-muted">This may take a few seconds</p>

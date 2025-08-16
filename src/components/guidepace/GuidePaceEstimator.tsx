@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, Collapse, Button } from 'react-bootstrap';
-import { ChevronDown, ChevronUp, Search, Clock, Settings } from 'lucide-react';
+import { ChevronDown, ChevronUp, Search, Settings } from 'lucide-react';
 import { RouteAnalyzer, RouteData, RouteSegment } from '../../utils/RouteAnalyzer';
 import { TimeCalculator, PaceFactors } from '../../utils/TimeCalculator';
 import { RouteBreakdown } from './RouteBreakdown';
@@ -66,7 +66,7 @@ export const GuidePaceEstimator: React.FC<GuidePaceEstimatorProps> = ({
   }
 
   return (
-    <Card variant="step" className="border-primary bg-light mt-3">
+    <Card className="border-primary bg-light mt-3">
       <div className="d-flex align-items-center mb-3">
         <Search size={20} className="me-2 text-primary" />
         <h5 className="h6 mb-0 text-primary">Route Analysis (Powered by GuidePace)</h5>

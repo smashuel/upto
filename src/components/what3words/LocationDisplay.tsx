@@ -85,21 +85,21 @@ export const LocationDisplay: React.FC<LocationDisplayProps> = ({
           card: 'p-2',
           primary: 'h6 mb-1',
           secondary: 'small',
-          button: 'btn-sm'
+          button: 'sm' as const
         };
       case 'lg':
         return {
           card: 'p-4',
           primary: 'h3 mb-2',
           secondary: 'h6',
-          button: 'btn-lg'
+          button: 'sm' as const
         };
       default:
         return {
           card: 'p-3',
           primary: 'h5 mb-2',
           secondary: '',
-          button: ''
+          button: 'sm' as const
         };
     }
   };
@@ -149,7 +149,7 @@ export const LocationDisplay: React.FC<LocationDisplayProps> = ({
               {what3wordsText && (
                 <Button
                   variant="danger"
-                  size="lg"
+                  size="sm"
                   onClick={() => copyToClipboard(what3wordsText, 'what3words')}
                   className="fw-bold"
                 >
@@ -160,7 +160,7 @@ export const LocationDisplay: React.FC<LocationDisplayProps> = ({
               
               <Button
                 variant="outline-danger"
-                size="lg"
+                size="sm"
                 onClick={() => copyToClipboard(coordinateText, 'coordinates')}
               >
                 <Navigation size={20} className="me-2" />

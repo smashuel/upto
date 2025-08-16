@@ -35,8 +35,6 @@ export class RouteAnalyzer {
    * Analyze route data and break into segments with time estimates
    */
   static analyzeRoute(routeData: RouteData, paceFactors: PaceFactors): RouteSegment[] {
-    const segments: RouteSegment[] = [];
-
     // Determine if this is a technical climbing route
     if (this.isTechnicalClimbing(routeData)) {
       return this.analyzeTechnicalRoute(routeData, paceFactors);

@@ -3,10 +3,10 @@ import { useParams } from 'react-router-dom';
 import { Container, Row, Col, Alert } from 'react-bootstrap';
 import { 
   MapPin, Clock, Users, Shield, CheckCircle, AlertTriangle, 
-  Phone, Mail, Calendar, Route, Mountain, Activity, Info 
+  Phone, Mail, Calendar, Mountain, Activity, Info 
 } from 'lucide-react';
 import { Card, Button } from '../components/ui';
-import { Adventure, CheckIn } from '../types/adventure';
+import { Adventure } from '../types/adventure';
 import { MapSelector } from '../components/map/MapSelector';
 
 export const PublicAdventureView: React.FC = () => {
@@ -285,9 +285,6 @@ export const PublicAdventureView: React.FC = () => {
                   <div style={{ height: '300px' }} className="map-container">
                     <MapSelector
                       center={adventure.location.coordinates}
-                      waypoints={adventure.activities[0]?.route?.waypoints || []}
-                      readOnly={true}
-                      showRoute={true}
                     />
                   </div>
                 </div>
@@ -380,10 +377,10 @@ export const PublicAdventureView: React.FC = () => {
                   </div>
                   <div className="d-flex gap-2">
                     <Button variant="outline-secondary" size="sm" icon={Phone} 
-                      onClick={() => window.open(`tel:${contact.phone}`)}>
+                      onClick={() => window.open(`tel:${contact.phone}`)}>Call
                     </Button>
                     <Button variant="outline-secondary" size="sm" icon={Mail} 
-                      onClick={() => window.open(`mailto:${contact.email}`)}>
+                      onClick={() => window.open(`mailto:${contact.email}`)}>Email
                     </Button>
                   </div>
                 </div>

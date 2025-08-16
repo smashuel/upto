@@ -105,9 +105,28 @@ export const CreateAdventure: React.FC = () => {
             estimatedTime: new Date(wp.estimatedTime),
           })) } : undefined,
         }],
-        emergencyContacts: data.emergencyContacts,
+        emergencyContacts: data.emergencyContacts.map(contact => ({
+          ...contact,
+          notificationPreferences: {
+            email: true,
+            sms: true,
+            immediateAlerts: true,
+            dailyUpdates: false,
+          }
+        })),
         checkInInterval: data.checkInInterval,
         status: 'planned',
+        visibility: 'contacts-only',
+        shareToken: crypto.randomUUID(),
+        checkIns: [],
+        notifications: {
+          checkInReminders: true,
+          emergencyEscalation: true,
+          adventureUpdates: true,
+          contactNotifications: true,
+          escalationTimeHours: 2,
+          reminderIntervalMinutes: 30,
+        },
         createdAt: new Date(),
         updatedAt: new Date(),
       };

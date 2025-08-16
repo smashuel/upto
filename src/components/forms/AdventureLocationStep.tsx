@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Row, Col, Alert, Form } from 'react-bootstrap';
+import { Row, Col, Alert } from 'react-bootstrap';
 import { useFormContext } from 'react-hook-form';
 import { MapPin, Navigation, CheckCircle, Globe, Info, AlertTriangle } from 'lucide-react';
 import { Input, Card } from '../ui';
@@ -9,12 +9,10 @@ import { LocationDisplay } from '../what3words/LocationDisplay';
 import { What3WordsLocation } from '../../types/what3words';
 
 export const AdventureLocationStep: React.FC = () => {
-  const { register, setValue, watch, formState: { errors } } = useFormContext();
-  const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number; address: string } | null>(null);
+  const { register, setValue, watch } = useFormContext();
   const [primaryLocation, setPrimaryLocation] = useState<What3WordsLocation | null>(null);
   const [parkingLocation, setParkingLocation] = useState<What3WordsLocation | null>(null);
   const [emergencyExitLocation, setEmergencyExitLocation] = useState<What3WordsLocation | null>(null);
-  const location = watch('location');
 
   const handleLocationUpdate = (locationType: 'primary' | 'parking' | 'emergency', location: What3WordsLocation | null) => {
     switch (locationType) {
@@ -87,7 +85,6 @@ export const AdventureLocationStep: React.FC = () => {
                     required: 'Location name is required',
                     minLength: { value: 3, message: 'Location name must be at least 3 characters' }
                   })}
-                  error={errors.location?.name?.message as string}
                   helperText="Give your adventure location a descriptive name"
                 />
               </Col>
@@ -199,7 +196,7 @@ export const AdventureLocationStep: React.FC = () => {
                 [primaryLocation.coordinates.lat, primaryLocation.coordinates.lng] : 
                 undefined
               }
-              onLocationSelect={(lat, lng, address) => {
+              onLocationSelect={(lat, lng) => {
                 const location: What3WordsLocation = {
                   coordinates: { lat, lng },
                   // Note: In a real implementation, you'd convert these coordinates to what3words
@@ -226,7 +223,6 @@ export const AdventureLocationStep: React.FC = () => {
                   description: emergencyExitLocation.words ? `///${emergencyExitLocation.words}` : 'Emergency access point'
                 }] : [])
               ]}
-              showRoute={true}
             />
             
             <div className="mt-3 small text-muted">

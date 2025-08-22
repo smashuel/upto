@@ -1,18 +1,81 @@
-import React, { useState } from 'react';
-import { Row, Col, Alert } from 'react-bootstrap';
+import React, { useState, useEffect } from 'react';
+import { Row, Col, Alert, Spinner, Badge } from 'react-bootstrap';
 import { useFormContext } from 'react-hook-form';
-import { MapPin, Navigation, CheckCircle, Globe, Info, AlertTriangle } from 'lucide-react';
-import { Input, Card } from '../ui';
+import { MapPin, Navigation, CheckCircle, Globe, Info, AlertTriangle, Route, TrendingUp, Star } from 'lucide-react';
+import { Input, Card, Button } from '../ui';
 import { MapSelector } from '../map/MapSelector';
 import { What3wordsInput } from '../what3words/What3wordsInput';
 import { LocationDisplay } from '../what3words/LocationDisplay';
 import { What3WordsLocation } from '../../types/what3words';
+import { GlobalTrailService, TrailSuggestion } from '../../services/GlobalTrailService';
 
 export const TripLinkLocationStep: React.FC = () => {
   const { register, setValue, watch } = useFormContext();
   const [primaryLocation, setPrimaryLocation] = useState<What3WordsLocation | null>(null);
   const [parkingLocation, setParkingLocation] = useState<What3WordsLocation | null>(null);
   const [emergencyExitLocation, setEmergencyExitLocation] = useState<What3WordsLocation | null>(null);
+  
+  // Route suggestion state
+  const [routeSuggestions, setRouteSuggestions] = useState<TrailSuggestion[]>([]);
+  const [isLoadingRoutes, setIsLoadingRoutes] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<TrailSuggestion | null>(null);
+  
+  const formData = watch();
+  const trailService = new GlobalTrailService();
+
+  // Auto-suggest routes when trip title and activity type are available
+  useEffect(() => {
+    const triggerRouteSuggestion = async () => {
+      if (formData.title && formData.activityType && formData.title.length > 3) {
+        setIsLoadingRoutes(true);
+        setShowSuggestions(true);
+        
+        try {
+          const suggestions = await trailService.suggestRoute({
+            title: formData.title,
+            activityType: formData.activityType,
+            location: formData.location?.name
+          });
+          
+          setRouteSuggestions(suggestions);
+        } catch (error) {
+          console.error('Error fetching route suggestions:', error);
+          setRouteSuggestions([]);
+        } finally {
+          setIsLoadingRoutes(false);
+        }
+      }
+    };
+
+    const debounceTimer = setTimeout(triggerRouteSuggestion, 1000);
+    return () => clearTimeout(debounceTimer);
+  }, [formData.title, formData.activityType, formData.location?.name]);
+
+  const handleSuggestionSelect = (suggestion: TrailSuggestion) => {
+    setSelectedSuggestion(suggestion);
+    
+    // Auto-fill location data from suggestion
+    setValue('location.name', suggestion.name);
+    
+    if (suggestion.location.coordinates) {
+      const [lng, lat] = suggestion.location.coordinates;
+      const location: What3WordsLocation = {
+        coordinates: { lat, lng },
+        nearestPlace: suggestion.location.name
+      };
+      handleLocationUpdate('primary', location);
+    }
+    
+    // Set route metadata if available
+    if (suggestion.waypoints && suggestion.waypoints.length > 0) {
+      setValue('waypoints', suggestion.waypoints.map(wp => ({
+        name: wp.name,
+        coordinates: wp.coordinates,
+        estimatedTime: new Date().toISOString() // Default time - would be calculated properly
+      })));
+    }
+  };
 
   const handleLocationUpdate = (locationType: 'primary' | 'parking' | 'emergency', location: What3WordsLocation | null) => {
     switch (locationType) {
@@ -49,6 +112,108 @@ export const TripLinkLocationStep: React.FC = () => {
           Use what3words addresses for precise location sharing with emergency contacts and services.
         </p>
       </div>
+
+      {/* Route Suggestions Section */}
+      {showSuggestions && (formData.title && formData.activityType) && (
+        <Row className="mb-4">
+          <Col>
+            <Card>
+              <h5 className="h6 mb-3">
+                <Route className="me-2 text-primary" size={20} />
+                Suggested Routes for "{formData.title}"
+              </h5>
+              
+              {isLoadingRoutes ? (
+                <div className="text-center py-4">
+                  <Spinner animation="border" size="sm" className="me-2" />
+                  Searching global trail databases...
+                </div>
+              ) : routeSuggestions.length > 0 ? (
+                <div>
+                  <p className="text-muted small mb-3">
+                    Found {routeSuggestions.length} potential route matches from global trail databases
+                  </p>
+                  
+                  <Row className="g-3">
+                    {routeSuggestions.map((suggestion) => (
+                      <Col key={suggestion.id} md={6} lg={4}>
+                        <div 
+                          className={`suggestion-card p-3 border rounded cursor-pointer ${
+                            selectedSuggestion?.id === suggestion.id ? 'border-primary bg-primary bg-opacity-10' : 'border'
+                          }`}
+                          style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+                          onClick={() => handleSuggestionSelect(suggestion)}
+                        >
+                          <div className="d-flex justify-content-between align-items-start mb-2">
+                            <h6 className="mb-1">{suggestion.name}</h6>
+                            <Badge 
+                              bg={suggestion.confidence > 0.8 ? 'success' : 'warning'} 
+                              className="ms-2"
+                            >
+                              {Math.round(suggestion.confidence * 100)}%
+                            </Badge>
+                          </div>
+                          
+                          <div className="small text-muted mb-2">
+                            <div className="d-flex align-items-center mb-1">
+                              <Globe size={12} className="me-1" />
+                              {suggestion.location.name}
+                            </div>
+                            <div className="d-flex align-items-center">
+                              <TrendingUp size={12} className="me-1" />
+                              Source: {suggestion.source.toUpperCase()}
+                            </div>
+                          </div>
+                          
+                          {suggestion.distance && (
+                            <div className="small">
+                              <strong>Distance:</strong> {suggestion.distance}km
+                            </div>
+                          )}
+                          
+                          {suggestion.elevationGain && (
+                            <div className="small">
+                              <strong>Elevation:</strong> +{suggestion.elevationGain}m
+                            </div>
+                          )}
+                          
+                          {suggestion.difficulty && (
+                            <div className="small">
+                              <strong>Difficulty:</strong> {suggestion.difficulty}
+                            </div>
+                          )}
+                          
+                          {suggestion.metadata?.userRating && (
+                            <div className="small d-flex align-items-center mt-1">
+                              <Star size={12} className="me-1" />
+                              {suggestion.metadata.userRating}/5
+                            </div>
+                          )}
+                        </div>
+                      </Col>
+                    ))}
+                  </Row>
+                  
+                  <div className="mt-3 text-center">
+                    <Button
+                      variant="outline-secondary"
+                      size="sm"
+                      onClick={() => setShowSuggestions(false)}
+                    >
+                      Continue with Manual Entry
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Alert variant="light">
+                  <Info size={16} className="me-2" />
+                  No exact route matches found. You can continue with manual location entry below.
+                </Alert>
+              )}
+            </Card>
+          </Col>
+        </Row>
+      )}
 
       {/* What3words info banner */}
       <Alert variant="info" className="mb-4">

@@ -159,6 +159,27 @@ export const TripOverviewStep: React.FC = () => {
                     </div>
                   </Col>
                 </Row>
+
+                <hr className="my-4" />
+
+                <h5 className="h6 mb-3 text-center">When does your trip start?</h5>
+                
+                <Row>
+                  <Col md={6} className="mx-auto">
+                    <Input
+                      label=""
+                      type="datetime-local"
+                      {...register('startDate', { 
+                        required: 'Start date and time is required'
+                      })}
+                      error={errors.startDate?.message as string}
+                    />
+
+                    <div className="form-text text-muted mt-3 text-center">
+                      Set when you plan to begin your trip. Duration will be calculated based on your route.
+                    </div>
+                  </Col>
+                </Row>
               </>
             )}
           </Card>

@@ -5,7 +5,6 @@ import { useForm, FormProvider } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { Button, Card } from '../components/ui';
 import { TripOverviewStep } from '../components/forms/TripOverviewStep';
-import { TripLinkScheduleStep } from '../components/forms/AdventureScheduleStep';
 import { TripLinkLocationStep } from '../components/forms/AdventureLocationStep';
 import { TripDetailsStep } from '../components/forms/TripDetailsStep';
 import { TripLinkContactsStep } from '../components/forms/AdventureContactsStep';
@@ -14,12 +13,11 @@ import { TripLinkShareLink } from '../components/adventure/AdventureShareLink';
 import type { Adventure } from '../types/adventure';
 
 const STEPS = [
-  { id: 1, title: 'Trip Overview', description: 'Select your activity type and name your trip' },
-  { id: 2, title: 'Schedule', description: 'Start time, duration, and check-ins' },
-  { id: 3, title: 'Location & Route', description: 'Where you\'re going and your planned route' },
-  { id: 4, title: 'Trip Details', description: 'Description and professional time estimation' },
-  { id: 5, title: 'Emergency Contacts', description: 'Who to notify in case of emergency' },
-  { id: 6, title: 'Review & Share', description: 'Preview your plan and generate share link' },
+  { id: 1, title: 'Trip Overview', description: 'Activity type, name, and start time' },
+  { id: 2, title: 'Location & Route', description: 'Where you\'re going and your planned route' },
+  { id: 3, title: 'Trip Details', description: 'Description and professional time estimation' },
+  { id: 4, title: 'Emergency Contacts', description: 'Who to notify in case of emergency' },
+  { id: 5, title: 'Review & Share', description: 'Preview your plan and generate share link' },
 ];
 
 interface TripLinkFormData {
@@ -65,18 +63,15 @@ export const CreateTripLink: React.FC = () => {
       
       switch (currentStep) {
         case 1: // Trip Overview
-          fieldsToValidate = ['activityType', 'title'];
+          fieldsToValidate = ['activityType', 'title', 'startDate'];
           break;
-        case 2: // Schedule
-          fieldsToValidate = ['startDate', 'endDate', 'checkInInterval'];
-          break;
-        case 3: // Location & Route
+        case 2: // Location & Route
           fieldsToValidate = ['location'];
           break;
-        case 4: // Trip Details
+        case 3: // Trip Details
           fieldsToValidate = ['description'];
           break;
-        case 5: // Emergency Contacts
+        case 4: // Emergency Contacts
           fieldsToValidate = ['emergencyContacts'];
           break;
         default:
@@ -103,13 +98,16 @@ export const CreateTripLink: React.FC = () => {
       // Generate TripLink ID
       const newTripLinkId = `triplink-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       
-      // Create TripLink object
+      // Create TripLink object with calculated end date (default 8 hours from start)
+      const startDate = new Date(data.startDate);
+      const defaultEndDate = new Date(startDate.getTime() + (8 * 60 * 60 * 1000)); // Add 8 hours
+
       const tripLink: Adventure = {
         id: newTripLinkId,
         title: data.title,
         description: data.description,
-        startDate: new Date(data.startDate),
-        endDate: new Date(data.endDate),
+        startDate: startDate,
+        endDate: defaultEndDate,
         location: {
           name: data.location,
           coordinates: data.waypoints[0]?.coordinates || [0, 0],
@@ -118,7 +116,7 @@ export const CreateTripLink: React.FC = () => {
           id: `activity-${Date.now()}`,
           type: data.activityType as any,
           name: data.title,
-          estimatedDuration: Math.ceil((new Date(data.endDate).getTime() - new Date(data.startDate).getTime()) / (1000 * 60)),
+          estimatedDuration: Math.ceil((defaultEndDate.getTime() - startDate.getTime()) / (1000 * 60)),
           difficulty: 'moderate' as any, // Default difficulty level
           equipment: [],
           route: data.waypoints.length > 0 ? { waypoints: data.waypoints.map(wp => ({
@@ -136,7 +134,7 @@ export const CreateTripLink: React.FC = () => {
             dailyUpdates: false,
           }
         })),
-        checkInInterval: data.checkInInterval,
+        checkInInterval: 24, // Default 24 hour check-in interval
         status: 'planned',
         visibility: 'contacts-only',
         shareToken: crypto.randomUUID(),
@@ -180,14 +178,12 @@ export const CreateTripLink: React.FC = () => {
       case 1:
         return <TripOverviewStep />;
       case 2:
-        return <TripLinkScheduleStep />;
-      case 3:
         return <TripLinkLocationStep />;
-      case 4:
+      case 3:
         return <TripDetailsStep />;
-      case 5:
+      case 4:
         return <TripLinkContactsStep />;
-      case 6:
+      case 5:
         return (
           <div className="space-y-4">
             <AdventurePreview formData={formData} />

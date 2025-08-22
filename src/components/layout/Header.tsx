@@ -10,7 +10,7 @@ export const Header: React.FC = () => {
 
   const navItems = [
     { path: '/', label: 'Home', icon: () => <img src="/location.png" alt="Home" style={{ width: '16px', height: '16px' }} /> },
-    { path: '/create', label: 'Create Adventure', icon: Plus },
+    { path: '/create', label: 'Create TripLink', icon: Plus },
     { path: '/profile', label: 'Profile', icon: User },
   ];
 
@@ -22,12 +22,15 @@ export const Header: React.FC = () => {
   return (
     <Navbar expand="lg" className="header" style={{backgroundColor: 'transparent', position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1000}} variant="light">
       <Container>
-        <Navbar.Brand as={Link} to="/" className="d-flex align-items-center text-decoration-none">
+        <Navbar.Brand as={Link} to="/" className="d-flex flex-column align-items-start text-decoration-none">
           <img 
             src="/Fresh Teal Logo for Upto with Aqua Accents (1).png" 
             alt="upto Logo" 
             height="160"
           />
+          <small className="text-muted mt-1" style={{ fontSize: '0.75rem', marginLeft: '10px' }}>
+            Outdoor Trip Planning – For recreationalists and professionals
+          </small>
         </Navbar.Brand>
 
         <Navbar.Toggle aria-controls="basic-navbar-nav" />

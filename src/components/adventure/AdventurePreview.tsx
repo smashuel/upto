@@ -9,7 +9,6 @@ interface AdventurePreviewProps {
     title: string;
     description: string;
     activityType: string;
-    difficulty: string;
     startDate: string;
     endDate: string;
     checkInInterval: number;
@@ -34,15 +33,6 @@ export const AdventurePreview: React.FC<AdventurePreviewProps> = ({ formData }) 
     }
   };
 
-  const getDifficultyVariant = () => {
-    switch (formData.difficulty) {
-      case 'easy': return 'success';
-      case 'moderate': return 'warning';
-      case 'difficult': return 'danger';
-      case 'extreme': return 'dark';
-      default: return 'secondary';
-    }
-  };
 
   return (
     <div>
@@ -65,9 +55,6 @@ export const AdventurePreview: React.FC<AdventurePreviewProps> = ({ formData }) 
                   <div className="d-flex gap-2">
                     <Badge bg="light" text="dark" className="text-capitalize">
                       {formData.activityType || 'Not specified'}
-                    </Badge>
-                    <Badge bg={getDifficultyVariant()}>
-                      {formData.difficulty || 'Not specified'}
                     </Badge>
                   </div>
                 </div>

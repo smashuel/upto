@@ -4,15 +4,15 @@ import { Share2, Copy, Check, ExternalLink } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Button, Card } from '../ui';
 
-interface AdventureShareLinkProps {
-  adventureId: string;
+interface TripLinkShareLinkProps {
+  tripLinkId: string;
 }
 
-export const AdventureShareLink: React.FC<AdventureShareLinkProps> = ({ adventureId }) => {
+export const TripLinkShareLink: React.FC<TripLinkShareLinkProps> = ({ tripLinkId }) => {
   const [copied, setCopied] = useState(false);
   
   // Generate the shareable link
-  const shareUrl = `${window.location.origin}/adventure/${adventureId}`;
+  const shareUrl = `${window.location.origin}/triplink/${tripLinkId}`;
 
   const handleCopyLink = async () => {
     try {
@@ -44,9 +44,9 @@ export const AdventureShareLink: React.FC<AdventureShareLinkProps> = ({ adventur
         <div className="text-center mb-4">
           <div className="share-link-container">
             <Share2 size={48} className="text-primary mb-3" />
-            <h5 className="mb-2">Your Adventure Plan is Ready!</h5>
+            <h5 className="mb-2">Your TripLink is Ready!</h5>
             <p className="text-muted mb-4">
-              Share this link with your emergency contacts so they can view your adventure details and track your progress.
+              Share this link with your emergency contacts so they can view your trip details and track your progress.
             </p>
             
             <InputGroup size="lg" className="mb-3">

@@ -3,7 +3,7 @@ import { Row, Col, Alert } from 'react-bootstrap';
 import { Users, Plus, Phone, Mail } from 'lucide-react';
 import { Card, Button } from '../ui';
 
-export const AdventureContactsStep: React.FC = () => {
+export const TripLinkContactsStep: React.FC = () => {
   return (
     <div>
       <div className="mb-4">

@@ -8,7 +8,7 @@ import { What3wordsInput } from '../what3words/What3wordsInput';
 import { LocationDisplay } from '../what3words/LocationDisplay';
 import { What3WordsLocation } from '../../types/what3words';
 
-export const AdventureLocationStep: React.FC = () => {
+export const TripLinkLocationStep: React.FC = () => {
   const { register, setValue, watch } = useFormContext();
   const [primaryLocation, setPrimaryLocation] = useState<What3WordsLocation | null>(null);
   const [parkingLocation, setParkingLocation] = useState<What3WordsLocation | null>(null);
@@ -67,13 +67,13 @@ export const AdventureLocationStep: React.FC = () => {
         </div>
       </Alert>
 
-      {/* Primary Adventure Location */}
+      {/* Primary Trip Location */}
       <Row className="mb-4">
         <Col>
           <Card variant="step">
             <h5 className="h6 mb-3">
               <MapPin className="me-2 text-primary" size={20} />
-              Primary Adventure Location
+              Primary Trip Location
             </h5>
             
             <Row>
@@ -85,7 +85,7 @@ export const AdventureLocationStep: React.FC = () => {
                     required: 'Location name is required',
                     minLength: { value: 3, message: 'Location name must be at least 3 characters' }
                   })}
-                  helperText="Give your adventure location a descriptive name"
+                  helperText="Give your trip location a descriptive name"
                 />
               </Col>
               <Col md={6}>
@@ -95,7 +95,7 @@ export const AdventureLocationStep: React.FC = () => {
                   value={primaryLocation}
                   onChange={(location) => handleLocationUpdate('primary', location)}
                   required={true}
-                  helpText="Main location where your adventure takes place"
+                  helpText="Main location where your trip takes place"
                   showCurrentLocation={true}
                 />
               </Col>
@@ -208,7 +208,7 @@ export const AdventureLocationStep: React.FC = () => {
                   id: 'primary',
                   position: [primaryLocation.coordinates.lat, primaryLocation.coordinates.lng] as [number, number],
                   title: 'Primary Location',
-                  description: primaryLocation.words ? `///${primaryLocation.words}` : 'Primary adventure location'
+                  description: primaryLocation.words ? `///${primaryLocation.words}` : 'Primary trip location'
                 }] : []),
                 ...(parkingLocation ? [{
                   id: 'parking',
@@ -245,7 +245,7 @@ export const AdventureLocationStep: React.FC = () => {
                   <li><strong>Share what3words addresses</strong> with your emergency contacts - they're more precise than regular addresses</li>
                   <li><strong>Save key locations</strong> like parking and emergency exits for quick access during emergencies</li>
                   <li><strong>Test pronunciation</strong> of what3words addresses - practice saying them clearly</li>
-                  <li><strong>Screenshot locations</strong> in case you lose cellular data during your adventure</li>
+                  <li><strong>Screenshot locations</strong> in case you lose cellular data during your trip</li>
                   <li><strong>Inform emergency services</strong> that you use what3words - most now support it</li>
                 </ul>
               </div>

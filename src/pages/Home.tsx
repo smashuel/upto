@@ -12,7 +12,7 @@ export const Home: React.FC = () => {
     {
       icon: Shield,
       title: 'Safety First',
-      description: 'Create detailed adventure plans with emergency contacts and automated check-in schedules.',
+      description: 'Create detailed TripLinks with emergency contacts and automated check-in schedules.',
       color: 'forest'
     },
     {
@@ -24,7 +24,7 @@ export const Home: React.FC = () => {
     {
       icon: Share2,
       title: 'Easy Sharing',
-      description: 'Send your adventure details to trusted contacts with a simple, shareable link.',
+      description: 'Send your trip details to trusted contacts with a simple, shareable TripLink.',
       color: 'sage'
     },
     {
@@ -42,7 +42,7 @@ export const Home: React.FC = () => {
     {
       icon: AlertCircle,
       title: 'Smart Alerts',
-      description: 'Automatic notifications when adventures exceed their planned duration or check-ins are missed.',
+      description: 'Automatic notifications when trips exceed their planned duration or check-ins are missed.',
       color: 'terracotta'
     },
   ];
@@ -51,7 +51,7 @@ export const Home: React.FC = () => {
     {
       name: "Sarah Chen",
       role: "Mountain Guide",
-      quote: "upto has become essential for my guiding business. My clients' families have peace of mind, and I can focus on the adventure.",
+      quote: "upto has become essential for my guiding business. My clients' families have peace of mind, and I can focus on the trip.",
       rating: 5,
       image: "🏔️"
     },
@@ -72,7 +72,7 @@ export const Home: React.FC = () => {
   ];
 
   const stats = [
-    { value: "10K+", label: "Adventures Planned" },
+    { value: "10K+", label: "TripLinks Created" },
     { value: "99.8%", label: "Successful Check-ins" },
     { value: "24/7", label: "Safety Monitoring" },
     { value: "50+", label: "Countries Served" }
@@ -99,18 +99,21 @@ export const Home: React.FC = () => {
           <Row className="align-items-center min-vh-100">
             <Col lg={6} className="text-white">
               <div className="fade-in">
-                <h1 className="text-golden mb-4">
-                  Adventure with <span className="text-golden">Confidence</span>
+                <h1 className="text-golden mb-3">
+                  Travel with <span className="text-golden">Confidence</span>
                 </h1>
+                <p className="h5 mb-4 text-light fw-normal" style={{ opacity: 0.9 }}>
+                  Outdoor Trip Planning – For recreationalists and professionals
+                </p>
                 <p className="lead mb-5 text-hero">
-                  upto is your premium safety companion for outdoor adventures. Create detailed plans, 
+                  upto is your premium safety companion for outdoor trips. Create detailed TripLinks, 
                   set automated check-ins, and keep your loved ones informed so you can focus 
-                  on what matters most—the adventure ahead.
+                  on what matters most—the journey ahead.
                 </p>
                 <div className="d-flex flex-column flex-sm-row gap-3">
                   <Link to="/create" className="text-decoration-none">
                     <Button variant="sunrise" size="lg" icon={Plus} className="w-100">
-                      Start Planning Your Adventure
+                      Create Your First TripLink
                     </Button>
                   </Link>
                   <Button variant="outline-light" size="lg" icon={ArrowRight} className="w-100">
@@ -183,11 +186,14 @@ export const Home: React.FC = () => {
         <Container>
           <Row className="text-center mb-5">
             <Col lg={8} className="mx-auto">
-              <h2 className="display-5 fw-bold mb-4 text-forest">
+              <h2 className="display-5 fw-bold mb-3 text-forest">
                 Why Choose upto?
               </h2>
+              <p className="h6 mb-4 text-muted fw-normal">
+                Outdoor Trip Planning – For recreationalists and professionals
+              </p>
               <p className="lead text-stone">
-                Every outdoor adventure carries inherent risks. upto bridges the gap between 
+                Every outdoor trip carries inherent risks. upto bridges the gap between 
                 independence and safety, giving you the freedom to explore while keeping 
                 your loved ones connected and informed.
               </p>
@@ -263,16 +269,16 @@ export const Home: React.FC = () => {
             <Col lg={8} className="mx-auto">
               <Zap className="mb-4 text-warning" size={64} />
               <h2 className="display-5 fw-bold mb-4 text-hero">
-                Ready to Adventure Safely?
+                Ready to Travel Safely?
               </h2>
               <p className="lead mb-5 text-light">
-                Join thousands of adventurers who trust upto to keep them connected. 
-                Create your first adventure plan in under 5 minutes.
+                Join thousands of travelers who trust upto to keep them connected. 
+                Create your first TripLink in under 5 minutes.
               </p>
               <div className="d-flex flex-column flex-sm-row gap-3 justify-content-center">
                 <Link to="/create" className="text-decoration-none">
                   <Button variant="light" size="lg" icon={Plus} className="shadow-lg">
-                    Create Your First Adventure
+                    Create Your First TripLink
                   </Button>
                 </Link>
                 <Button variant="outline-light" size="lg" icon={Users}>
@@ -292,15 +298,15 @@ export const Home: React.FC = () => {
               <Card className="card-adventure text-center">
                 <div className="p-5">
                   <img src="/location.png" alt="Location" style={{ width: '64px', height: '64px' }} className="mb-4" />
-                  <h3 className="fw-bold mb-3 text-charcoal">Your Adventures Await</h3>
+                  <h3 className="fw-bold mb-3 text-charcoal">Your TripLinks Await</h3>
                   <p className="text-stone mb-4">
-                    Once you create your first adventure plan, you'll see all your upcoming 
-                    and completed adventures here. Get started and take the first step 
+                    Once you create your first TripLink, you'll see all your upcoming 
+                    and completed trips here. Get started and take the first step 
                     toward safer outdoor exploration.
                   </p>
                   <Link to="/create">
                     <Button variant="adventure" size="lg" icon={Plus}>
-                      Create Your First Adventure
+                      Create Your First TripLink
                     </Button>
                   </Link>
                 </div>

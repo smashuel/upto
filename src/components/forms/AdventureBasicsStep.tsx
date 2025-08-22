@@ -15,7 +15,7 @@ const ACTIVITY_TYPES = [
 ];
 
 
-export const AdventureBasicsStep: React.FC = () => {
+export const TripLinkBasicsStep: React.FC = () => {
   const { register, watch, formState: { errors } } = useFormContext();
   
   const activityType = watch('activityType');
@@ -50,7 +50,7 @@ export const AdventureBasicsStep: React.FC = () => {
   return (
     <div>
       <div className="mb-4">
-        <h3 className="h4 mb-2">Adventure Details</h3>
+        <h3 className="h4 mb-2">TripLink Details</h3>
         <p className="text-muted">Tell us about your planned adventure</p>
       </div>
 
@@ -60,10 +60,10 @@ export const AdventureBasicsStep: React.FC = () => {
             <h5 className="h6 mb-3">Basic Information</h5>
             
             <Input
-              label="Adventure Title"
+              label="Trip Title"
               placeholder="e.g., Mount Washington Day Hike"
               {...register('title', { 
-                required: 'Adventure title is required',
+                required: 'Trip title is required',
                 minLength: { value: 3, message: 'Title must be at least 3 characters' }
               })}
               error={errors.title?.message as string}
@@ -74,7 +74,7 @@ export const AdventureBasicsStep: React.FC = () => {
               <Form.Control
                 as="textarea"
                 rows={4}
-                placeholder="Describe your planned adventure, route, and any important details..."
+                placeholder="Describe your planned trip, route, and any important details..."
                 {...register('description', {
                   required: 'Description is required',
                   minLength: { value: 10, message: 'Description must be at least 10 characters' }

@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import { Layout } from './components/layout/Layout';
 import { Home } from './pages/Home';
-import { CreateAdventure } from './pages/CreateAdventure';
+import { CreateTripLink } from './pages/CreateAdventure';
 import { ViewAdventure } from './pages/ViewAdventure';
 import { Profile } from './pages/Profile';
 import { NotFound } from './pages/NotFound';
@@ -26,8 +26,8 @@ function App() {
         <Layout>
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/create" element={<CreateAdventure />} />
-            <Route path="/adventure/:id" element={<ViewAdventure />} />
+            <Route path="/create" element={<CreateTripLink />} />
+            <Route path="/triplink/:id" element={<ViewAdventure />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

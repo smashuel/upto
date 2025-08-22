@@ -6,13 +6,13 @@ import { format, differenceInHours, addHours } from 'date-fns';
 import { Input, Card } from '../ui';
 
 const CHECK_IN_INTERVALS = [
-  { value: 6, label: '6 hours', description: 'For high-risk or short adventures' },
-  { value: 12, label: '12 hours', description: 'For day-long adventures' },
-  { value: 24, label: '24 hours', description: 'For overnight adventures' },
-  { value: 48, label: '48 hours', description: 'For multi-day adventures' },
+  { value: 6, label: '6 hours', description: 'For high-risk or short trips' },
+  { value: 12, label: '12 hours', description: 'For day-long trips' },
+  { value: 24, label: '24 hours', description: 'For overnight trips' },
+  { value: 48, label: '48 hours', description: 'For multi-day trips' },
 ];
 
-export const AdventureScheduleStep: React.FC = () => {
+export const TripLinkScheduleStep: React.FC = () => {
   const { register, watch, setValue, formState: { errors } } = useFormContext();
   
   const startDate = watch('startDate');
@@ -34,7 +34,7 @@ export const AdventureScheduleStep: React.FC = () => {
   return (
     <div>
       <div className="mb-4">
-        <h3 className="h4 mb-2">Adventure Schedule</h3>
+        <h3 className="h4 mb-2">Trip Schedule</h3>
         <p className="text-muted">When are you planning to go and when should we check on you?</p>
       </div>
 
@@ -43,7 +43,7 @@ export const AdventureScheduleStep: React.FC = () => {
           <Card variant="step">
             <h5 className="h6 mb-3">
               <Calendar className="me-2" size={20} />
-              Adventure Timeline
+              Trip Timeline
             </h5>
             
             <Row>
@@ -55,7 +55,7 @@ export const AdventureScheduleStep: React.FC = () => {
                     required: 'Start date and time is required'
                   })}
                   error={errors.startDate?.message as string}
-                  helperText="When will you begin your adventure?"
+                  helperText="When will you begin your trip?"
                 />
               </Col>
               
@@ -73,7 +73,7 @@ export const AdventureScheduleStep: React.FC = () => {
                     }
                   })}
                   error={errors.endDate?.message as string}
-                  helperText="When do you expect to complete your adventure?"
+                  helperText="When do you expect to complete your trip?"
                 />
               </Col>
             </Row>
@@ -81,7 +81,7 @@ export const AdventureScheduleStep: React.FC = () => {
             {duration > 0 && (
               <Alert variant="info" className="mt-3">
                 <Info size={16} className="me-2" />
-                <strong>Adventure Duration:</strong> {duration} hours ({Math.floor(duration / 24)} days, {duration % 24} hours)
+                <strong>Trip Duration:</strong> {duration} hours ({Math.floor(duration / 24)} days, {duration % 24} hours)
               </Alert>
             )}
           </Card>

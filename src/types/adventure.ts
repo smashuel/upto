@@ -63,7 +63,7 @@ export interface Contact {
 
 export interface CheckIn {
   id: string;
-  adventureId: string;
+  tripLinkId: string;
   timestamp: Date;
   location?: {
     coordinates: [number, number];
@@ -91,7 +91,7 @@ export interface EmergencyInfo {
 export interface NotificationSettings {
   checkInReminders: boolean;
   emergencyEscalation: boolean;
-  adventureUpdates: boolean;
+  tripLinkUpdates: boolean;
   contactNotifications: boolean;
   escalationTimeHours: number; // How many hours late before escalation
   reminderIntervalMinutes: number; // How often to remind before due
@@ -99,7 +99,7 @@ export interface NotificationSettings {
 
 export interface ShareableLink {
   token: string;
-  adventureId: string;
+  tripLinkId: string;
   createdAt: Date;
   expiresAt?: Date;
   viewCount: number;

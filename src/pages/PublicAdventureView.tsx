@@ -40,31 +40,31 @@ export const PublicAdventureView: React.FC = () => {
       setLoading(true);
       // In production, this would be an API call
       // For now, simulate loading from localStorage with token matching
-      const adventures = JSON.parse(localStorage.getItem('adventures') || '[]');
-      const foundAdventure = adventures.find((adv: Adventure) => adv.shareToken === shareToken);
+      const tripLinks = JSON.parse(localStorage.getItem('triplinks') || '[]');
+      const foundTripLink = tripLinks.find((tl: Adventure) => tl.shareToken === shareToken);
       
-      if (!foundAdventure) {
-        setError('Adventure not found or link has expired.');
+      if (!foundTripLink) {
+        setError('TripLink not found or link has expired.');
         return;
       }
 
       // Check visibility permissions
-      if (foundAdventure.visibility === 'private') {
-        setError('This adventure is private and cannot be viewed.');
+      if (foundTripLink.visibility === 'private') {
+        setError('This TripLink is private and cannot be viewed.');
         return;
       }
 
       // Parse dates
-      foundAdventure.startDate = new Date(foundAdventure.startDate);
-      foundAdventure.endDate = new Date(foundAdventure.endDate);
-      if (foundAdventure.lastCheckIn) {
-        foundAdventure.lastCheckIn = new Date(foundAdventure.lastCheckIn);
+      foundTripLink.startDate = new Date(foundTripLink.startDate);
+      foundTripLink.endDate = new Date(foundTripLink.endDate);
+      if (foundTripLink.lastCheckIn) {
+        foundTripLink.lastCheckIn = new Date(foundTripLink.lastCheckIn);
       }
-      if (foundAdventure.nextCheckInDue) {
-        foundAdventure.nextCheckInDue = new Date(foundAdventure.nextCheckInDue);
+      if (foundTripLink.nextCheckInDue) {
+        foundTripLink.nextCheckInDue = new Date(foundTripLink.nextCheckInDue);
       }
 
-      setAdventure(foundAdventure);
+      setAdventure(foundTripLink);
       updateCountdown();
     } catch (err) {
       setError('Failed to load adventure details.');

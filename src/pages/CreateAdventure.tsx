@@ -4,27 +4,28 @@ import { ArrowLeft, ArrowRight, Save, Eye } from 'lucide-react';
 import { useForm, FormProvider } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { Button, Card } from '../components/ui';
-import { AdventureBasicsStep } from '../components/forms/AdventureBasicsStep';
-import { AdventureScheduleStep } from '../components/forms/AdventureScheduleStep';
-import { AdventureLocationStep } from '../components/forms/AdventureLocationStep';
-import { AdventureContactsStep } from '../components/forms/AdventureContactsStep';
+import { TripOverviewStep } from '../components/forms/TripOverviewStep';
+import { TripLinkScheduleStep } from '../components/forms/AdventureScheduleStep';
+import { TripLinkLocationStep } from '../components/forms/AdventureLocationStep';
+import { TripDetailsStep } from '../components/forms/TripDetailsStep';
+import { TripLinkContactsStep } from '../components/forms/AdventureContactsStep';
 import { AdventurePreview } from '../components/adventure/AdventurePreview';
-import { AdventureShareLink } from '../components/adventure/AdventureShareLink';
+import { TripLinkShareLink } from '../components/adventure/AdventureShareLink';
 import type { Adventure } from '../types/adventure';
 
 const STEPS = [
-  { id: 1, title: 'Adventure Details', description: 'Basic information about your adventure' },
+  { id: 1, title: 'Trip Overview', description: 'Select your activity type and name your trip' },
   { id: 2, title: 'Schedule', description: 'Start time, duration, and check-ins' },
   { id: 3, title: 'Location & Route', description: 'Where you\'re going and your planned route' },
-  { id: 4, title: 'Emergency Contacts', description: 'Who to notify in case of emergency' },
-  { id: 5, title: 'Review & Share', description: 'Preview your plan and generate share link' },
+  { id: 4, title: 'Trip Details', description: 'Description and professional time estimation' },
+  { id: 5, title: 'Emergency Contacts', description: 'Who to notify in case of emergency' },
+  { id: 6, title: 'Review & Share', description: 'Preview your plan and generate share link' },
 ];
 
-interface AdventureFormData {
+interface TripLinkFormData {
+  activityType: string;
   title: string;
   description: string;
-  activityType: string;
-  difficulty: string;
   startDate: string;
   endDate: string;
   checkInInterval: number;
@@ -33,17 +34,16 @@ interface AdventureFormData {
   emergencyContacts: Array<{ id: string; name: string; email: string; phone: string; relationship: string; isPrimary: boolean }>;
 }
 
-export const CreateAdventure: React.FC = () => {
+export const CreateTripLink: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
-  const [adventureId, setAdventureId] = useState<string | null>(null);
+  const [tripLinkId, setTripLinkId] = useState<string | null>(null);
 
-  const methods = useForm<AdventureFormData>({
+  const methods = useForm<TripLinkFormData>({
     defaultValues: {
+      activityType: '',
       title: '',
       description: '',
-      activityType: 'hiking',
-      difficulty: 'moderate',
       startDate: '',
       endDate: '',
       checkInInterval: 24,
@@ -60,12 +60,34 @@ export const CreateAdventure: React.FC = () => {
 
   const handleNextStep = async () => {
     if (currentStep < STEPS.length) {
-      // Validate current step before proceeding
-      const isValid = await methods.trigger();
+      // Validate specific fields for current step
+      let fieldsToValidate: string[] = [];
+      
+      switch (currentStep) {
+        case 1: // Trip Overview
+          fieldsToValidate = ['activityType', 'title'];
+          break;
+        case 2: // Schedule
+          fieldsToValidate = ['startDate', 'endDate', 'checkInInterval'];
+          break;
+        case 3: // Location & Route
+          fieldsToValidate = ['location'];
+          break;
+        case 4: // Trip Details
+          fieldsToValidate = ['description'];
+          break;
+        case 5: // Emergency Contacts
+          fieldsToValidate = ['emergencyContacts'];
+          break;
+        default:
+          fieldsToValidate = [];
+      }
+      
+      const isValid = fieldsToValidate.length > 0 ? await methods.trigger(fieldsToValidate as any) : await methods.trigger();
       if (isValid) {
         setCurrentStep(currentStep + 1);
       } else {
-        toast.error('Please fix the errors before continuing');
+        toast.error('Please complete all required fields before continuing');
       }
     }
   };
@@ -76,14 +98,14 @@ export const CreateAdventure: React.FC = () => {
     }
   };
 
-  const onSubmit = async (data: AdventureFormData) => {
+  const onSubmit = async (data: TripLinkFormData) => {
     try {
-      // Generate adventure ID
-      const newAdventureId = `adventure-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      // Generate TripLink ID
+      const newTripLinkId = `triplink-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       
-      // Create adventure object
-      const adventure: Adventure = {
-        id: newAdventureId,
+      // Create TripLink object
+      const tripLink: Adventure = {
+        id: newTripLinkId,
         title: data.title,
         description: data.description,
         startDate: new Date(data.startDate),
@@ -97,7 +119,7 @@ export const CreateAdventure: React.FC = () => {
           type: data.activityType as any,
           name: data.title,
           estimatedDuration: Math.ceil((new Date(data.endDate).getTime() - new Date(data.startDate).getTime()) / (1000 * 60)),
-          difficulty: data.difficulty as any,
+          difficulty: 'moderate' as any, // Default difficulty level
           equipment: [],
           route: data.waypoints.length > 0 ? { waypoints: data.waypoints.map(wp => ({
             name: wp.name,
@@ -122,7 +144,7 @@ export const CreateAdventure: React.FC = () => {
         notifications: {
           checkInReminders: true,
           emergencyEscalation: true,
-          adventureUpdates: true,
+          tripLinkUpdates: true,
           contactNotifications: true,
           escalationTimeHours: 2,
           reminderIntervalMinutes: 30,
@@ -132,16 +154,16 @@ export const CreateAdventure: React.FC = () => {
       };
 
       // Save to localStorage (Phase 2 persistence)
-      const existingAdventures = JSON.parse(localStorage.getItem('adventures') || '[]');
-      existingAdventures.push(adventure);
-      localStorage.setItem('adventures', JSON.stringify(existingAdventures));
+      const existingTripLinks = JSON.parse(localStorage.getItem('triplinks') || '[]');
+      existingTripLinks.push(tripLink);
+      localStorage.setItem('triplinks', JSON.stringify(existingTripLinks));
 
-      setAdventureId(newAdventureId);
-      toast.success('Adventure plan created successfully!');
+      setTripLinkId(newTripLinkId);
+      toast.success('TripLink created successfully!');
       setCurrentStep(5); // Go to review step
     } catch (error) {
-      toast.error('Failed to create adventure plan');
-      console.error('Error creating adventure:', error);
+      toast.error('Failed to create TripLink');
+      console.error('Error creating TripLink:', error);
     }
   };
 
@@ -156,18 +178,20 @@ export const CreateAdventure: React.FC = () => {
 
     switch (currentStep) {
       case 1:
-        return <AdventureBasicsStep />;
+        return <TripOverviewStep />;
       case 2:
-        return <AdventureScheduleStep />;
+        return <TripLinkScheduleStep />;
       case 3:
-        return <AdventureLocationStep />;
+        return <TripLinkLocationStep />;
       case 4:
-        return <AdventureContactsStep />;
+        return <TripDetailsStep />;
       case 5:
+        return <TripLinkContactsStep />;
+      case 6:
         return (
           <div className="space-y-4">
             <AdventurePreview formData={formData} />
-            {adventureId && <AdventureShareLink adventureId={adventureId} />}
+            {tripLinkId && <TripLinkShareLink tripLinkId={tripLinkId} />}
           </div>
         );
       default:
@@ -184,9 +208,12 @@ export const CreateAdventure: React.FC = () => {
           <Row className="align-items-center" style={{ minHeight: '40vh' }}>
             <Col className="text-center text-white">
               <div className="fade-in">
-                <h1 className="text-hero mb-4">Create Your Adventure</h1>
+                <h1 className="text-hero mb-3">Create Your TripLink</h1>
+                <p className="h6 mb-3 text-light fw-normal" style={{ opacity: 0.9 }}>
+                  Outdoor Trip Planning – For recreationalists and professionals
+                </p>
                 <p className="lead mb-0 text-hero">
-                  Plan your next outdoor adventure with our comprehensive safety wizard
+                  Plan your next outdoor trip with our comprehensive safety wizard
                 </p>
               </div>
             </Col>
@@ -198,7 +225,7 @@ export const CreateAdventure: React.FC = () => {
         <Row>
           <Col>
             <div className="mb-4">
-              <p className="text-muted">Follow our step-by-step wizard to create a detailed safety plan and keep your loved ones informed.</p>
+              <p className="text-muted">Follow our step-by-step wizard to create a detailed TripLink and keep your loved ones informed.</p>
             </div>
 
           {/* Progress Bar */}

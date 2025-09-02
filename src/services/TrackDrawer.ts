@@ -26,7 +26,6 @@ export default class TrackDrawer {
   private viewer: any;
   private tracks: Track[] = [];
   private isDrawing: boolean = false;
-  private currentTrack: Track | null = null;
   private currentTrackPoints: TrackPoint[] = [];
   private currentEntity: any = null;
   private onRouteCreated?: (track: Track) => void;
@@ -53,7 +52,7 @@ export default class TrackDrawer {
       }
     };
 
-    this.doubleClickHandler = (event: any) => {
+    this.doubleClickHandler = (_event: any) => {
       if (this.isDrawing) {
         this.finishDrawing();
       }

@@ -6,7 +6,10 @@
       "Bash(npm install:*)",
       "Bash(mkdir:*)",
       "Bash(mv:*)",
-      "Bash(timeout 10s npm run dev)"
+      "Bash(timeout 10s npm run dev)",
+      "Bash(rm:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(ssh:*)"
     ],
     "deny": []
   }

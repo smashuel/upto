@@ -977,6 +977,86 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
 }
 
 /* ================================================================
+   SITE HEADER
+   ================================================================ */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: var(--upto-surface);
+  border-bottom: 1px solid var(--upto-border);
+}
+
+.site-header-inner {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 24px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.site-header-logo {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.site-header-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.site-header-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--upto-text);
+  text-decoration: none;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.site-header-link:hover,
+.site-header-link.is-active {
+  background: var(--upto-surface-raised);
+  color: var(--upto-text);
+}
+
+.site-header-link--ghost {
+  color: var(--upto-text-muted);
+}
+
+.site-header-link--ghost:hover {
+  color: var(--upto-text);
+  background: var(--upto-surface-raised);
+}
+
+.site-header-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--upto-text-secondary);
+}
+
+/* ================================================================
    CREATE TRIPLINK — Field Brief Design
    ================================================================ */
 
@@ -1448,6 +1528,1208 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   font-size: 0.8rem;
   color: var(--upto-danger);
   margin: 4px 0 0;
+}
+
+/* ================================================================
+   ACTIVE TRIP PAGE
+   ================================================================ */
+
+.active-trip-overdue-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: oklch(50% 0.20 25 / 0.10);
+  border: 1.5px solid oklch(50% 0.20 25 / 0.35);
+  color: oklch(40% 0.18 25);
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-family: var(--font-ui);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+.active-trip-nudge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: oklch(78% 0.13 70 / 0.15);
+  border: 1.5px solid oklch(78% 0.13 70 / 0.40);
+  color: oklch(48% 0.14 70);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 20px;
+}
+
+.active-trip-timing {
+  display: flex;
+  gap: 0;
+  border: 1.5px solid var(--upto-border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 28px;
+}
+
+.active-trip-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 12px;
+  border-right: 1px solid var(--upto-border);
+}
+
+.active-trip-stat:last-child {
+  border-right: none;
+}
+
+.active-trip-stat-value {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--upto-text);
+  line-height: 1;
+  margin-bottom: 4px;
+  letter-spacing: -0.01em;
+}
+
+.active-trip-stat-label {
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--upto-text-muted);
+}
+
+.active-trip-checkin-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: white;
+  background: var(--upto-success);
+  border: none;
+  border-radius: 10px;
+  padding: 18px 24px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+  margin-bottom: 24px;
+}
+
+.active-trip-checkin-btn:active {
+  transform: scale(0.98);
+}
+
+.active-trip-checkin-panel {
+  border: 1.5px solid var(--upto-border);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 24px;
+  background: white;
+}
+
+.active-trip-checkin-label {
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  color: var(--upto-text-muted);
+  margin: 0 0 12px;
+}
+
+.active-trip-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--upto-text-secondary);
+  background: var(--upto-surface-raised);
+  border: 1.5px solid var(--upto-border);
+  border-radius: 7px;
+  padding: 9px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.active-trip-action-btn:hover {
+  border-color: var(--upto-primary);
+  color: var(--upto-primary);
+}
+
+.active-trip-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.active-trip-share {
+  border: 1.5px solid var(--upto-border);
+  border-radius: 10px;
+  padding: 16px;
+  background: var(--upto-surface-raised);
+}
+
+.active-trip-share-label {
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--upto-text-muted);
+}
+
+/* ================================================================
+   LOGIN PAGE — Split landscape layout
+   ================================================================ */
+
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 42% 1fr;
+}
+
+.login-landscape {
+  position: relative;
+  background-image: url('/hero-background.jpg');
+  background-size: cover;
+  background-position: center 30%;
+  overflow: hidden;
+}
+
+.login-landscape::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    160deg,
+    oklch(10% 0.04 232 / 0.72) 0%,
+    oklch(15% 0.05 232 / 0.55) 100%
+  );
+}
+
+.login-landscape-inner {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(32px, 5vw, 56px) clamp(28px, 4vw, 48px);
+}
+
+.login-landscape-logo {
+  display: block;
+  width: clamp(80px, 12vw, 120px);
+}
+
+.login-landscape-tagline {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 3.5vw, 2.75rem);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  color: white;
+  line-height: 1.1;
+  margin: 0 0 14px;
+  text-shadow: 0 2px 20px oklch(0% 0 0 / 0.35);
+}
+
+.login-landscape-sub {
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  color: oklch(100% 0 0 / 0.60);
+  line-height: 1.65;
+  max-width: 28ch;
+}
+
+.login-landscape-credit {
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: oklch(100% 0 0 / 0.28);
+}
+
+.login-form-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--upto-surface);
+  padding: clamp(40px, 6vw, 80px) clamp(32px, 5vw, 72px);
+}
+
+.login-form-inner {
+  width: 100%;
+  max-width: 360px;
+}
+
+.login-form-heading {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 3.5vw, 2.25rem);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  color: var(--upto-text);
+  line-height: 1;
+  margin: 0 0 6px;
+}
+
+.login-form-sub {
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  color: var(--upto-text-muted);
+  margin: 0 0 32px;
+  line-height: 1.55;
+}
+
+.login-switch-row {
+  margin-top: 20px;
+  text-align: center;
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  color: var(--upto-text-muted);
+}
+
+.login-switch-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--upto-primary);
+  font-weight: 600;
+  padding: 0;
+  font-size: inherit;
+  font-family: inherit;
+}
+
+.login-anon-note {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--upto-border);
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  color: var(--upto-text-muted);
+  line-height: 1.6;
+  text-align: center;
+}
+
+/* Google sign-in button */
+.google-signin-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 16px;
+  font-family: var(--font-ui);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: oklch(22% 0.02 260);
+  background: white;
+  border: 1.5px solid var(--upto-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+
+.google-signin-btn:hover {
+  border-color: oklch(65% 0.02 260);
+  box-shadow: 0 1px 6px oklch(0% 0 0 / 0.08);
+  background: oklch(99% 0 0);
+}
+
+.google-signin-btn:active {
+  background: oklch(96% 0 0);
+}
+
+/* "or" divider */
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  color: var(--upto-text-muted);
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--upto-border);
+}
+
+@media (max-width: 640px) {
+  .login-page {
+    grid-template-columns: 1fr;
+    grid-template-rows: 160px 1fr;
+  }
+
+  .login-landscape-inner {
+    min-height: 160px;
+    padding: 20px 24px;
+    justify-content: flex-end;
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 0;
+  }
+
+  .login-landscape-logo {
+    display: none;
+  }
+
+  .login-landscape-tagline,
+  .login-landscape-sub,
+  .login-landscape-credit {
+    display: none;
+  }
+
+  .login-form-panel {
+    padding: 32px 24px;
+    align-items: flex-start;
+  }
+}
+
+/* ================================================================
+   PROFILE PAGE
+   ================================================================ */
+
+.profile-page {
+  min-height: 100vh;
+  background: var(--upto-surface);
+}
+
+.profile-container {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: clamp(32px, 5vw, 64px) clamp(20px, 5vw, 40px) 80px;
+}
+
+.profile-header {
+  margin-bottom: 48px;
+  padding-bottom: 32px;
+  border-bottom: 1px solid var(--upto-border);
+}
+
+.profile-name {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 6vw, 3rem);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  color: var(--upto-text);
+  line-height: 1;
+  margin: 0 0 6px;
+}
+
+.profile-email {
+  font-family: var(--font-ui);
+  font-size: 0.9375rem;
+  color: var(--upto-text-muted);
+}
+
+.profile-section {
+  margin-bottom: 40px;
+}
+
+.profile-section-label {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--upto-text-muted);
+  margin: 0 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.profile-section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--upto-border);
+}
+
+.profile-contact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--upto-border);
+}
+
+.profile-contact-row:last-child {
+  border-bottom: none;
+}
+
+.profile-contact-name {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--upto-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-contact-details {
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  color: var(--upto-text-muted);
+  margin-top: 2px;
+}
+
+.profile-contact-fav {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: var(--upto-text-muted);
+  transition: color 0.15s;
+  display: flex;
+  align-items: center;
+}
+
+.profile-contact-fav.is-fav {
+  color: oklch(72% 0.14 70);
+}
+
+.profile-empty-state {
+  padding: 40px 0;
+  text-align: center;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  color: var(--upto-text-muted);
+  line-height: 1.6;
+}
+
+.profile-signout-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--upto-danger);
+  background: none;
+  border: 1.5px solid oklch(50% 0.20 25 / 0.30);
+  border-radius: 7px;
+  padding: 9px 16px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.profile-signout-btn:hover {
+  background: oklch(50% 0.20 25 / 0.06);
+  border-color: oklch(50% 0.20 25 / 0.55);
+}
+
+/* ================================================================
+   PUBLIC WATCHER VIEW — Landscape backdrop + floating brief
+   ================================================================ */
+
+.public-view-page {
+  min-height: 100vh;
+  position: relative;
+  background-image: url('/hero-background.jpg');
+  background-size: cover;
+  background-position: center 35%;
+  background-attachment: fixed;
+}
+
+.public-view-backdrop {
+  position: fixed;
+  inset: 0;
+  background: oklch(11% 0.04 232 / 0.68);
+  transition: background 1s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.public-view-backdrop.is-overdue {
+  background: oklch(20% 0.14 22 / 0.74);
+}
+
+.public-view-scene {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: clamp(24px, 5vw, 56px) clamp(16px, 4vw, 32px) 80px;
+}
+
+.public-view-hero {
+  width: 100%;
+  max-width: 600px;
+  padding-bottom: 24px;
+}
+
+.public-view-eyebrow {
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: oklch(100% 0 0 / 0.50);
+  margin: 0 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.public-view-eyebrow::before {
+  content: '';
+  width: 20px;
+  height: 1px;
+  background: oklch(100% 0 0 / 0.30);
+}
+
+.public-view-title {
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 8vw, 4.75rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  color: white;
+  line-height: 0.95;
+  margin: 0 0 16px;
+  text-shadow: 0 3px 32px oklch(0% 0 0 / 0.45);
+}
+
+.public-view-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  backdrop-filter: blur(8px);
+}
+
+/* Pulsing dot */
+.public-view-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--upto-success);
+  animation: pulse-ring 2s ease infinite;
+}
+
+@keyframes pulse-ring {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.4); }
+}
+
+/* Floating brief card */
+.public-view-brief {
+  width: 100%;
+  max-width: 600px;
+  background: var(--upto-surface);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow:
+    0 4px 6px oklch(0% 0 0 / 0.08),
+    0 12px 40px oklch(0% 0 0 / 0.28),
+    0 1px 3px oklch(0% 0 0 / 0.12);
+}
+
+.public-view-brief-body {
+  padding: clamp(20px, 4vw, 32px);
+}
+
+/* Overdue banner — inside brief at top */
+.public-view-overdue-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: oklch(50% 0.20 25 / 0.10);
+  border-bottom: 2px solid oklch(50% 0.20 25 / 0.35);
+  color: oklch(35% 0.18 25);
+  padding: 16px clamp(20px, 4vw, 32px);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.public-view-overdue-banner svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.public-view-error {
+  text-align: center;
+  padding: 48px 24px;
+  color: white;
+}
+
+.public-view-container {
+  /* legacy — not used in new layout, kept for error state fallback */
+  max-width: 600px;
+  margin: 0 auto;
+  padding: clamp(24px, 5vw, 56px) clamp(16px, 5vw, 32px) 80px;
+}
+
+/* Primary contact CTA */
+.public-view-contact-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: 1.5px solid var(--upto-border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  background: white;
+  transition: border-color 0.15s ease;
+}
+
+.public-view-contact-cta.is-urgent {
+  border-color: oklch(50% 0.20 25 / 0.50);
+  background: oklch(50% 0.20 25 / 0.04);
+}
+
+.public-view-contact-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-ui);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--upto-text);
+}
+
+.public-view-contact-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.public-view-call-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: white;
+  background: var(--upto-primary);
+  border-radius: 7px;
+  padding: 10px 18px;
+  transition: background 0.15s ease;
+}
+
+.public-view-call-btn.is-urgent {
+  background: oklch(43% 0.20 25);
+}
+
+.public-view-email-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  color: var(--upto-text-secondary);
+  background: var(--upto-surface-raised);
+  border: 1.5px solid var(--upto-border);
+  border-radius: 7px;
+  padding: 9px 14px;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.public-view-email-btn:hover {
+  border-color: var(--upto-primary);
+  color: var(--upto-primary);
+}
+
+/* Trip details */
+.public-view-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+
+.public-view-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  color: var(--upto-text-secondary);
+}
+
+.public-view-detail-row svg {
+  flex-shrink: 0;
+  color: var(--upto-text-muted);
+}
+
+.public-view-w3w {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--upto-accent);
+  background: oklch(58% 0.16 236 / 0.08);
+  border-radius: 4px;
+  padding: 2px 7px;
+  letter-spacing: 0.01em;
+}
+
+/* Sections */
+.public-view-section {
+  margin-bottom: 28px;
+}
+
+.public-view-section-title {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--upto-text-muted);
+  margin: 0 0 12px;
+}
+
+/* Check-in list */
+.public-view-checkins {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1.5px solid var(--upto-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.public-view-checkin {
+  padding: 14px 16px;
+  background: white;
+  border-bottom: 1px solid var(--upto-border);
+}
+
+.public-view-checkin:last-child {
+  border-bottom: none;
+}
+
+.public-view-checkin-time {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--upto-text-muted);
+  margin-bottom: 4px;
+}
+
+.public-view-checkin-msg {
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  color: var(--upto-text-secondary);
+  margin: 0 0 6px;
+}
+
+/* Contacts list */
+.public-view-contacts {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1.5px solid var(--upto-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.public-view-contact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  background: white;
+  border-bottom: 1px solid var(--upto-border);
+}
+
+.public-view-contact-row:last-child {
+  border-bottom: none;
+}
+
+.public-view-contact-row-name {
+  font-family: var(--font-ui);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--upto-text);
+  margin-right: 8px;
+}
+
+.public-view-contact-row-rel {
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  color: var(--upto-text-muted);
+  margin-right: 8px;
+}
+
+.public-view-primary-tag {
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--upto-success);
+  background: oklch(49% 0.14 155 / 0.12);
+  border-radius: 4px;
+  padding: 2px 7px;
+  letter-spacing: 0.02em;
+}
+
+/* Footer */
+.public-view-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: oklch(100% 0 0 / 0.35);
+  margin-top: 32px;
+  padding-top: 0;
+  border-top: none;
+}
+
+/* Overdue description */
+.public-view-description {
+  font-family: var(--font-ui);
+  font-size: 0.9375rem;
+  color: var(--upto-text-secondary);
+  margin: 12px 0 20px;
+  line-height: 1.6;
+}
+
+/* header area (brief card) */
+.public-view-header {
+  margin-bottom: 20px;
+}
+
+@media (max-width: 480px) {
+  .public-view-page {
+    background-attachment: scroll;
+  }
+}
+
+/* Overdue banner */
+.public-view-overdue-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: oklch(50% 0.20 25 / 0.10);
+  border: 1.5px solid oklch(50% 0.20 25 / 0.40);
+  color: oklch(35% 0.18 25);
+  border-radius: 12px;
+  padding: 16px;
+  font-family: var(--font-ui);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin-bottom: 24px;
+}
+
+.public-view-overdue-banner svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* Header */
+.public-view-header {
+  margin-bottom: 24px;
+}
+
+.public-view-title {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 6vw, 3.25rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  color: var(--upto-text);
+  line-height: 1;
+  margin: 0 0 10px;
+}
+
+.public-view-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 4px 12px;
+  border-radius: 9999px;
+}
+
+/* Pulsing dot for active status */
+.public-view-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--upto-success);
+  animation: pulse-ring 2s ease infinite;
+}
+
+@keyframes pulse-ring {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.4); }
+}
+
+.public-view-description {
+  font-family: var(--font-ui);
+  font-size: 0.9375rem;
+  color: var(--upto-text-secondary);
+  margin: 12px 0 0;
+  line-height: 1.6;
+}
+
+/* Primary contact CTA */
+.public-view-contact-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: 1.5px solid var(--upto-border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  background: white;
+  transition: border-color 0.15s ease;
+}
+
+.public-view-contact-cta.is-urgent {
+  border-color: oklch(50% 0.20 25 / 0.50);
+  background: oklch(50% 0.20 25 / 0.04);
+}
+
+.public-view-contact-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-ui);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--upto-text);
+}
+
+.public-view-contact-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.public-view-call-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: white;
+  background: var(--upto-primary);
+  border-radius: 7px;
+  padding: 10px 18px;
+  transition: background 0.15s ease;
+}
+
+.public-view-call-btn.is-urgent {
+  background: oklch(43% 0.20 25);
+}
+
+.public-view-email-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  color: var(--upto-text-secondary);
+  background: var(--upto-surface-raised);
+  border: 1.5px solid var(--upto-border);
+  border-radius: 7px;
+  padding: 9px 14px;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.public-view-email-btn:hover {
+  border-color: var(--upto-primary);
+  color: var(--upto-primary);
+}
+
+/* Trip details */
+.public-view-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+
+.public-view-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  color: var(--upto-text-secondary);
+}
+
+.public-view-detail-row svg {
+  flex-shrink: 0;
+  color: var(--upto-text-muted);
+}
+
+.public-view-w3w {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--upto-accent);
+  background: oklch(58% 0.16 236 / 0.08);
+  border-radius: 4px;
+  padding: 2px 7px;
+  letter-spacing: 0.01em;
+}
+
+/* Sections */
+.public-view-section {
+  margin-bottom: 28px;
+}
+
+.public-view-section-title {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--upto-text-muted);
+  margin: 0 0 12px;
+}
+
+/* Check-in list */
+.public-view-checkins {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1.5px solid var(--upto-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.public-view-checkin {
+  padding: 14px 16px;
+  background: white;
+  border-bottom: 1px solid var(--upto-border);
+}
+
+.public-view-checkin:last-child {
+  border-bottom: none;
+}
+
+.public-view-checkin-time {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--upto-text-muted);
+  margin-bottom: 4px;
+}
+
+.public-view-checkin-msg {
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  color: var(--upto-text-secondary);
+  margin: 0 0 6px;
+}
+
+/* Contacts list */
+.public-view-contacts {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1.5px solid var(--upto-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.public-view-contact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  background: white;
+  border-bottom: 1px solid var(--upto-border);
+}
+
+.public-view-contact-row:last-child {
+  border-bottom: none;
+}
+
+.public-view-contact-row-name {
+  font-family: var(--font-ui);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--upto-text);
+  margin-right: 8px;
+}
+
+.public-view-contact-row-rel {
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  color: var(--upto-text-muted);
+  margin-right: 8px;
+}
+
+.public-view-primary-tag {
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--upto-success);
+  background: oklch(49% 0.14 155 / 0.12);
+  border-radius: 4px;
+  padding: 2px 7px;
+  letter-spacing: 0.02em;
+}
+
+/* Footer */
+.public-view-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--upto-text-muted);
+  padding-top: 24px;
+  border-top: 1px solid var(--upto-border);
+  margin-top: 40px;
 }
 
 /* ── Responsive ── */

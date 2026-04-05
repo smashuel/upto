@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Mountain, Bike, Waves, Snowflake, MapPin,
   Activity, Footprints, ChevronDown, Route,
-  Users, Clock, ArrowRight, Check, Copy, ExternalLink,
+  Users, Clock, ArrowRight, Check, Copy, ExternalLink, Play,
   type LucideIcon
 } from 'lucide-react';
 import { useForm, FormProvider } from 'react-hook-form';
@@ -10,6 +11,8 @@ import toast from 'react-hot-toast';
 import { TripLinkLocationStep } from '../components/forms/AdventureLocationStep';
 import { TripLinkContactsStep } from '../components/forms/AdventureContactsStep';
 import { GuidePaceEstimator } from '../components/guidepace/GuidePaceEstimator';
+import { api } from '../config/api';
+import { useAuth } from '../hooks/useAuth';
 import type { TripLink, ActivityType, LatLng } from '../types/adventure';
 import type { What3WordsLocation } from '../types/what3words';
 
@@ -20,6 +23,7 @@ export interface TripLinkFormData {
   title: string;
   description: string;
   startDate: string;
+  expectedReturnTime: string;
   location: {
     name: string;
     coordinates?: LatLng;
@@ -34,6 +38,7 @@ export interface TripLinkFormData {
     phone: string;
     relationship: string;
     isPrimary: boolean;
+    savedContactId?: number;
   }>;
   useGuidePace?: boolean;
 }
@@ -111,8 +116,13 @@ const ExpandSection: React.FC<ExpandSectionProps> = ({
 // ── Main Page ─────────────────────────────────────────────────────
 
 export const CreateTripLink: React.FC = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [tripLinkId, setTripLinkId] = useState<string | null>(null);
+  const [shareToken, setShareToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedFor, setCopiedFor] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
 
   const methods = useForm<TripLinkFormData>({
     mode: 'onBlur',
@@ -121,6 +131,7 @@ export const CreateTripLink: React.FC = () => {
       title: '',
       description: '',
       startDate: '',
+      expectedReturnTime: '',
       location: { name: '' },
       waypoints: [],
       emergencyContacts: [],
@@ -142,20 +153,23 @@ export const CreateTripLink: React.FC = () => {
   const hasLocation = !!(formData.location?.name || (formData.waypoints?.length ?? 0) > 0);
   const hasContacts = (formData.emergencyContacts?.length ?? 0) > 0;
 
-  const shareUrl = tripLinkId
-    ? `${window.location.origin}/triplink/${tripLinkId}`
+  const shareUrl = shareToken
+    ? `${window.location.origin}/triplink/${shareToken}`
     : '';
 
   const onSubmit = async (data: TripLinkFormData) => {
     try {
       const id = `triplink-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const token = crypto.randomUUID();
 
       const tripLink: TripLink = {
         id,
+        userId: user?.id,
         title: data.title,
         description: data.description,
         activityType: (data.activityType || 'other') as ActivityType,
         startDate: data.startDate,
+        expectedReturnTime: data.expectedReturnTime || undefined,
         location: {
           name: data.location.name,
           coordinates: data.location.coordinates || [0, 0],
@@ -164,19 +178,36 @@ export const CreateTripLink: React.FC = () => {
         },
         waypoints: data.waypoints,
         emergencyContacts: data.emergencyContacts,
-        shareToken: id,
+        shareToken: token,
         status: 'planned',
         createdAt: new Date().toISOString(),
+        checkIns: [],
       };
 
+      await api.createTripLink(tripLink);
+
+      // Also keep in localStorage as fallback / offline cache
       const existing = JSON.parse(localStorage.getItem('triplinks') || '[]');
       existing.push(tripLink);
       localStorage.setItem('triplinks', JSON.stringify(existing));
 
       setTripLinkId(id);
+      setShareToken(token);
       toast.success('TripLink created');
     } catch {
       toast.error('Failed to create TripLink — try again');
+    }
+  };
+
+  const handleStartTrip = async () => {
+    if (!shareToken || !tripLinkId) return;
+    setStarting(true);
+    try {
+      await api.startTrip(shareToken);
+      navigate(`/my-trip/${tripLinkId}?token=${shareToken}`);
+    } catch {
+      toast.error('Could not start trip — try again');
+      setStarting(false);
     }
   };
 
@@ -189,6 +220,18 @@ export const CreateTripLink: React.FC = () => {
       setTimeout(() => setCopied(false), 2500);
     } catch {
       toast.error('Could not copy — try manually');
+    }
+  };
+
+  const handleCopyFor = async (contactName: string) => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopiedFor(contactName);
+      toast.success(`Link copied — send to ${contactName}`);
+      setTimeout(() => setCopiedFor(null), 2500);
+    } catch {
+      toast.error('Could not copy');
     }
   };
 
@@ -272,18 +315,33 @@ export const CreateTripLink: React.FC = () => {
                 )}
               </div>
 
-              {/* Setting off (optional) */}
-              <div className="create-field" style={{ maxWidth: 280 }}>
-                <label className="create-label" htmlFor="startDate">
-                  Setting off
-                  <span className="create-label-hint">Optional</span>
-                </label>
-                <input
-                  id="startDate"
-                  type="datetime-local"
-                  className="create-input"
-                  {...register('startDate')}
-                />
+              {/* Setting off + Expected return — side by side */}
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                <div className="create-field" style={{ flex: '1 1 200px' }}>
+                  <label className="create-label" htmlFor="startDate">
+                    Setting off
+                    <span className="create-label-hint">Optional</span>
+                  </label>
+                  <input
+                    id="startDate"
+                    type="datetime-local"
+                    className="create-input"
+                    {...register('startDate')}
+                  />
+                </div>
+
+                <div className="create-field" style={{ flex: '1 1 200px' }}>
+                  <label className="create-label" htmlFor="expectedReturnTime">
+                    Expected back by
+                    <span className="create-label-hint">Used for overdue alerts</span>
+                  </label>
+                  <input
+                    id="expectedReturnTime"
+                    type="datetime-local"
+                    className="create-input"
+                    {...register('expectedReturnTime')}
+                  />
+                </div>
               </div>
 
             </div>
@@ -340,8 +398,77 @@ export const CreateTripLink: React.FC = () => {
                     </button>
                   </div>
                   <p className="create-success-hint">
-                    Send this to your emergency contacts before you head out.
+                    Send this link to your emergency contacts before you head out.
                   </p>
+
+                  {/* ── Contact sender — show contacts to copy link for each ── */}
+                  {formData.emergencyContacts.length > 0 && (
+                    <div style={{ marginTop: 16 }}>
+                      <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--upto-text-secondary)', marginBottom: 8 }}>
+                        Send to your contacts
+                      </p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 1, border: '1.5px solid var(--upto-border)', borderRadius: 8, overflow: 'hidden' }}>
+                        {formData.emergencyContacts.map(contact => (
+                          <div key={contact.id} style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            gap: 12, padding: '10px 14px', background: 'white',
+                            borderBottom: '1px solid var(--upto-border)',
+                          }}>
+                            <div>
+                              <span style={{ fontFamily: 'var(--font-ui)', fontWeight: 500, fontSize: '0.875rem', color: 'var(--upto-text)' }}>
+                                {contact.name}
+                              </span>
+                              {contact.relationship && (
+                                <span style={{ fontFamily: 'var(--font-ui)', fontSize: '0.775rem', color: 'var(--upto-text-muted)', marginLeft: 6 }}>
+                                  {contact.relationship}
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                              {contact.phone && (
+                                <a
+                                  href={`sms:${contact.phone}?body=${encodeURIComponent(`My trip plan: ${shareUrl}`)}`}
+                                  className="active-trip-action-btn"
+                                  style={{ padding: '5px 10px', fontSize: '0.8125rem', textDecoration: 'none' }}
+                                >
+                                  Text
+                                </a>
+                              )}
+                              {contact.email && (
+                                <a
+                                  href={`mailto:${contact.email}?subject=${encodeURIComponent('My trip plan')}&body=${encodeURIComponent(`Hi ${contact.name},\n\nHere's my trip plan in case anything goes wrong:\n${shareUrl}\n\nI'll check in when I'm back safely.`)}`}
+                                  className="active-trip-action-btn"
+                                  style={{ padding: '5px 10px', fontSize: '0.8125rem', textDecoration: 'none' }}
+                                >
+                                  Email
+                                </a>
+                              )}
+                              <button
+                                type="button"
+                                className="active-trip-action-btn"
+                                onClick={() => handleCopyFor(contact.name)}
+                                style={{ padding: '5px 10px', fontSize: '0.8125rem', color: copiedFor === contact.name ? 'var(--upto-success)' : undefined }}
+                              >
+                                {copiedFor === contact.name ? <Check size={12} /> : <Copy size={12} />}
+                                {copiedFor === contact.name ? 'Copied' : 'Copy'}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    className="create-submit"
+                    style={{ marginTop: 16, width: '100%', justifyContent: 'center', background: 'var(--upto-success)' }}
+                    onClick={handleStartTrip}
+                    disabled={starting}
+                  >
+                    <Play size={16} />
+                    {starting ? 'Starting…' : "I'm heading out — Start Trip"}
+                  </button>
                 </div>
               </div>
             )}

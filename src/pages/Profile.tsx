@@ -1,103 +1,329 @@
-import React from 'react';
-import { Card, Button, Input } from '../components/ui';
-import { User, Settings } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Star, Trash2, Plus, LogOut, LogIn } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
+import { api } from '../config/api';
+import type { SavedContact } from '../config/api';
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+interface AddContactFormProps {
+  sessionToken: string;
+  onAdded: (contact: SavedContact) => void;
+  onCancel: () => void;
+}
+
+const AddContactForm: React.FC<AddContactFormProps> = ({ sessionToken, onAdded, onCancel }) => {
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [relationship, setRelationship] = useState('');
+  const [isFavourite, setIsFavourite] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) { setError('Name is required'); return; }
+    if (!phone.trim() && !email.trim()) { setError('Phone or email is required'); return; }
+    setSubmitting(true);
+    try {
+      const saved = await api.createContact(sessionToken, {
+        name: name.trim(),
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
+        relationship: relationship.trim() || undefined,
+        is_favourite: isFavourite,
+      });
+      onAdded(saved);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save contact');
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div style={{
+      border: '1.5px solid var(--upto-border)',
+      borderRadius: 10,
+      padding: 20,
+      background: 'white',
+      marginTop: 16,
+    }}>
+      <form onSubmit={handleSubmit} noValidate>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <div className="create-field" style={{ flex: '1 1 160px' }}>
+              <label className="create-label" htmlFor="pc-name">Name</label>
+              <input id="pc-name" className="create-input" placeholder="Jane Smith"
+                value={name} onChange={e => { setName(e.target.value); setError(''); }} autoFocus />
+            </div>
+            <div className="create-field" style={{ flex: '1 1 160px' }}>
+              <label className="create-label" htmlFor="pc-rel">
+                Relationship <span className="create-label-hint">Optional</span>
+              </label>
+              <input id="pc-rel" className="create-input" placeholder="Partner, Flatmate…"
+                value={relationship} onChange={e => setRelationship(e.target.value)} />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <div className="create-field" style={{ flex: '1 1 160px' }}>
+              <label className="create-label" htmlFor="pc-phone">Phone</label>
+              <input id="pc-phone" className="create-input" type="tel" placeholder="+64 21 000 000"
+                value={phone} onChange={e => { setPhone(e.target.value); setError(''); }} />
+            </div>
+            <div className="create-field" style={{ flex: '1 1 160px' }}>
+              <label className="create-label" htmlFor="pc-email">Email</label>
+              <input id="pc-email" className="create-input" type="email" placeholder="jane@example.com"
+                value={email} onChange={e => { setEmail(e.target.value); setError(''); }} />
+            </div>
+          </div>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontSize: '0.875rem', color: 'var(--upto-text-secondary)' }}>
+            <input type="checkbox" checked={isFavourite} onChange={e => setIsFavourite(e.target.checked)} />
+            Mark as favourite (appears first on every trip)
+          </label>
+
+          {error && <p className="create-error">{error}</p>}
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="submit" className="create-submit" style={{ alignSelf: 'auto' }} disabled={submitting}>
+              {submitting ? 'Saving…' : 'Save contact'}
+            </button>
+            <button type="button" className="active-trip-action-btn" onClick={onCancel}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 
 export const Profile: React.FC = () => {
-  return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Profile</h1>
-        <p className="text-gray-600">Manage your account settings and emergency contacts.</p>
+  const navigate = useNavigate();
+  const { user, sessionToken, isLoggedIn, loading: authLoading, logout } = useAuth();
+
+  const [contacts, setContacts] = useState<SavedContact[]>([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [addingContact, setAddingContact] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
+  useEffect(() => {
+    if (!isLoggedIn || !sessionToken) return;
+    setLoadingContacts(true);
+    api.getContacts(sessionToken)
+      .then(setContacts)
+      .catch(() => { /* silently fail */ })
+      .finally(() => setLoadingContacts(false));
+  }, [isLoggedIn, sessionToken]);
+
+  const handleToggleFavourite = async (contact: SavedContact) => {
+    if (!sessionToken) return;
+    const updated = { ...contact, is_favourite: !contact.is_favourite };
+    // Optimistic update
+    setContacts(prev => prev.map(c => c.id === contact.id ? updated : c));
+    try {
+      await api.updateContact(sessionToken, contact.id, { is_favourite: updated.is_favourite });
+    } catch {
+      // Revert on failure
+      setContacts(prev => prev.map(c => c.id === contact.id ? contact : c));
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!sessionToken) return;
+    const prev = contacts;
+    setContacts(contacts.filter(c => c.id !== id));
+    try {
+      await api.deleteContact(sessionToken, id);
+    } catch {
+      setContacts(prev);
+    }
+  };
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    await logout();
+    navigate('/');
+  };
+
+  // ── Not logged in ──
+  if (authLoading) {
+    return (
+      <div className="profile-page">
+        <div className="profile-container" style={{ paddingTop: 80, textAlign: 'center' }}>
+          <div className="adventure-spinner" style={{ margin: '0 auto' }} />
+        </div>
       </div>
+    );
+  }
 
-      <div className="space-y-6">
-        {/* Personal Information */}
-        <Card>
-          <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-            <User className="h-5 w-5 mr-2 text-adventure-600" />
-            Personal Information
-          </h2>
-          
-          <div className="space-y-4">
-            <Input
-              label="Full Name"
-              placeholder="Your full name"
-              defaultValue="Adventure User"
+  if (!isLoggedIn) {
+    return (
+      <div className="profile-page">
+        <div className="profile-container" style={{ maxWidth: 480 }}>
+          <header className="profile-header">
+            <h1 className="profile-name">Your profile</h1>
+            <p className="profile-email">Sign in to manage contacts and view your trip history.</p>
+          </header>
+
+          <div className="profile-empty-state" style={{ paddingTop: 0 }}>
+            <p style={{ marginBottom: 20 }}>
+              An account lets you save contacts and reuse them on every trip — no re-entering the same numbers each time.
+            </p>
+            <button
+              type="button"
+              className="create-submit"
+              onClick={() => navigate('/login')}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+            >
+              <LogIn size={16} />
+              Sign in or create account
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const favourites = contacts.filter(c => c.is_favourite);
+  const others = contacts.filter(c => !c.is_favourite);
+  const sortedContacts = [...favourites, ...others];
+
+  return (
+    <div className="profile-page">
+      <div className="profile-container">
+
+        {/* ── Account header ── */}
+        <header className="profile-header">
+          <h1 className="profile-name">{user!.name}</h1>
+          <p className="profile-email">{user!.email}</p>
+        </header>
+
+        {/* ── Saved contacts ── */}
+        <section className="profile-section">
+          <h2 className="profile-section-label">Saved contacts</h2>
+
+          {loadingContacts && (
+            <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.875rem', color: 'var(--upto-text-muted)' }}>
+              Loading…
+            </p>
+          )}
+
+          {!loadingContacts && sortedContacts.length === 0 && !addingContact && (
+            <div className="profile-empty-state">
+              <p>No saved contacts yet.</p>
+              <p style={{ fontSize: '0.8125rem', marginTop: 4 }}>
+                Add the people who should know where you are — they'll be available to select on every trip.
+              </p>
+            </div>
+          )}
+
+          {sortedContacts.length > 0 && (
+            <div>
+              {sortedContacts.map(contact => (
+                <div key={contact.id} className="profile-contact-row">
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="profile-contact-name">
+                      {contact.is_favourite && (
+                        <Star size={12} style={{ color: 'oklch(72% 0.14 70)', flexShrink: 0 }} />
+                      )}
+                      {contact.name}
+                      {contact.relationship && (
+                        <span style={{ fontWeight: 400, color: 'var(--upto-text-muted)', fontSize: '0.8125rem' }}>
+                          {contact.relationship}
+                        </span>
+                      )}
+                    </div>
+                    <div className="profile-contact-details">
+                      {[contact.phone, contact.email].filter(Boolean).join(' · ')}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    <button
+                      type="button"
+                      className={`profile-contact-fav${contact.is_favourite ? ' is-fav' : ''}`}
+                      onClick={() => handleToggleFavourite(contact)}
+                      title={contact.is_favourite ? 'Remove favourite' : 'Mark as favourite'}
+                    >
+                      <Star size={15} fill={contact.is_favourite ? 'currentColor' : 'none'} />
+                    </button>
+                    <button
+                      type="button"
+                      className="active-trip-action-btn"
+                      onClick={() => handleDelete(contact.id)}
+                      title="Remove"
+                      style={{ padding: '6px 9px', color: 'var(--upto-danger)' }}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {addingContact ? (
+            <AddContactForm
+              sessionToken={sessionToken!}
+              onAdded={(contact) => {
+                setContacts(prev => [...prev, contact]);
+                setAddingContact(false);
+              }}
+              onCancel={() => setAddingContact(false)}
             />
-            
-            <div className="grid md:grid-cols-2 gap-4">
-              <Input
-                label="Email"
-                type="email"
-                placeholder="your@email.com"
-                defaultValue="user@example.com"
-              />
-              
-              <Input
-                label="Phone Number"
-                type="tel"
-                placeholder="+1 (555) 123-4567"
-                defaultValue="+1 (555) 123-4567"
-              />
-            </div>
-          </div>
-          
-          <div className="mt-6 flex justify-end">
-            <Button>Save Changes</Button>
-          </div>
-        </Card>
+          ) : (
+            <button
+              type="button"
+              className="active-trip-action-btn"
+              onClick={() => setAddingContact(true)}
+              style={{ marginTop: sortedContacts.length > 0 ? 16 : 8, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              <Plus size={14} />
+              Add contact
+            </button>
+          )}
+        </section>
 
-        {/* Safety Preferences */}
-        <Card>
-          <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-            <Settings className="h-5 w-5 mr-2 text-adventure-600" />
-            Safety Preferences
-          </h2>
-          
-          <div className="space-y-4">
+        {/* ── Account section ── */}
+        <section className="profile-section">
+          <h2 className="profile-section-label">Account</h2>
+
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingBottom: 20,
+            borderBottom: '1px solid var(--upto-border)',
+          }}>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Default Check-in Interval
-              </label>
-              <select className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                <option value={6}>Every 6 hours</option>
-                <option value={12}>Every 12 hours</option>
-                <option value={24} selected>Every 24 hours</option>
-                <option value={48}>Every 48 hours</option>
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Notification Methods
-              </label>
-              <div className="space-y-2">
-                <label className="flex items-center">
-                  <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" defaultChecked />
-                  <span className="ml-2 text-sm text-gray-700">Email notifications</span>
-                </label>
-                <label className="flex items-center">
-                  <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                  <span className="ml-2 text-sm text-gray-700">SMS notifications</span>
-                </label>
+              <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: '0.9375rem', color: 'var(--upto-text)', marginBottom: 2 }}>
+                {user!.name}
+              </div>
+              <div style={{ fontFamily: 'var(--font-ui)', fontSize: '0.8125rem', color: 'var(--upto-text-muted)' }}>
+                {user!.email}
               </div>
             </div>
           </div>
-          
-          <div className="mt-6 flex justify-end">
-            <Button>Save Preferences</Button>
-          </div>
-        </Card>
 
-        {/* Emergency Contacts */}
-        <Card>
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Emergency Contacts</h2>
-          
-          <div className="text-center py-12 text-gray-500">
-            <p className="mb-4">Emergency contact management coming soon!</p>
-            <p className="text-sm">This feature will be available in Phase 2.</p>
+          <div style={{ marginTop: 24 }}>
+            <button
+              type="button"
+              className="profile-signout-btn"
+              onClick={handleSignOut}
+              disabled={signingOut}
+            >
+              <LogOut size={14} />
+              {signingOut ? 'Signing out…' : 'Sign out'}
+            </button>
           </div>
-        </Card>
+        </section>
+
       </div>
     </div>
   );

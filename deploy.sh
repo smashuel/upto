@@ -91,7 +91,7 @@ cp backend-package.json "$TEMP_DIR/package.json"
 cp nginx-config "$TEMP_DIR/"
 
 # Create PM2 ecosystem file
-cat > "$TEMP_DIR/ecosystem.config.js" << EOF
+cat > "$TEMP_DIR/ecosystem.config.cjs" << EOF
 module.exports = {
   apps: [{
     name: 'upto-backend',
@@ -103,7 +103,11 @@ module.exports = {
     env: {
       NODE_ENV: 'production',
       PORT: $BACKEND_PORT,
-      DOC_API_KEY: process.env.DOC_API_KEY || ''
+      DOC_API_KEY: process.env.DOC_API_KEY || '',
+      DATABASE_URL: 'postgresql://upto_user:Rowdy050@127.0.0.1:5432/upto_db',
+      GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
+      GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
+      BACKEND_URL: 'http://172.105.178.48'
     },
     error_file: '/var/log/pm2/upto-backend-error.log',
     out_file: '/var/log/pm2/upto-backend-out.log',
@@ -124,7 +128,7 @@ echo "Installing dependencies..."
 npm install --production
 
 echo "Starting application with PM2..."
-pm2 start ecosystem.config.js
+pm2 restart upto-backend 2>/dev/null || pm2 start ecosystem.config.cjs
 
 echo "Setting up PM2 to start on boot..."
 pm2 save

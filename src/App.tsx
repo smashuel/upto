@@ -4,7 +4,10 @@ import { Toaster } from 'react-hot-toast';
 import { Layout } from './components/layout/Layout';
 import { Home } from './pages/Home';
 import { CreateTripLink } from './pages/CreateAdventure';
+import { ActiveTrip } from './pages/ActiveTrip';
+import { PublicAdventureView } from './pages/PublicAdventureView';
 import { ViewAdventure } from './pages/ViewAdventure';
+import { Login } from './pages/Login';
 import { Profile } from './pages/Profile';
 import { NotFound } from './pages/NotFound';
 import './styles/globals.css';
@@ -27,7 +30,10 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/create" element={<CreateTripLink />} />
+            <Route path="/my-trip/:tripLinkId" element={<ActiveTrip />} />
+            <Route path="/triplink/:token" element={<PublicAdventureView />} />
             <Route path="/triplink/:id" element={<ViewAdventure />} />
+            <Route path="/login" element={<Login />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

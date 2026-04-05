@@ -13,12 +13,20 @@ export type ActivityType =
 // Coordinates are always [lat, lng] — never [lng, lat]
 export type LatLng = [number, number];
 
+export interface CheckIn {
+  timestamp: string;       // ISO 8601
+  message?: string;
+  locationW3w?: string;    // what3words address at check-in time
+}
+
 export interface TripLink {
   id: string;
+  userId?: string;         // set when creator is logged in
   title: string;
   description: string;
   activityType: ActivityType;
-  startDate: string; // ISO 8601 — stored as string in localStorage
+  startDate: string;       // ISO 8601
+  expectedReturnTime?: string; // ISO 8601 — used for overdue detection
   location: {
     name: string;
     coordinates: LatLng;
@@ -28,8 +36,12 @@ export interface TripLink {
   waypoints: TripWaypoint[];
   emergencyContacts: Contact[];
   shareToken: string;
-  status: 'planned' | 'active' | 'completed';
-  createdAt: string; // ISO 8601
+  status: 'planned' | 'active' | 'completed' | 'overdue';
+  createdAt: string;       // ISO 8601
+  startedAt?: string;      // ISO 8601 — when creator tapped "Start Trip"
+  lastCheckIn?: string;    // ISO 8601 — timestamp of most recent check-in
+  overdueSince?: string;   // ISO 8601 — when overdue state was triggered
+  checkIns: CheckIn[];
 }
 
 export interface TripWaypoint {

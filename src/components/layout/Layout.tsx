@@ -10,14 +10,19 @@ interface LayoutProps {
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const isHomePage = location.pathname === '/';
+  const isLoginPage = location.pathname === '/login';
+  // Public watcher view has its own full-bleed layout (no header/footer)
+  const isPublicView = location.pathname.startsWith('/triplink/');
+
+  const showChrome = !isHomePage && !isLoginPage && !isPublicView;
 
   return (
     <div className="d-flex flex-column min-vh-100">
-      {!isHomePage && <Header />}
+      {showChrome && <Header />}
       <main className="flex-grow-1">
         {children}
       </main>
-      {!isHomePage && <Footer />}
+      {showChrome && <Footer />}
     </div>
   );
 };

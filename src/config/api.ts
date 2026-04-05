@@ -5,7 +5,8 @@ const isDevelopment = import.meta.env.MODE === 'development' || import.meta.env.
 
 const API_BASE_URL = isDevelopment
   ? (import.meta.env.VITE_DEV_API_URL || 'http://localhost:3001')
-  : (import.meta.env.VITE_API_BASE_URL || 'http://172.105.178.48');
+  // In production, use empty string so /api/* calls go to the same origin (Vercel proxy)
+  : (import.meta.env.VITE_API_BASE_URL || '');
 
 // API Configuration
 export const API_CONFIG = {

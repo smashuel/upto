@@ -160,6 +160,7 @@ const corsOptions = {
     'http://127.0.0.1:5173',
     'https://upto-six.vercel.app',
     'https://upto.world',
+    'https://www.upto.world',
     'http://172.105.178.48',  // Nginx proxy
     'http://localhost'        // Local Nginx proxy
   ],

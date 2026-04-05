@@ -1,401 +1,222 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { CesiumManager } from './CesiumManager';
+import type { LatLng } from '../types/adventure';
+
 interface TrackPoint {
   position: any; // Cesium.Cartesian3
-  cartographic: any; // Cesium.Cartographic
-  elevation?: number;
+  cartographic: any;
+  elevation: number;
   timestamp: Date;
 }
 
-interface Track {
+export interface Track {
   id: string;
   name: string;
   points: TrackPoint[];
-  entity?: any; // Cesium.Entity
+  entity?: any;
   metadata: {
-    distance: number;
-    elevationGain: number;
-    elevationLoss: number;
+    distance: number; // km
+    elevationGain: number; // m
+    elevationLoss: number; // m
     difficulty?: string;
-    notes: string;
     activityType: string;
     created: Date;
-    lastModified: Date;
   };
 }
 
-export default class TrackDrawer {
-  private viewer: any;
+export default class TrackDrawer extends CesiumManager {
   private tracks: Track[] = [];
-  private isDrawing: boolean = false;
-  private currentTrackPoints: TrackPoint[] = [];
-  private currentEntity: any = null;
-  private onRouteCreated?: (track: Track) => void;
-  private clickHandler?: any;
-  private doubleClickHandler?: any;
+  private drawing = false;
+  private currentPoints: TrackPoint[] = [];
+  private previewEntity: any = null;
+  private onCreated?: (track: Track) => void;
 
-  constructor(viewer: any, onRouteCreated?: (track: Track) => void) {
-    this.viewer = viewer;
-    this.onRouteCreated = onRouteCreated;
-    this.setupDrawingHandlers();
+  constructor(viewer: any, onCreated?: (track: Track) => void) {
+    super(viewer);
+    this.onCreated = onCreated;
   }
 
-  private setupDrawingHandlers() {
-    this.clickHandler = (event: any) => {
-      if (!this.isDrawing) return;
+  protected setup(handler: any) {
+    const Cesium = window.Cesium;
 
-      const pickedPosition = this.viewer.camera.pickEllipsoid(
-        event.position,
-        this.viewer.scene.globe.ellipsoid
-      );
+    handler.setInputAction((event: any) => {
+      if (!this.drawing) return;
+      const pos = this.pickPosition(event.position);
+      if (pos) this.addPoint(pos);
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
-      if (pickedPosition) {
-        this.addTrackPoint(pickedPosition);
-      }
-    };
-
-    this.doubleClickHandler = (_event: any) => {
-      if (this.isDrawing) {
-        this.finishDrawing();
-      }
-    };
-
-    this.viewer.cesiumWidget.screenSpaceEventHandler.setInputAction(
-      this.clickHandler,
-      window.Cesium.ScreenSpaceEventType.LEFT_CLICK
-    );
-
-    this.viewer.cesiumWidget.screenSpaceEventHandler.setInputAction(
-      this.doubleClickHandler,
-      window.Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK
-    );
+    handler.setInputAction(() => {
+      if (this.drawing) this.finishDrawing();
+    }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
   }
 
   setMode(enabled: boolean) {
-    if (enabled && !this.isDrawing) {
-      this.startDrawing();
-    } else if (!enabled && this.isDrawing) {
+    if (enabled && !this.drawing) {
+      this.drawing = true;
+      this.currentPoints = [];
+      this.previewEntity = null;
+      this.setCursor('crosshair');
+    } else if (!enabled && this.drawing) {
       this.cancelDrawing();
     }
   }
 
-  private startDrawing() {
-    this.isDrawing = true;
-    this.currentTrackPoints = [];
-    this.currentEntity = null;
-    this.viewer.cesiumWidget.canvas.style.cursor = 'crosshair';
-  }
-
-  private addTrackPoint(position: any) {
+  private addPoint(position: any) {
     const cartographic = window.Cesium.Cartographic.fromCartesian(position);
-    
-    const trackPoint: TrackPoint = {
-      position: position,
-      cartographic: cartographic,
-      elevation: cartographic.height,
-      timestamp: new Date()
-    };
-
-    this.currentTrackPoints.push(trackPoint);
-    this.updateTrackVisualization();
+    this.currentPoints.push({ position, cartographic, elevation: cartographic.height, timestamp: new Date() });
+    this.updatePreview();
   }
 
-  private updateTrackVisualization() {
-    if (this.currentEntity) {
-      this.viewer.entities.remove(this.currentEntity);
-    }
+  private updatePreview() {
+    if (this.previewEntity) this.viewer.entities.remove(this.previewEntity);
+    if (this.currentPoints.length < 2) return;
 
-    if (this.currentTrackPoints.length > 1) {
-      const positions = this.currentTrackPoints.map(point => point.position);
-      
-      this.currentEntity = this.viewer.entities.add({
-        polyline: {
-          positions: positions,
-          width: 4,
-          material: window.Cesium.Color.ORANGE.withAlpha(0.8),
-          clampToGround: true,
-          // Add arrow-like appearance for direction
-          polylineOutline: true,
-          outlineColor: window.Cesium.Color.BLACK,
-          outlineWidth: 1
-        }
-      });
-
-      // Add point markers for each track point
-      this.currentTrackPoints.forEach((point, index) => {
-        if (index === 0 || index === this.currentTrackPoints.length - 1) {
-          this.viewer.entities.add({
-            position: point.position,
-            point: {
-              pixelSize: 8,
-              color: index === 0 ? window.Cesium.Color.GREEN : window.Cesium.Color.RED,
-              outlineColor: window.Cesium.Color.WHITE,
-              outlineWidth: 2,
-              heightReference: window.Cesium.HeightReference.CLAMP_TO_GROUND
-            },
-            label: {
-              text: index === 0 ? 'START' : 'END',
-              font: '10pt sans-serif',
-              pixelOffset: new window.Cesium.Cartesian2(0, -30),
-              fillColor: window.Cesium.Color.WHITE,
-              outlineColor: window.Cesium.Color.BLACK,
-              outlineWidth: 1,
-              style: window.Cesium.LabelStyle.FILL_AND_OUTLINE
-            }
-          });
-        }
-      });
-    }
+    const Cesium = window.Cesium;
+    const positions = this.currentPoints.map(p => p.position);
+    this.previewEntity = this.viewer.entities.add({
+      polyline: {
+        positions,
+        width: 4,
+        material: new Cesium.PolylineOutlineMaterialProperty({
+          color: Cesium.Color.ORANGE.withAlpha(0.8),
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 1,
+        }),
+        clampToGround: true,
+      },
+    });
   }
 
-  private finishDrawing(): Track | null {
-    if (this.currentTrackPoints.length < 2) {
+  private finishDrawing() {
+    if (this.currentPoints.length < 2) {
       this.cancelDrawing();
-      return null;
+      return;
     }
 
-    const track = this.createTrackFromPoints();
+    const track = this.buildTrack();
     this.tracks.push(track);
-    this.renderFinalTrack(track);
+    if (this.previewEntity) this.viewer.entities.remove(this.previewEntity);
+    track.entity = this.renderTrack(track);
+    this.onCreated?.(track);
 
-    if (this.onRouteCreated) {
-      this.onRouteCreated(track);
-    }
-
-    this.isDrawing = false;
-    this.viewer.cesiumWidget.canvas.style.cursor = '';
-    this.currentTrackPoints = [];
-    this.currentEntity = null;
-
-    return track;
+    this.drawing = false;
+    this.currentPoints = [];
+    this.previewEntity = null;
+    this.setCursor('');
   }
 
   private cancelDrawing() {
-    if (this.currentEntity) {
-      this.viewer.entities.remove(this.currentEntity);
-      this.currentEntity = null;
+    if (this.previewEntity) {
+      this.viewer.entities.remove(this.previewEntity);
+      this.previewEntity = null;
     }
-    
-    this.isDrawing = false;
-    this.viewer.cesiumWidget.canvas.style.cursor = '';
-    this.currentTrackPoints = [];
+    this.drawing = false;
+    this.currentPoints = [];
+    this.setCursor('');
   }
 
-  private createTrackFromPoints(): Track {
-    const metadata = this.calculateTrackMetadata();
-    
-    return {
-      id: this.generateId(),
-      name: `Route ${this.tracks.length + 1}`,
-      points: [...this.currentTrackPoints],
-      metadata: {
-        distance: metadata.distance,
-        elevationGain: metadata.elevationGain,
-        elevationLoss: metadata.elevationLoss,
-        difficulty: this.estimateDifficulty(metadata),
-        notes: '',
-        activityType: 'hiking', // Default, can be updated
-        created: new Date(),
-        lastModified: new Date()
-      }
-    };
-  }
-
-  private calculateTrackMetadata() {
-    let totalDistance = 0;
+  private buildTrack(): Track {
+    let distance = 0;
     let elevationGain = 0;
     let elevationLoss = 0;
-    let previousPoint: TrackPoint | null = null;
 
-    for (const point of this.currentTrackPoints) {
-      if (previousPoint) {
-        // Calculate distance between points
-        const distance = window.Cesium.Cartesian3.distance(
-          previousPoint.position,
-          point.position
-        );
-        totalDistance += distance;
-
-        // Calculate elevation change
-        const elevationChange = point.elevation! - previousPoint.elevation!;
-        if (elevationChange > 0) {
-          elevationGain += elevationChange;
-        } else {
-          elevationLoss += Math.abs(elevationChange);
-        }
-      }
-      previousPoint = point;
+    for (let i = 1; i < this.currentPoints.length; i++) {
+      distance += window.Cesium.Cartesian3.distance(
+        this.currentPoints[i - 1].position,
+        this.currentPoints[i].position
+      );
+      const delta = this.currentPoints[i].elevation - this.currentPoints[i - 1].elevation;
+      if (delta > 0) elevationGain += delta;
+      else elevationLoss += Math.abs(delta);
     }
 
+    distance /= 1000; // convert to km
+    const difficulty = this.estimateDifficulty(distance, elevationGain);
+
     return {
-      distance: totalDistance / 1000, // Convert to kilometers
-      elevationGain,
-      elevationLoss
+      id: this.generateId('track'),
+      name: `Route ${this.tracks.length + 1}`,
+      points: [...this.currentPoints],
+      metadata: { distance, elevationGain, elevationLoss, difficulty, activityType: 'hiking', created: new Date() },
     };
   }
 
-  private estimateDifficulty(metadata: { distance: number; elevationGain: number; elevationLoss: number }): string {
-    const { distance, elevationGain } = metadata;
-    
-    // Simple difficulty estimation based on distance and elevation gain
-    const difficultyScore = distance * 0.5 + (elevationGain / 100) * 0.3;
-    
-    if (difficultyScore < 2) return 'easy';
-    if (difficultyScore < 5) return 'moderate';
-    if (difficultyScore < 8) return 'difficult';
+  private estimateDifficulty(distanceKm: number, elevationGainM: number): string {
+    const score = distanceKm * 0.5 + (elevationGainM / 100) * 0.3;
+    if (score < 2) return 'easy';
+    if (score < 5) return 'moderate';
+    if (score < 8) return 'difficult';
     return 'expert';
   }
 
-  private renderFinalTrack(track: Track) {
-    const positions = track.points.map(point => point.position);
-    
-    const entity = this.viewer.entities.add({
+  private renderTrack(track: Track): any {
+    return this.viewer.entities.add({
       polyline: {
-        positions: positions,
+        positions: track.points.map(p => p.position),
         width: 3,
         material: window.Cesium.Color.BLUE.withAlpha(0.8),
-        clampToGround: true
+        clampToGround: true,
       },
-      description: this.createTrackDescription(track)
+      description: `<div><h4>${track.name}</h4><p>${track.metadata.distance.toFixed(2)} km · +${track.metadata.elevationGain.toFixed(0)}m / -${track.metadata.elevationLoss.toFixed(0)}m · ${track.metadata.difficulty}</p></div>`,
     });
-
-    track.entity = entity;
-  }
-
-  private createTrackDescription(track: Track): string {
-    const { metadata } = track;
-    
-    return `
-      <div style="max-width: 400px;">
-        <h4>${track.name}</h4>
-        <p><strong>Distance:</strong> ${metadata.distance.toFixed(2)} km</p>
-        <p><strong>Elevation Gain:</strong> +${metadata.elevationGain.toFixed(0)}m</p>
-        <p><strong>Elevation Loss:</strong> -${metadata.elevationLoss.toFixed(0)}m</p>
-        <p><strong>Difficulty:</strong> ${metadata.difficulty}</p>
-        <p><strong>Activity Type:</strong> ${metadata.activityType}</p>
-        ${metadata.notes ? `<p><strong>Notes:</strong> ${metadata.notes}</p>` : ''}
-        <p><small>Created: ${metadata.created.toLocaleDateString()}</small></p>
-        <button onclick="track_${track.id}_edit()">Edit</button>
-        <button onclick="track_${track.id}_delete()">Delete</button>
-        <button onclick="track_${track.id}_export()">Export GPX</button>
-      </div>
-    `;
-  }
-
-  deleteTrack(id: string) {
-    const trackIndex = this.tracks.findIndex(track => track.id === id);
-    if (trackIndex === -1) return;
-
-    const track = this.tracks[trackIndex];
-    if (track.entity) {
-      this.viewer.entities.remove(track.entity);
-    }
-
-    this.tracks.splice(trackIndex, 1);
-  }
-
-  updateTrack(id: string, updates: Partial<Track>) {
-    const track = this.tracks.find(t => t.id === id);
-    if (!track) return;
-
-    Object.assign(track, updates);
-    track.metadata.lastModified = new Date();
-    
-    // Update the visual representation
-    if (track.entity) {
-      track.entity.description = this.createTrackDescription(track);
-    }
   }
 
   getTracks(): Track[] {
     return [...this.tracks];
   }
 
-  loadRoutes(routes: any[]) {
-    routes.forEach(route => {
-      if (route.waypoints && Array.isArray(route.waypoints)) {
-        const trackPoints: TrackPoint[] = route.waypoints.map((wp: any) => {
-          const [lat, lng] = wp.coordinates;
-          const position = window.Cesium.Cartesian3.fromDegrees(lng, lat, wp.elevation || 0);
-          return {
-            position,
-            cartographic: window.Cesium.Cartographic.fromCartesian(position),
-            elevation: wp.elevation,
-            timestamp: new Date()
-          };
-        });
+  /** Load routes from stored data — waypoint coordinates are [lat, lng] */
+  loadRoutes(routes: Array<{ id?: string; name?: string; waypoints?: Array<{ coordinates: LatLng; elevation?: number }>; distance?: number; elevationGain?: number; elevationLoss?: number; difficulty?: string; activityType?: string }>) {
+    for (const route of routes) {
+      if (!route.waypoints?.length) continue;
 
-        const track: Track = {
-          id: route.id || this.generateId(),
-          name: route.name || `Imported Route ${this.tracks.length + 1}`,
-          points: trackPoints,
-          metadata: {
-            distance: route.distance || 0,
-            elevationGain: route.elevationGain || 0,
-            elevationLoss: route.elevationLoss || 0,
-            difficulty: route.difficulty,
-            notes: route.notes || '',
-            activityType: route.activityType || 'hiking',
-            created: new Date(route.created || Date.now()),
-            lastModified: new Date()
-          }
-        };
+      const points: TrackPoint[] = route.waypoints.map(wp => {
+        const [lat, lng] = wp.coordinates;
+        const position = window.Cesium.Cartesian3.fromDegrees(lng, lat, wp.elevation ?? 0);
+        return { position, cartographic: window.Cesium.Cartographic.fromCartesian(position), elevation: wp.elevation ?? 0, timestamp: new Date() };
+      });
 
-        this.tracks.push(track);
-        this.renderFinalTrack(track);
-      }
-    });
+      const track: Track = {
+        id: route.id || this.generateId('track'),
+        name: route.name || `Imported Route ${this.tracks.length + 1}`,
+        points,
+        metadata: {
+          distance: route.distance ?? 0,
+          elevationGain: route.elevationGain ?? 0,
+          elevationLoss: route.elevationLoss ?? 0,
+          difficulty: route.difficulty,
+          activityType: route.activityType ?? 'hiking',
+          created: new Date(),
+        },
+      };
+
+      this.tracks.push(track);
+      track.entity = this.renderTrack(track);
+    }
   }
 
-  exportTrackAsGPX(id: string): string {
+  exportGPX(id: string): string {
     const track = this.tracks.find(t => t.id === id);
     if (!track) return '';
 
-    const trackPointsXML = track.points.map(point => {
-      const lat = window.Cesium.Math.toDegrees(point.cartographic.latitude);
-      const lng = window.Cesium.Math.toDegrees(point.cartographic.longitude);
-      const elevation = point.elevation || 0;
-      
-      return `    <trkpt lat="${lat}" lon="${lng}">
-      <ele>${elevation}</ele>
-      <time>${point.timestamp.toISOString()}</time>
-    </trkpt>`;
+    const pts = track.points.map(p => {
+      const lat = window.Cesium.Math.toDegrees(p.cartographic.latitude);
+      const lng = window.Cesium.Math.toDegrees(p.cartographic.longitude);
+      return `    <trkpt lat="${lat}" lon="${lng}"><ele>${p.elevation}</ele><time>${p.timestamp.toISOString()}</time></trkpt>`;
     }).join('\n');
 
-    return `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Upto Trip Planner">
-  <trk>
-    <name>${track.name}</name>
-    <desc>${track.metadata.notes}</desc>
-    <trkseg>
-${trackPointsXML}
-    </trkseg>
-  </trk>
-</gpx>`;
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Upto">\n  <trk><name>${track.name}</name><trkseg>\n${pts}\n  </trkseg></trk>\n</gpx>`;
   }
 
   clearAll() {
-    this.tracks.forEach(track => {
-      if (track.entity) {
-        this.viewer.entities.remove(track.entity);
-      }
-    });
+    for (const track of this.tracks) {
+      if (track.entity) this.viewer.entities.remove(track.entity);
+    }
     this.tracks = [];
   }
 
-  flyToTrack(id: string) {
-    const track = this.tracks.find(t => t.id === id);
-    if (!track || track.points.length === 0) return;
-
-    // Calculate bounding box of the track
-    const positions = track.points.map(point => point.position);
-    const boundingSphere = window.Cesium.BoundingSphere.fromPoints(positions);
-    
-    this.viewer.camera.flyToBoundingSphere(boundingSphere, {
-      duration: 2.0,
-      offset: new window.Cesium.HeadingPitchRange(0, -0.5, boundingSphere.radius * 2)
-    });
-  }
-
-  private generateId(): string {
-    return `track_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  /** Kept for backward compat — was called getRoutes() in export */
+  getRoutes(): Track[] {
+    return this.getTracks();
   }
 }

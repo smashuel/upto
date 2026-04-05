@@ -1,7 +1,7 @@
 import React from 'react';
 import { Row, Col, Badge } from 'react-bootstrap';
-import { MapPin, Clock, Users, Calendar, Bell } from 'lucide-react';
-import { format, differenceInHours } from 'date-fns';
+import { MapPin, Clock, Users, Calendar } from 'lucide-react';
+import { format } from 'date-fns';
 import { Card } from '../ui';
 
 interface AdventurePreviewProps {
@@ -10,35 +10,31 @@ interface AdventurePreviewProps {
     description: string;
     activityType: string;
     startDate: string;
-    endDate: string;
-    checkInInterval: number;
-    location: string;
+    location: { name: string } | string;
     emergencyContacts: Array<{ name: string; relationship: string; phone: string; email: string }>;
   };
 }
 
+const ACTIVITY_ICONS: Record<string, string> = {
+  'hiking': '🥾',
+  'trail-running': '🏃',
+  'climbing': '🧗',
+  'cycling': '🚴',
+  'water-sports': '🚣',
+  'winter-sports': '⛷️',
+  'other': '🗺️',
+};
+
 export const AdventurePreview: React.FC<AdventurePreviewProps> = ({ formData }) => {
-  const duration = formData.startDate && formData.endDate 
-    ? differenceInHours(new Date(formData.endDate), new Date(formData.startDate))
-    : 0;
-
-  const getActivityIcon = () => {
-    switch (formData.activityType) {
-      case 'hiking': return '🥾';
-      case 'climbing': return '🧗';
-      case 'sailing': return '⛵';
-      case 'skiing': return '⛷️';
-      case 'cycling': return '🚴';
-      default: return '🗺️';
-    }
-  };
-
+  const locationName = typeof formData.location === 'string'
+    ? formData.location
+    : formData.location?.name || 'TBD';
 
   return (
     <div>
       <div className="mb-4">
-        <h3 className="h4 mb-2">Adventure Preview</h3>
-        <p className="text-muted">Review your adventure plan before sharing</p>
+        <h3 className="h4 mb-2">TripLink Preview</h3>
+        <p className="text-muted">Review your trip plan before sharing</p>
       </div>
 
       <div className="adventure-preview">
@@ -48,10 +44,10 @@ export const AdventurePreview: React.FC<AdventurePreviewProps> = ({ formData }) 
             <Col>
               <div className="d-flex align-items-center mb-2">
                 <span className="me-3" style={{ fontSize: '2rem' }}>
-                  {getActivityIcon()}
+                  {ACTIVITY_ICONS[formData.activityType] || '🗺️'}
                 </span>
                 <div>
-                  <h2 className="mb-1 text-white">{formData.title || 'Untitled Adventure'}</h2>
+                  <h2 className="mb-1 text-white">{formData.title || 'Untitled Trip'}</h2>
                   <div className="d-flex gap-2">
                     <Badge bg="light" text="dark" className="text-capitalize">
                       {formData.activityType || 'Not specified'}
@@ -70,17 +66,15 @@ export const AdventurePreview: React.FC<AdventurePreviewProps> = ({ formData }) 
         <div className="adventure-stats">
           <div className="adventure-stat">
             <MapPin size={20} className="text-primary mb-2" />
-            <div className="adventure-stat-value">
-              {formData.location || 'TBD'}
-            </div>
+            <div className="adventure-stat-value">{locationName}</div>
             <div className="adventure-stat-label">Location</div>
           </div>
 
           <div className="adventure-stat">
             <Calendar size={20} className="text-primary mb-2" />
             <div className="adventure-stat-value">
-              {formData.startDate 
-                ? format(new Date(formData.startDate), 'MMM d') 
+              {formData.startDate
+                ? format(new Date(formData.startDate), 'MMM d')
                 : 'TBD'
               }
             </div>
@@ -90,17 +84,12 @@ export const AdventurePreview: React.FC<AdventurePreviewProps> = ({ formData }) 
           <div className="adventure-stat">
             <Clock size={20} className="text-primary mb-2" />
             <div className="adventure-stat-value">
-              {duration > 0 ? `${duration}h` : 'TBD'}
+              {formData.startDate
+                ? format(new Date(formData.startDate), 'h:mm a')
+                : 'TBD'
+              }
             </div>
-            <div className="adventure-stat-label">Duration</div>
-          </div>
-
-          <div className="adventure-stat">
-            <Bell size={20} className="text-primary mb-2" />
-            <div className="adventure-stat-value">
-              {formData.checkInInterval}h
-            </div>
-            <div className="adventure-stat-label">Check-in</div>
+            <div className="adventure-stat-label">Start Time</div>
           </div>
         </div>
 
@@ -113,19 +102,11 @@ export const AdventurePreview: React.FC<AdventurePreviewProps> = ({ formData }) 
                   <Calendar className="me-2 text-primary" size={18} />
                   Schedule Details
                 </h6>
-                
+
                 {formData.startDate ? (
                   <div className="small">
                     <div className="mb-2">
                       <strong>Start:</strong> {format(new Date(formData.startDate), 'PPpp')}
-                    </div>
-                    {formData.endDate && (
-                      <div className="mb-2">
-                        <strong>End:</strong> {format(new Date(formData.endDate), 'PPpp')}
-                      </div>
-                    )}
-                    <div className="text-muted">
-                      Check-ins every {formData.checkInInterval} hours
                     </div>
                   </div>
                 ) : (
@@ -140,7 +121,7 @@ export const AdventurePreview: React.FC<AdventurePreviewProps> = ({ formData }) 
                   <Users className="me-2 text-primary" size={18} />
                   Emergency Contacts
                 </h6>
-                
+
                 {formData.emergencyContacts && formData.emergencyContacts.length > 0 ? (
                   <div className="small">
                     {formData.emergencyContacts.map((contact, index) => (

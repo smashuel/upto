@@ -1,0 +1,161 @@
+═══════════════════════════════════════════════════════════════════════════════
+DOC API INTEGRATION — IMPLEMENTATION SUMMARY
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ IMPLEMENTATION COMPLETE
+
+6 files modified/created, full TypeScript build passes clean.
+
+═══════════════════════════════════════════════════════════════════════════════
+FILES CHANGED
+═══════════════════════════════════════════════════════════════════════════════
+
+BACKEND (Node.js/Express):
+  ✓ backend-server.js (~450 lines added)
+      - DOC API constants & NZ bounds detection
+      - Cache utilities (read/write/staleness check)
+      - Fetch wrapper with x-api-key header
+      - 5 new routes:
+        • GET /api/doc/tracks?name=&region=
+        • GET /api/doc/huts?region=
+        • GET /api/doc/campsites?region=
+        • GET /api/doc/alerts (always live, never cached)
+        • GET /api/doc/nearby?lat=&lng=&radius=
+      - Haversine distance filtering for nearby search
+      - Background sync on startup if cache is stale
+
+  ✓ doc-sync.js (new, ~200 lines)
+      - Standalone sync script for manual or cron use
+      - Syncs tracks, huts, campsites in parallel (with 1s delay between)
+      - Writes to ./data/doc-{resource}.json with syncedAt timestamp
+      - TTL: 7 days
+      - Exit codes: 0 (success), 1 (failure)
+      - Detailed logging and summary output
+
+  ✓ deploy.sh
+      - Added DOC_API_KEY to PM2 ecosystem.config.js env block
+      - Added mkdir -p ./data in startup script
+
+FRONTEND (React/TypeScript):
+  ✓ src/services/GlobalTrailService.ts (~120 lines added)
+      - Extended source union: 'doc' added to TrailSuggestion.source
+      - NZ_BOUNDS constant: lat -47 to -34, lng 166 to 178
+      - isNZQuery() helper: detects if query is in/near NZ
+      - searchDOC() method: only calls /api/doc/tracks if NZ
+      - processDOCResults() mapper:
+        • GeoJSON [lng,lat] → TrailSuggestion [lat,lng]
+        • Extracts first point as center, all points as waypoints
+        • Maps assetId, name, line, distance, dificulty (note typo)
+      - Integrated into suggestRoute() parallel search
+
+  ✓ src/config/api.ts (~30 lines added)
+      - Added 5 DOC endpoints to API_CONFIG.ENDPOINTS
+      - Added getDocAlerts(region?) method to ApiClient
+      - Added getDocNearby(lat, lng, radius) method to ApiClient
+      - Added docAlerts() and docNearby() to api shorthand object
+
+CONFIGURATION:
+  ✓ .env.example
+      - Added DOC_API_KEY documentation
+      - Clarified backend-only vs frontend VITE_ vars
+
+═══════════════════════════════════════════════════════════════════════════════
+KEY ARCHITECTURE DECISIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+1. SERVER-SIDE API KEY
+   • DOC_API_KEY never leaves the backend
+   • Frontend communicates via /api/doc/* routes
+   • Prevents key exposure, enables rate limit management
+
+2. WEEKLY CACHE + LIVE ALERTS
+   • Tracks/huts/campsites: Cached 7 days (reliable, cost-effective)
+   • Alerts: Always live (safety-critical, DOC API is stable)
+   • Background sync on startup if cache missing/stale
+   • Manual sync via: node doc-sync.js
+
+3. NZ-ONLY ACTIVATION
+   • Queries only hit DOC if bounds overlap NZ or location mentions "NZ"
+   • Prevents wasted API calls for non-NZ users
+   • Seamless integration — no user-facing toggles needed
+
+4. HAVERSINE FILTERING
+   • Nearby endpoint uses haversine distance in km
+   • Tracks: center = first point of LineString geometry
+   • Huts/campsites: use lat/lng fields
+   • Default radius: 20km
+
+═══════════════════════════════════════════════════════════════════════════════
+TESTING CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+LOCAL DEV:
+  □ npm run build             (TypeScript compile + Vite)
+  □ export DOC_API_KEY=...
+  □ npm run dev               (Vite dev server)
+  □ curl http://localhost:3001/api/health
+  □ Search "Tongariro Alpine Crossing" in frontend
+  □ Verify DOC results appear
+
+PRODUCTION DEPLOY:
+  □ export DOC_API_KEY=...
+  □ sh deploy.sh             (uploads + starts backend)
+  □ ssh root@172.105.178.48 'pm2 logs upto-backend'
+  □ curl http://172.105.178.48/api/doc/alerts
+
+SYNC SCRIPT:
+  □ ssh root@172.105.178.48
+  □ cd /opt/upto-backend
+  □ node doc-sync.js         (manual sync)
+  □ Verify ./data/ has doc-tracks.json, doc-huts.json, doc-campsites.json
+  □ Check crontab: crontab -l
+  □ Add weekly cron: 0 3 * * 1 cd /opt/upto-backend && node doc-sync.js >> /var/log/pm2/doc-sync.log 2>&1
+
+NEARBY SEARCH:
+  □ curl "http://localhost:3001/api/doc/nearby?lat=-39.2&lng=175.3&radius=20"
+  □ Verify tracks, huts, campsites sorted by distance
+  □ Verify alerts included (all active regional alerts, not distance-filtered)
+
+═══════════════════════════════════════════════════════════════════════════════
+QUICK START
+═══════════════════════════════════════════════════════════════════════════════
+
+LOCAL TESTING:
+  1. Get DOC_API_KEY from https://api.doc.govt.nz
+  2. export DOC_API_KEY=your_key_here
+  3. npm run build
+  4. npm run dev
+  5. Search for NZ trails in the frontend
+
+PRODUCTION DEPLOY:
+  1. export DOC_API_KEY=your_key_here
+  2. sh deploy.sh
+  3. SSH to Linode: ssh root@172.105.178.48
+  4. cd /opt/upto-backend && node doc-sync.js
+  5. crontab -e && add: 0 3 * * 1 cd /opt/upto-backend && node doc-sync.js >> /var/log/pm2/doc-sync.log 2>&1
+
+═══════════════════════════════════════════════════════════════════════════════
+DATA LICENSE
+═══════════════════════════════════════════════════════════════════════════════
+
+All DOC data is CC BY 4.0:
+  • Human-readable: https://creativecommons.org/licenses/by/4.0/
+  • DOC Attribution: https://www.doc.govt.nz/
+
+Your app must display:
+  "Data © New Zealand Department of Conservation"
+  (+ link to https://www.doc.govt.nz/)
+
+═══════════════════════════════════════════════════════════════════════════════
+SUPPORT
+═══════════════════════════════════════════════════════════════════════════════
+
+Full documentation: DOC-INTEGRATION.md
+
+Key files:
+  • Backend routes: backend-server.js (lines ~500-700)
+  • Sync script: doc-sync.js
+  • Frontend search: src/services/GlobalTrailService.ts (lines ~213-340)
+  • API config: src/config/api.ts (lines ~14-18, ~101-108)
+
+═══════════════════════════════════════════════════════════════════════════════

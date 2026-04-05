@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable no-console */
 import what3words from '@what3words/api';
 import { What3WordsAddress, What3WordsLocation, What3WordsSuggestion } from '../types/what3words';
 

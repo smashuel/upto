@@ -1,229 +1,125 @@
-interface MapNote {
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { CesiumManager } from './CesiumManager';
+
+export interface MapNote {
   id: string;
-  position: any; // Cesium.Cartesian3
-  cartographic: any; // Cesium.Cartographic
-  entity?: any; // Cesium.Entity
+  position: any;
+  cartographic: any;
+  entity?: any;
   content: string;
   type: 'accommodation' | 'warning' | 'info' | 'photo' | 'general';
-  metadata: {
-    title: string;
-    stayDuration?: string;
-    contact?: string;
-    website?: string;
-    phone?: string;
-    elevation?: number;
-    timestamp: Date;
-    lastModified: Date;
-  };
+  title: string;
+  timestamp: Date;
 }
 
-export default class NoteManager {
-  private viewer: any;
-  private notes: MapNote[] = [];
-  private isNoteMode: boolean = false;
-  private onNoteAdded?: (note: MapNote) => void;
-  private clickHandler?: any;
+// Minimal inline SVG icons as data URLs
+const NOTE_ICONS: Record<MapNote['type'], string> = {
+  accommodation: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23007CFF"><rect x="3" y="9" width="18" height="12" rx="1"/><path d="M1 9h22M9 9V5h6v4"/></svg>',
+  warning:       'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23FF6B00"><path d="M12 2L22 20H2z"/><path d="M12 9v4M12 16v2" stroke="white" stroke-width="1.5"/></svg>',
+  info:          'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%2300B8D4"><circle cx="12" cy="12" r="10"/><path d="M12 8v2M12 12v6" stroke="white" stroke-width="2"/></svg>',
+  photo:         'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23007CFF"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="12" r="3" fill="white"/></svg>',
+  general:       'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 12H3M12 3v18" stroke="%236B7280" stroke-width="2"/></svg>',
+};
 
-  constructor(viewer: any, onNoteAdded?: (note: MapNote) => void) {
-    this.viewer = viewer;
-    this.onNoteAdded = onNoteAdded;
-    this.setupEventHandlers();
+export default class NoteManager extends CesiumManager {
+  private notes: MapNote[] = [];
+  private active = false;
+  private onAdded?: (note: MapNote) => void;
+
+  constructor(viewer: any, onAdded?: (note: MapNote) => void) {
+    super(viewer);
+    this.onAdded = onAdded;
   }
 
-  private setupEventHandlers() {
-    this.clickHandler = (event: any) => {
-      if (!this.isNoteMode) return;
-
-      const pickedPosition = this.viewer.camera.pickEllipsoid(
-        event.position,
-        this.viewer.scene.globe.ellipsoid
-      );
-
-      if (pickedPosition) {
-        this.promptForNote(pickedPosition);
-      }
-    };
-
-    this.viewer.cesiumWidget.screenSpaceEventHandler.setInputAction(
-      this.clickHandler,
-      window.Cesium.ScreenSpaceEventType.LEFT_CLICK
-    );
+  protected setup(handler: any) {
+    handler.setInputAction((event: any) => {
+      if (!this.active) return;
+      const pos = this.pickPosition(event.position);
+      if (pos) this.promptAndAdd(pos);
+    }, window.Cesium.ScreenSpaceEventType.LEFT_CLICK);
   }
 
   setMode(enabled: boolean) {
-    this.isNoteMode = enabled;
-    this.viewer.cesiumWidget.canvas.style.cursor = enabled ? 'help' : '';
+    this.active = enabled;
+    this.setCursor(enabled ? 'help' : '');
   }
 
-  private promptForNote(position: any) {
-    // In a real implementation, this would open a modal or form
-    // For now, we'll create a simple note with prompt
-    const content = prompt('Enter note content:');
+  private promptAndAdd(position: any) {
+    // TODO: replace with a proper modal — window.prompt doesn't work on mobile
+    const content = window.prompt('Note content:');
     if (!content) return;
+    const title = window.prompt('Note title (optional):') || 'Map Note';
+    const typeRaw = window.prompt('Type: accommodation / warning / info / photo / general') || 'general';
+    const type = (['accommodation', 'warning', 'info', 'photo', 'general'].includes(typeRaw)
+      ? typeRaw
+      : 'general') as MapNote['type'];
 
-    const title = prompt('Note title (optional):') || 'Map Note';
-    const type = prompt('Note type (accommodation/warning/info/photo/general):') as MapNote['type'] || 'general';
-
-    this.addNote(position, {
-      content,
-      type,
-      metadata: {
-        title
-      }
-    });
+    this.addNote(position, { content, title, type });
   }
 
-  addNote(position: any, noteData: {
-    content: string;
-    type: MapNote['type'];
-    metadata: Partial<MapNote['metadata']>;
-  }): MapNote {
+  addNote(position: any, data: { content: string; title: string; type: MapNote['type'] }): MapNote {
     const cartographic = window.Cesium.Cartographic.fromCartesian(position);
-    
+
     const note: MapNote = {
-      id: this.generateId(),
-      position: position,
-      cartographic: cartographic,
-      content: noteData.content,
-      type: noteData.type,
-      metadata: {
-        title: noteData.metadata.title || 'Map Note',
-        stayDuration: noteData.metadata.stayDuration,
-        contact: noteData.metadata.contact,
-        website: noteData.metadata.website,
-        phone: noteData.metadata.phone,
-        elevation: cartographic.height,
-        timestamp: new Date(),
-        lastModified: new Date(),
-        ...noteData.metadata
-      }
+      id: this.generateId('note'),
+      position,
+      cartographic,
+      content: data.content,
+      type: data.type,
+      title: data.title,
+      timestamp: new Date(),
     };
 
     this.notes.push(note);
-    this.renderNote(note);
-    
-    if (this.onNoteAdded) {
-      this.onNoteAdded(note);
-    }
-
+    note.entity = this.renderNote(note);
+    this.onAdded?.(note);
     return note;
   }
 
-  private renderNote(note: MapNote) {
-    const entity = this.viewer.entities.add({
+  private renderNote(note: MapNote): any {
+    const Cesium = window.Cesium;
+    const lat = Cesium.Math.toDegrees(note.cartographic.latitude).toFixed(6);
+    const lng = Cesium.Math.toDegrees(note.cartographic.longitude).toFixed(6);
+
+    return this.viewer.entities.add({
       position: note.position,
       billboard: {
-        image: this.getNoteIcon(note.type),
+        image: NOTE_ICONS[note.type],
         scale: 0.6,
-        heightReference: window.Cesium.HeightReference.CLAMP_TO_GROUND,
-        verticalOrigin: window.Cesium.VerticalOrigin.BOTTOM,
-        scaleByDistance: new window.Cesium.NearFarScalar(1.5e2, 1.0, 1.5e7, 0.5)
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        scaleByDistance: new Cesium.NearFarScalar(1.5e2, 1.0, 1.5e7, 0.5),
       },
       label: {
-        text: note.metadata.title,
+        text: note.title,
         font: '11pt sans-serif',
-        pixelOffset: new window.Cesium.Cartesian2(0, -60),
-        fillColor: window.Cesium.Color.WHITE,
-        outlineColor: window.Cesium.Color.BLACK,
+        pixelOffset: new Cesium.Cartesian2(0, -60),
+        fillColor: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.BLACK,
         outlineWidth: 2,
-        style: window.Cesium.LabelStyle.FILL_AND_OUTLINE,
-        scaleByDistance: new window.Cesium.NearFarScalar(1.5e2, 1.0, 1.5e7, 0.0)
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        scaleByDistance: new Cesium.NearFarScalar(1.5e2, 1.0, 1.5e7, 0.0),
       },
-      description: this.createNoteDescription(note)
+      description: `<div><h4>${note.title}</h4><p>${note.content}</p><p>${lat}, ${lng}</p></div>`,
     });
-
-    note.entity = entity;
-  }
-
-  private getNoteIcon(type: MapNote['type']): string {
-    // Using data URLs for simple icons (you could replace with actual icon files)
-    const icons = {
-      accommodation: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTMgMjFIMjFWOUgzVjIxWk01IDExSDdWMTNINVYxMVpNOSAxMUgxMVYxM0g5VjExWk0xMyAxMUgxNVYxM0gxM1YxMVpNMTcgMTFIMTlWMTNIMTdWMTFaIiBmaWxsPSIjMDA3Q0ZGIi8+Cjwvc3ZnPg==',
-      warning: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyIDJMMjIgMjBIMkwxMiAyWk0xMSAxN0gxM1YxOUgxMVYxN1pNMTEgOUgxM1YxNUgxMVY5WiIgZmlsbD0iI0ZGNkIwMCIvPgo8L3N2Zz4=',
-      info: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiIGZpbGw9IiMwMEI4RDQiLz4KPHBhdGggZD0iTTEyIDZWOE0xMiAxMlYxOCIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPC9zdmc+',
-      photo: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3QgeD0iMyIgeT0iNSIgd2lkdGg9IjE4IiBoZWlnaHQ9IjE0IiByeD0iMiIgZmlsbD0iIzAwN0NGRiIvPgo8Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIzIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4=',
-      general: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTIxIDEySDNNMTIgM1YyMSIgc3Ryb2tlPSIjNkI3MjgwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4='
-    };
-    
-    return icons[type] || icons.general;
-  }
-
-  private createNoteDescription(note: MapNote): string {
-    const { metadata, cartographic } = note;
-    const lat = window.Cesium.Math.toDegrees(cartographic.latitude).toFixed(6);
-    const lng = window.Cesium.Math.toDegrees(cartographic.longitude).toFixed(6);
-    const elevation = cartographic.height.toFixed(0);
-
-    return `
-      <div style="max-width: 350px;">
-        <h4>${metadata.title}</h4>
-        <p><strong>Type:</strong> ${note.type.charAt(0).toUpperCase() + note.type.slice(1)}</p>
-        <p><strong>Content:</strong> ${note.content}</p>
-        <p><strong>Location:</strong> ${lat}, ${lng}</p>
-        <p><strong>Elevation:</strong> ${elevation}m</p>
-        ${metadata.stayDuration ? `<p><strong>Stay Duration:</strong> ${metadata.stayDuration}</p>` : ''}
-        ${metadata.contact ? `<p><strong>Contact:</strong> ${metadata.contact}</p>` : ''}
-        ${metadata.phone ? `<p><strong>Phone:</strong> ${metadata.phone}</p>` : ''}
-        ${metadata.website ? `<p><strong>Website:</strong> <a href="${metadata.website}" target="_blank">${metadata.website}</a></p>` : ''}
-        <p><small>Added: ${metadata.timestamp.toLocaleDateString()}</small></p>
-        <button onclick="note_${note.id}_edit()">Edit</button>
-        <button onclick="note_${note.id}_delete()">Delete</button>
-      </div>
-    `;
-  }
-
-  deleteNote(id: string) {
-    const noteIndex = this.notes.findIndex(note => note.id === id);
-    if (noteIndex === -1) return;
-
-    const note = this.notes[noteIndex];
-    if (note.entity) {
-      this.viewer.entities.remove(note.entity);
-    }
-
-    this.notes.splice(noteIndex, 1);
-  }
-
-  updateNote(id: string, updates: Partial<MapNote>) {
-    const note = this.notes.find(n => n.id === id);
-    if (!note) return;
-
-    Object.assign(note, updates);
-    note.metadata.lastModified = new Date();
-    
-    // Update the visual representation
-    if (note.entity) {
-      note.entity.description = this.createNoteDescription(note);
-      if (updates.metadata?.title) {
-        note.entity.label.text = updates.metadata.title;
-      }
-    }
   }
 
   getNotes(): MapNote[] {
     return [...this.notes];
   }
 
+  deleteNote(id: string) {
+    const idx = this.notes.findIndex(n => n.id === id);
+    if (idx === -1) return;
+    const note = this.notes[idx];
+    if (note.entity) this.viewer.entities.remove(note.entity);
+    this.notes.splice(idx, 1);
+  }
+
   clearAll() {
-    this.notes.forEach(note => {
-      if (note.entity) {
-        this.viewer.entities.remove(note.entity);
-      }
-    });
+    for (const note of this.notes) {
+      if (note.entity) this.viewer.entities.remove(note.entity);
+    }
     this.notes = [];
-  }
-
-  flyToNote(id: string) {
-    const note = this.notes.find(n => n.id === id);
-    if (!note) return;
-
-    this.viewer.camera.flyTo({
-      destination: window.Cesium.Cartesian3.fromCartesian(note.position, undefined, 1000),
-      duration: 2.0
-    });
-  }
-
-  private generateId(): string {
-    return `note_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 }

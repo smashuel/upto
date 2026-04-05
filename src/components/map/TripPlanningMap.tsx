@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable no-console */
 import React, { useEffect, useRef, useState } from 'react';
 import { Card, Button, ButtonGroup } from 'react-bootstrap';
-import { Map, MapPin, Route, StickyNote, Download, RotateCcw } from 'lucide-react';
+import { Map, MapPin, Route, StickyNote, Download, RotateCcw, Navigation } from 'lucide-react';
 
 // Cesium types (using CDN, so we declare globals)
 declare global {
@@ -26,7 +28,7 @@ interface MapMode {
 
 export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   height = '600px',
-  center = [44.5, -121.5], // Default to Oregon Cascades
+  center,
   onWaypointAdded,
   onRouteCreated,
   onNoteAdded,
@@ -61,31 +63,56 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   useEffect(() => {
     if (!cesiumReady || !mapContainerRef.current) return;
 
+    // Prevent duplicate initialization
+    if (viewerRef.current) {
+      console.log('TripPlanningMap: Viewer already initialized, skipping');
+      return;
+    }
+
     const initializeMap = async () => {
       try {
+        const Cesium = window.Cesium;
+
         // Set Cesium Ion token from environment variables
         const cesiumToken = import.meta.env.VITE_CESIUM_ION_TOKEN;
-        if (cesiumToken && cesiumToken !== 'your_cesium_ion_token_here') {
-          window.Cesium.Ion.defaultAccessToken = cesiumToken;
+        const hasValidToken = cesiumToken && cesiumToken !== 'your_cesium_ion_token_here';
+
+        if (hasValidToken) {
+          Cesium.Ion.defaultAccessToken = cesiumToken;
+          console.log('Cesium Ion token set successfully');
+        } else {
+          console.warn('No valid Cesium Ion token found, using fallback imagery');
         }
 
-        // Create viewer with terrain and outdoor imagery
-        const viewer = new window.Cesium.Viewer(mapContainerRef.current, {
-          // Use Cesium World Terrain for 3D elevation data
-          terrainProvider: window.Cesium.createWorldTerrain({
-            requestWaterMask: true,
-            requestVertexNormals: true
-          }),
-          
-          // Use OpenStreetMap as base imagery (no API key required)
-          imageryProvider: new window.Cesium.OpenStreetMapImageryProvider({
-            url: 'https://tile.openstreetmap.org/'
-          }),
-          
+        // Build baseLayer for the Viewer (CesiumJS 1.107+ requires baseLayer, not imageryProvider)
+        let baseLayer;
+        if (hasValidToken) {
+          try {
+            baseLayer = Cesium.ImageryLayer.fromProviderAsync(
+              Cesium.IonImageryProvider.fromAssetId(2)
+            );
+            console.log('Using Cesium Ion Sentinel-2 imagery');
+          } catch (error) {
+            console.warn('Failed to create Cesium Ion imagery layer, using OSM fallback:', error);
+            baseLayer = Cesium.ImageryLayer.fromProviderAsync(
+              Cesium.OpenStreetMapImageryProvider.fromUrl('https://a.tile.openstreetmap.org/')
+            );
+          }
+        } else {
+          baseLayer = Cesium.ImageryLayer.fromProviderAsync(
+            Cesium.OpenStreetMapImageryProvider.fromUrl('https://a.tile.openstreetmap.org/')
+          );
+          console.log('Using OpenStreetMap imagery fallback');
+        }
+
+        // Create viewer with the modern baseLayer option
+        const viewer = new Cesium.Viewer(mapContainerRef.current, {
+          baseLayer: baseLayer,
+
           // Scene configuration for outdoor use
           scene3DOnly: true,
           shouldAnimate: true,
-          
+
           // Remove default UI elements we don't need
           homeButton: false,
           sceneModePicker: false,
@@ -95,31 +122,63 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
           timeline: false,
           fullscreenButton: false,
           vrButton: false,
-          
+
           // Keep useful controls
           geocoder: true,
           infoBox: true,
           selectionIndicator: true
         });
 
+        // Enable globe features for better visualization
+        viewer.scene.globe.enableLighting = false;
+        viewer.scene.globe.depthTestAgainstTerrain = true;
+        viewer.scene.fog.enabled = true;
+        viewer.scene.fog.density = 0.0002;
+
         // Disable default double-click behavior
         viewer.cesiumWidget.screenSpaceEventHandler.removeInputAction(
-          window.Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK
+          Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK
         );
 
-        // Set initial camera position
-        viewer.camera.setView({
-          destination: window.Cesium.Cartesian3.fromDegrees(center[1], center[0], 10000),
-          orientation: {
-            heading: window.Cesium.Math.toRadians(0),
-            pitch: window.Cesium.Math.toRadians(-45),
-            roll: 0.0
+        // Add terrain provider after viewer is created
+        if (hasValidToken) {
+          try {
+            console.log('Loading Cesium World Terrain...');
+            const terrainProvider = await Cesium.CesiumTerrainProvider.fromIonAssetId(1, {
+              requestWaterMask: true,
+              requestVertexNormals: true
+            });
+            viewer.terrainProvider = terrainProvider;
+            console.log('Cesium World Terrain loaded successfully');
+          } catch (error) {
+            console.error('Could not load Cesium World Terrain:', error);
           }
-        });
+        }
 
         viewerRef.current = viewer;
 
-        // Initialize managers (we'll create these classes next)
+        // Set initial camera position — use center if provided, otherwise show whole globe
+        if (center) {
+          viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromDegrees(center[1], center[0], 15000),
+            orientation: {
+              heading: Cesium.Math.toRadians(0),
+              pitch: Cesium.Math.toRadians(-60),
+              roll: 0.0
+            },
+            duration: 0
+          });
+          console.log('Camera positioned at:', center, 'altitude: 15000m');
+        } else {
+          // Default: zoom out to show New Zealand region
+          viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromDegrees(172.0, -41.5, 2500000),
+            duration: 0
+          });
+          console.log('Camera positioned at default NZ overview');
+        }
+
+        // Initialize managers after viewer is fully ready
         const WaypointManager = (await import('../../services/WaypointManager')).default;
         const TrackDrawer = (await import('../../services/TrackDrawer')).default;
         const NoteManager = (await import('../../services/NoteManager')).default;
@@ -149,12 +208,32 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
 
     // Cleanup function
     return () => {
+      waypointManagerRef.current?.destroy();
+      trackDrawerRef.current?.destroy();
+      noteManagerRef.current?.destroy();
       if (viewerRef.current) {
+        console.log('TripPlanningMap: Cleaning up viewer');
         viewerRef.current.destroy();
         viewerRef.current = null;
       }
     };
-  }, [cesiumReady, center, onWaypointAdded, onRouteCreated, onNoteAdded]);
+  }, [cesiumReady]); // Only re-initialize when Cesium becomes available, not on prop changes
+
+  // Separate effect to handle center changes without recreating the entire viewer
+  useEffect(() => {
+    if (!viewerRef.current || !center) return;
+
+    console.log('TripPlanningMap: Flying to new center:', center);
+    viewerRef.current.camera.flyTo({
+      destination: window.Cesium.Cartesian3.fromDegrees(center[1], center[0], 15000),
+      orientation: {
+        heading: window.Cesium.Math.toRadians(0),
+        pitch: window.Cesium.Math.toRadians(-60),
+        roll: 0.0
+      },
+      duration: 2.0 // 2 second animation when center changes
+    });
+  }, [center]);
 
   // Handle mode changes
   const handleModeChange = (newMode: MapMode['type']) => {
@@ -190,13 +269,47 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   const resetView = () => {
     if (viewerRef.current) {
       viewerRef.current.camera.setView({
-        destination: window.Cesium.Cartesian3.fromDegrees(center[1], center[0], 10000),
+        destination: window.Cesium.Cartesian3.fromDegrees(center?.[1] ?? 172.0, center?.[0] ?? -41.5, center ? 10000 : 2500000),
         orientation: {
           heading: window.Cesium.Math.toRadians(0),
           pitch: window.Cesium.Math.toRadians(-45),
           roll: 0.0
         }
       });
+    }
+  };
+
+  const goToCurrentLocation = () => {
+    if (navigator.geolocation && viewerRef.current) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          viewerRef.current.camera.setView({
+            destination: window.Cesium.Cartesian3.fromDegrees(longitude, latitude, 5000),
+            orientation: {
+              heading: window.Cesium.Math.toRadians(0),
+              pitch: window.Cesium.Math.toRadians(-45),
+              roll: 0.0
+            }
+          });
+
+          // Add a marker at current location
+          if (onWaypointAdded) {
+            onWaypointAdded({
+              lat: latitude,
+              lng: longitude,
+              name: 'Current Location',
+              description: 'Your current GPS location'
+            });
+          }
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          alert('Unable to get your location. Please check location permissions.');
+        }
+      );
+    } else {
+      alert('Geolocation is not supported by this browser.');
     }
   };
 
@@ -275,14 +388,21 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
 
             {/* Utility Controls */}
             <ButtonGroup size="sm">
-              <Button 
+              <Button
+                variant="outline-secondary"
+                onClick={goToCurrentLocation}
+                title="Go to Current Location"
+              >
+                <Navigation size={16} />
+              </Button>
+              <Button
                 variant="outline-secondary"
                 onClick={resetView}
                 title="Reset View"
               >
                 <RotateCcw size={16} />
               </Button>
-              <Button 
+              <Button
                 variant="outline-secondary"
                 onClick={exportData}
                 title="Export Data"

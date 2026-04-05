@@ -1,49 +1,41 @@
 import { What3WordsLocation } from './what3words';
 
-export interface Adventure {
+// Canonical activity types used across the entire app
+export type ActivityType =
+  | 'hiking'
+  | 'trail-running'
+  | 'climbing'
+  | 'cycling'
+  | 'water-sports'
+  | 'winter-sports'
+  | 'other';
+
+// Coordinates are always [lat, lng] — never [lng, lat]
+export type LatLng = [number, number];
+
+export interface TripLink {
   id: string;
   title: string;
   description: string;
-  startDate: Date;
-  endDate: Date;
+  activityType: ActivityType;
+  startDate: string; // ISO 8601 — stored as string in localStorage
   location: {
     name: string;
-    coordinates: [number, number]; // [longitude, latitude]
+    coordinates: LatLng;
     what3words?: string;
     what3wordsDetails?: What3WordsLocation;
   };
-  activities: AdventureActivity[];
+  waypoints: TripWaypoint[];
   emergencyContacts: Contact[];
-  checkInInterval: number; // hours
-  status: 'planned' | 'active' | 'completed' | 'overdue' | 'cancelled';
-  visibility: 'public' | 'contacts-only' | 'private';
-  shareToken: string; // Unique token for sharing
-  qrCode?: string; // Base64 QR code data
-  checkIns: CheckIn[];
-  emergencyInfo?: EmergencyInfo;
-  notifications: NotificationSettings;
-  createdAt: Date;
-  updatedAt: Date;
-  lastCheckIn?: Date;
-  nextCheckInDue?: Date;
+  shareToken: string;
+  status: 'planned' | 'active' | 'completed';
+  createdAt: string; // ISO 8601
 }
 
-export interface AdventureActivity {
-  id: string;
-  type: 'hiking' | 'climbing' | 'sailing' | 'skiing' | 'cycling' | 'other';
+export interface TripWaypoint {
   name: string;
-  estimatedDuration: number; // minutes
-  difficulty: 'easy' | 'moderate' | 'difficult' | 'extreme';
-  equipment: string[];
-  route?: {
-    waypoints: Array<{
-      name: string;
-      coordinates: [number, number];
-      estimatedTime: Date;
-      what3words?: string;
-      what3wordsDetails?: What3WordsLocation;
-    }>;
-  };
+  coordinates: LatLng;
+  elevation?: number;
 }
 
 export interface Contact {
@@ -53,68 +45,8 @@ export interface Contact {
   phone: string;
   relationship: string;
   isPrimary: boolean;
-  notificationPreferences: {
-    email: boolean;
-    sms: boolean;
-    immediateAlerts: boolean;
-    dailyUpdates: boolean;
-  };
 }
 
-export interface CheckIn {
-  id: string;
-  tripLinkId: string;
-  timestamp: Date;
-  location?: {
-    coordinates: [number, number];
-    accuracy?: number;
-    address?: string;
-    what3words?: string;
-    what3wordsDetails?: What3WordsLocation;
-  };
-  type: 'manual' | 'automatic' | 'emergency';
-  status: 'safe' | 'need-help' | 'emergency';
-  message?: string;
-  photos?: string[]; // Base64 or URLs
-}
-
-export interface EmergencyInfo {
-  medicalConditions: string[];
-  allergies: string[];
-  medications: string[];
-  emergencyInstructions: string;
-  bloodType?: string;
-  emergencyContactPriority: string[]; // Contact IDs in priority order
-  localEmergencyNumber?: string;
-}
-
-export interface NotificationSettings {
-  checkInReminders: boolean;
-  emergencyEscalation: boolean;
-  tripLinkUpdates: boolean;
-  contactNotifications: boolean;
-  escalationTimeHours: number; // How many hours late before escalation
-  reminderIntervalMinutes: number; // How often to remind before due
-}
-
-export interface ShareableLink {
-  token: string;
-  tripLinkId: string;
-  createdAt: Date;
-  expiresAt?: Date;
-  viewCount: number;
-  lastAccessed?: Date;
-}
-
-export interface AdventureTemplate {
-  id: string;
-  name: string;
-  description: string;
-  activityType: string;
-  defaultDuration: number; // hours
-  defaultCheckInInterval: number; // hours
-  defaultDifficulty: 'easy' | 'moderate' | 'difficult' | 'extreme';
-  commonEquipment: string[];
-  createdAt: Date;
-  usageCount: number;
-}
+// Re-export the old name as an alias during migration so nothing breaks at import time.
+// TODO: remove once all consumers use TripLink directly.
+export type Adventure = TripLink;

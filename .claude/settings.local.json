@@ -9,7 +9,13 @@
       "Bash(timeout 10s npm run dev)",
       "Bash(rm:*)",
       "Bash(npm uninstall:*)",
-      "Bash(ssh:*)"
+      "Bash(ssh:*)",
+      "Bash(npm update)",
+      "Bash(npm audit fix:*)",
+      "Bash(chmod:*)",
+      "Bash(npm run lint)",
+      "Bash(tree:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": []
   }

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // Environment detection for Vercel deployment
 const isDevelopment = import.meta.env.MODE === 'development' || import.meta.env.DEV;
 
@@ -16,6 +17,11 @@ export const API_CONFIG = {
     TRAILS_SEARCH: '/api/trails/search',
     ADVENTURES: '/api/adventures',
     ADVENTURE_BY_ID: (id: string) => `/api/adventures/${id}`,
+    DOC_TRACKS: '/api/doc/tracks',
+    DOC_HUTS: '/api/doc/huts',
+    DOC_CAMPSITES: '/api/doc/campsites',
+    DOC_ALERTS: '/api/doc/alerts',
+    DOC_NEARBY: '/api/doc/nearby',
   }
 };
 
@@ -95,6 +101,20 @@ export class ApiClient {
   async getAdventure(id: string) {
     return this.get(API_CONFIG.ENDPOINTS.ADVENTURE_BY_ID(id));
   }
+
+  async getDocAlerts(region?: string) {
+    const params = region ? `?region=${encodeURIComponent(region)}` : '';
+    return this.get(`${API_CONFIG.ENDPOINTS.DOC_ALERTS}${params}`);
+  }
+
+  async getDocNearby(lat: number, lng: number, radius: number = 20) {
+    const params = new URLSearchParams({
+      lat: lat.toString(),
+      lng: lng.toString(),
+      radius: radius.toString()
+    });
+    return this.get(`${API_CONFIG.ENDPOINTS.DOC_NEARBY}?${params}`);
+  }
 }
 
 export const apiClient = new ApiClient();
@@ -131,6 +151,24 @@ export const api = {
   async getAdventure(id: string) {
     const response = await fetch(`${API_BASE_URL}/api/adventures/${id}`);
     if (!response.ok) throw new Error('Adventure fetch failed');
+    return response.json();
+  },
+
+  async docAlerts(region?: string) {
+    const params = region ? `?region=${encodeURIComponent(region)}` : '';
+    const response = await fetch(`${API_BASE_URL}/api/doc/alerts${params}`);
+    if (!response.ok) throw new Error('DOC alerts fetch failed');
+    return response.json();
+  },
+
+  async docNearby(lat: number, lng: number, radius: number = 20) {
+    const params = new URLSearchParams({
+      lat: lat.toString(),
+      lng: lng.toString(),
+      radius: radius.toString()
+    });
+    const response = await fetch(`${API_BASE_URL}/api/doc/nearby?${params}`);
+    if (!response.ok) throw new Error('DOC nearby fetch failed');
     return response.json();
   }
 };

@@ -1,28 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Alert, Spinner, Badge } from 'react-bootstrap';
 import { useFormContext } from 'react-hook-form';
-import { MapPin, Navigation, CheckCircle, Globe, Info, AlertTriangle, Route, TrendingUp, Star } from 'lucide-react';
+import { MapPin, Navigation, CheckCircle, Globe, Info, AlertTriangle, Route, TrendingUp } from 'lucide-react';
 import { Input, Card, Button } from '../ui';
-import { MapSelector } from '../map/MapSelector';
+import { TripPlanningMap } from '../map/TripPlanningMap';
 import { What3wordsInput } from '../what3words/What3wordsInput';
 import { LocationDisplay } from '../what3words/LocationDisplay';
 import { What3WordsLocation } from '../../types/what3words';
 import { GlobalTrailService, TrailSuggestion } from '../../services/GlobalTrailService';
+
+// Singleton — avoids re-instantiating on every render
+const trailService = new GlobalTrailService();
 
 export const TripLinkLocationStep: React.FC = () => {
   const { register, setValue, watch } = useFormContext();
   const [primaryLocation, setPrimaryLocation] = useState<What3WordsLocation | null>(null);
   const [parkingLocation, setParkingLocation] = useState<What3WordsLocation | null>(null);
   const [emergencyExitLocation, setEmergencyExitLocation] = useState<What3WordsLocation | null>(null);
-  
+
   // Route suggestion state
   const [routeSuggestions, setRouteSuggestions] = useState<TrailSuggestion[]>([]);
   const [isLoadingRoutes, setIsLoadingRoutes] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestion, setSelectedSuggestion] = useState<TrailSuggestion | null>(null);
-  
+
   const formData = watch();
-  const trailService = new GlobalTrailService();
 
   // Auto-suggest routes when trip title and activity type are available
   useEffect(() => {
@@ -30,15 +32,21 @@ export const TripLinkLocationStep: React.FC = () => {
       if (formData.title && formData.activityType && formData.title.length > 3) {
         setIsLoadingRoutes(true);
         setShowSuggestions(true);
-        
+
         try {
           const suggestions = await trailService.suggestRoute({
             title: formData.title,
             activityType: formData.activityType,
-            location: formData.location?.name
+            location: formData.location?.name,
+            autoExtractLocation: true // NEW: Enable auto-extraction from title
           });
-          
+
           setRouteSuggestions(suggestions);
+
+          // Auto-select the top suggestion if confidence > 70%
+          if (suggestions.length > 0 && suggestions[0].confidence > 0.7) {
+            handleSuggestionSelect(suggestions[0]);
+          }
         } catch (error) {
           console.error('Error fetching route suggestions:', error);
           setRouteSuggestions([]);
@@ -48,7 +56,7 @@ export const TripLinkLocationStep: React.FC = () => {
       }
     };
 
-    const debounceTimer = setTimeout(triggerRouteSuggestion, 1000);
+    const debounceTimer = setTimeout(triggerRouteSuggestion, 1500); // Increased delay for geocoding
     return () => clearTimeout(debounceTimer);
   }, [formData.title, formData.activityType, formData.location?.name]);
 
@@ -59,7 +67,7 @@ export const TripLinkLocationStep: React.FC = () => {
     setValue('location.name', suggestion.name);
     
     if (suggestion.location.coordinates) {
-      const [lng, lat] = suggestion.location.coordinates;
+      const [lat, lng] = suggestion.location.coordinates;
       const location: What3WordsLocation = {
         coordinates: { lat, lng },
         nearestPlace: suggestion.location.name
@@ -84,7 +92,7 @@ export const TripLinkLocationStep: React.FC = () => {
         if (location) {
           setValue('location.what3wordsDetails', location);
           setValue('location.what3words', location.words);
-          setValue('location.coordinates', [location.coordinates.lng, location.coordinates.lat]);
+          setValue('location.coordinates', [location.coordinates.lat, location.coordinates.lng]);
           if (!watch('location.name')) {
             setValue('location.name', location.nearestPlace || `${location.coordinates.lat.toFixed(6)}, ${location.coordinates.lng.toFixed(6)}`);
           }
@@ -105,22 +113,137 @@ export const TripLinkLocationStep: React.FC = () => {
     <div>
       <div className="mb-4">
         <h3 className="h4 mb-2">
-          <Globe className="me-2" size={24} />
-          Precise Location Details
+          <Route className="me-2" size={24} />
+          Location & Route Planning
         </h3>
         <p className="text-muted">
-          Use what3words addresses for precise location sharing with emergency contacts and services.
+          We've found potential routes based on your trip details. Review the map and adjust as needed.
         </p>
       </div>
 
-      {/* Route Suggestions Section */}
-      {showSuggestions && (formData.title && formData.activityType) && (
+      {/* Main Map - Full Width, Map-First Design */}
+      <Row className="mb-4">
+        <Col>
+          <div style={{ overflow: 'hidden' }}>
+            <Card className="p-0">
+              <div style={{ position: 'relative' }}>
+              <TripPlanningMap
+                height="700px"
+                center={primaryLocation ?
+                  [primaryLocation.coordinates.lat, primaryLocation.coordinates.lng] :
+                  undefined
+                }
+                onWaypointAdded={(waypoint) => {
+                  const location: What3WordsLocation = {
+                    coordinates: { lat: waypoint.lat, lng: waypoint.lng },
+                  };
+                  handleLocationUpdate('primary', location);
+                }}
+                initialWaypoints={[
+                  ...(primaryLocation ? [{
+                    id: 'primary',
+                    lat: primaryLocation.coordinates.lat,
+                    lng: primaryLocation.coordinates.lng,
+                    name: 'Primary Location',
+                    description: primaryLocation.words ? `///${primaryLocation.words}` : 'Primary trip location'
+                  }] : []),
+                  ...(parkingLocation ? [{
+                    id: 'parking',
+                    lat: parkingLocation.coordinates.lat,
+                    lng: parkingLocation.coordinates.lng,
+                    name: 'Parking',
+                    description: parkingLocation.words ? `///${parkingLocation.words}` : 'Parking location'
+                  }] : []),
+                  ...(emergencyExitLocation ? [{
+                    id: 'emergency',
+                    lat: emergencyExitLocation.coordinates.lat,
+                    lng: emergencyExitLocation.coordinates.lng,
+                    name: 'Emergency Exit',
+                    description: emergencyExitLocation.words ? `///${emergencyExitLocation.words}` : 'Emergency access point'
+                  }] : [])
+                ]}
+              />
+
+              {/* Route Info Overlay Card */}
+              {selectedSuggestion && (
+                <div style={{
+                  position: 'absolute',
+                  bottom: '20px',
+                  left: '20px',
+                  zIndex: 1000,
+                  maxWidth: '400px'
+                }}>
+                  <Card className="shadow-lg">
+                    <div className="d-flex justify-content-between align-items-start mb-2">
+                      <div>
+                        <h5 className="h6 mb-1">
+                          <MapPin size={16} className="me-2 text-primary" />
+                          {selectedSuggestion.name}
+                        </h5>
+                        <Badge bg="success" className="me-2">
+                          {Math.round(selectedSuggestion.confidence * 100)}% match
+                        </Badge>
+                        <Badge bg="secondary">
+                          {selectedSuggestion.source.toUpperCase()}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <div className="d-flex gap-3 mb-3">
+                      {selectedSuggestion.distance && (
+                        <div className="text-center">
+                          <div className="fw-bold text-primary">{selectedSuggestion.distance}km</div>
+                          <div className="small text-muted">Distance</div>
+                        </div>
+                      )}
+                      {selectedSuggestion.elevationGain && (
+                        <div className="text-center">
+                          <div className="fw-bold text-success">↗{selectedSuggestion.elevationGain}m</div>
+                          <div className="small text-muted">Elevation</div>
+                        </div>
+                      )}
+                      {selectedSuggestion.difficulty && (
+                        <div className="text-center">
+                          <div className="fw-bold text-warning">{selectedSuggestion.difficulty}</div>
+                          <div className="small text-muted">Difficulty</div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="d-flex gap-2">
+                      <Button
+                        variant="success"
+                        size="sm"
+                        onClick={() => {/* Auto-fill form with this route */}}
+                      >
+                        <CheckCircle size={16} className="me-1" />
+                        Use This Route
+                      </Button>
+                      <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        onClick={() => setSelectedSuggestion(null)}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </Card>
+                </div>
+              )}
+            </div>
+          </Card>
+          </div>
+        </Col>
+      </Row>
+
+      {/* Route Suggestions Section - Now more compact */}
+      {showSuggestions && routeSuggestions.length > 0 && !selectedSuggestion && (formData.title && formData.activityType) && (
         <Row className="mb-4">
           <Col>
             <Card>
               <h5 className="h6 mb-3">
                 <Route className="me-2 text-primary" size={20} />
-                Suggested Routes for "{formData.title}"
+                Other Suggested Routes for "{formData.title}"
               </h5>
               
               {isLoadingRoutes ? (
@@ -137,10 +260,8 @@ export const TripLinkLocationStep: React.FC = () => {
                   <Row className="g-3">
                     {routeSuggestions.map((suggestion) => (
                       <Col key={suggestion.id} md={6} lg={4}>
-                        <div 
-                          className={`suggestion-card p-3 border rounded cursor-pointer ${
-                            selectedSuggestion?.id === suggestion.id ? 'border-primary bg-primary bg-opacity-10' : 'border'
-                          }`}
+                        <div
+                          className="suggestion-card p-3 border rounded cursor-pointer"
                           style={{ cursor: 'pointer', transition: 'all 0.2s' }}
                           onClick={() => handleSuggestionSelect(suggestion)}
                         >
@@ -183,12 +304,6 @@ export const TripLinkLocationStep: React.FC = () => {
                             </div>
                           )}
                           
-                          {suggestion.metadata?.userRating && (
-                            <div className="small d-flex align-items-center mt-1">
-                              <Star size={12} className="me-1" />
-                              {suggestion.metadata.userRating}/5
-                            </div>
-                          )}
                         </div>
                       </Col>
                     ))}
@@ -346,54 +461,51 @@ export const TripLinkLocationStep: React.FC = () => {
         </Col>
       </Row>
 
-      {/* Interactive Map */}
+      {/* Collapsible Route Details */}
       <Row className="mb-4">
         <Col>
-          <Card variant="step">
-            <h5 className="h6 mb-3">
-              <Navigation className="me-2" size={20} />
-              Interactive Map View
-            </h5>
-            
-            <MapSelector
-              height="400px"
-              center={primaryLocation ? 
-                [primaryLocation.coordinates.lat, primaryLocation.coordinates.lng] : 
-                undefined
-              }
-              onLocationSelect={(lat, lng) => {
-                const location: What3WordsLocation = {
-                  coordinates: { lat, lng },
-                  // Note: In a real implementation, you'd convert these coordinates to what3words
-                };
-                handleLocationUpdate('primary', location);
-              }}
-              markers={[
-                ...(primaryLocation ? [{
-                  id: 'primary',
-                  position: [primaryLocation.coordinates.lat, primaryLocation.coordinates.lng] as [number, number],
-                  title: 'Primary Location',
-                  description: primaryLocation.words ? `///${primaryLocation.words}` : 'Primary trip location'
-                }] : []),
-                ...(parkingLocation ? [{
-                  id: 'parking',
-                  position: [parkingLocation.coordinates.lat, parkingLocation.coordinates.lng] as [number, number],
-                  title: 'Parking',
-                  description: parkingLocation.words ? `///${parkingLocation.words}` : 'Parking location'
-                }] : []),
-                ...(emergencyExitLocation ? [{
-                  id: 'emergency',
-                  position: [emergencyExitLocation.coordinates.lat, emergencyExitLocation.coordinates.lng] as [number, number],
-                  title: 'Emergency Exit',
-                  description: emergencyExitLocation.words ? `///${emergencyExitLocation.words}` : 'Emergency access point'
-                }] : [])
-              ]}
-            />
-            
-            <div className="mt-3 small text-muted">
-              <Info size={14} className="me-2" />
-              Click on the map to set locations. Different colored pins represent different location types.
-            </div>
+          <Card>
+            <details>
+              <summary className="h6 mb-3" style={{ cursor: 'pointer' }}>
+                <Navigation className="me-2" size={20} />
+                Route Coordinates & Waypoints
+              </summary>
+
+              <Row className="mt-3">
+                <Col md={6}>
+                  <div className="mb-3">
+                    <label className="form-label small text-muted">Start Coordinates</label>
+                    <div className="p-2 bg-light rounded">
+                      {primaryLocation ?
+                        `${primaryLocation.coordinates.lat.toFixed(6)}°N, ${primaryLocation.coordinates.lng.toFixed(6)}°${primaryLocation.coordinates.lng < 0 ? 'W' : 'E'}` :
+                        'Not set'
+                      }
+                    </div>
+                  </div>
+                </Col>
+                <Col md={6}>
+                  <div className="mb-3">
+                    <label className="form-label small text-muted">what3words Address</label>
+                    <div className="p-2 bg-light rounded">
+                      {primaryLocation?.words ? `///${primaryLocation.words}` : 'Not available'}
+                    </div>
+                  </div>
+                </Col>
+              </Row>
+
+              {selectedSuggestion?.waypoints && selectedSuggestion.waypoints.length > 0 && (
+                <div className="mt-3">
+                  <label className="form-label small text-muted">Route Waypoints</label>
+                  <div className="d-flex flex-wrap gap-2">
+                    {selectedSuggestion.waypoints.map((wp, idx) => (
+                      <Badge key={idx} bg="secondary" className="p-2">
+                        {wp.name}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </details>
           </Card>
         </Col>
       </Row>

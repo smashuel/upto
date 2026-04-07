@@ -135,6 +135,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [mapMode, setMapMode] = useState<MapMode>({ type: 'view', active: false });
   const [cesiumReady, setCesiumReady] = useState(false);
+  const topoTileUrl = getTopoTileUrl(); // null if no LINZ key available
   const [mapLayer, setMapLayer] = useState<MapLayer>(
     () => (localStorage.getItem(LAYER_STORAGE_KEY) as MapLayer) ?? 'satellite',
   );
@@ -258,7 +259,16 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         const TrackDrawer = (await import('../../services/TrackDrawer')).default;
         const NoteManager = (await import('../../services/NoteManager')).default;
 
-        waypointManagerRef.current = new WaypointManager(viewer, onWaypointAdded);
+        // Normalise WaypointManager's Waypoint object → { lat, lng, name } before
+        // forwarding to the parent. WaypointManager uses Cesium cartographic;
+        // callers (AdventureLocationStep) expect plain lat/lng numbers.
+        waypointManagerRef.current = new WaypointManager(viewer, (wp: any) => {
+          if (!onWaypointAdded) return;
+          const Cesium = window.Cesium;
+          const lat = Cesium.Math.toDegrees(wp.cartographic.latitude);
+          const lng = Cesium.Math.toDegrees(wp.cartographic.longitude);
+          onWaypointAdded({ lat, lng, name: wp.metadata?.name });
+        });
         trackDrawerRef.current = new TrackDrawer(
           viewer,
           onRouteCreated,
@@ -309,8 +319,9 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
 
   function applyTopoLayer(viewer: any, Cesium: any) {
     if (linzLayerRef.current) return; // already added
+    if (!topoTileUrl) return; // no LINZ key available
     const provider = new Cesium.UrlTemplateImageryProvider({
-      url: getTopoTileUrl(),
+      url: topoTileUrl,
       minimumLevel: 5,
       maximumLevel: 16,
       rectangle: Cesium.Rectangle.fromDegrees(
@@ -484,7 +495,8 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
               <Button
                 variant={mapLayer === 'topo' ? 'primary' : 'outline-secondary'}
                 onClick={() => mapLayer !== 'topo' && handleLayerToggle()}
-                title="LINZ Topo50 (NZ)"
+                title={topoTileUrl ? 'LINZ Topo50 (NZ)' : 'Topo unavailable — set LINZ_LDS_API_KEY'}
+                disabled={!topoTileUrl}
               >
                 <Layers size={14} className="me-1" />
                 Topo

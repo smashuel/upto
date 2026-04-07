@@ -95,7 +95,9 @@ export const TripLinkLocationStep: React.FC = () => {
           setValue('location.what3words', location.words);
           setValue('location.coordinates', [location.coordinates.lat, location.coordinates.lng]);
           if (!watch('location.name')) {
-            setValue('location.name', location.nearestPlace || `${location.coordinates.lat.toFixed(6)}, ${location.coordinates.lng.toFixed(6)}`);
+            const lat = location.coordinates?.lat;
+            const lng = location.coordinates?.lng;
+            setValue('location.name', location.nearestPlace || (lat != null && lng != null ? `${lat.toFixed(6)}, ${lng.toFixed(6)}` : ''));
           }
         }
         break;
@@ -487,7 +489,7 @@ export const TripLinkLocationStep: React.FC = () => {
                   <div className="mb-3">
                     <label className="form-label small text-muted">Start Coordinates</label>
                     <div className="p-2 bg-light rounded">
-                      {primaryLocation ?
+                      {primaryLocation?.coordinates?.lat != null && primaryLocation?.coordinates?.lng != null ?
                         `${primaryLocation.coordinates.lat.toFixed(6)}°N, ${primaryLocation.coordinates.lng.toFixed(6)}°${primaryLocation.coordinates.lng < 0 ? 'W' : 'E'}` :
                         'Not set'
                       }

@@ -88,6 +88,7 @@ print_status "Creating deployment bundle..."
 TEMP_DIR=$(mktemp -d)
 cp backend-server.js "$TEMP_DIR/"
 cp backend-package.json "$TEMP_DIR/package.json"
+cp doc-sync.js "$TEMP_DIR/"
 cp nginx-config "$TEMP_DIR/"
 
 # Create PM2 ecosystem file

@@ -78,7 +78,7 @@ export const PublicAdventureView: React.FC = () => {
       },
     });
     return () => es.close();
-  }, [token, !!tripLink]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [token, !!tripLink]); // intentionally limited — avoid re-subscribing on unrelated state changes
 
   // ── Loading ──
   if (loading) {

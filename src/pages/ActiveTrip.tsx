@@ -192,8 +192,10 @@ export const ActiveTrip: React.FC = () => {
     try {
       await api.completeTrip(shareToken);
       toast.success("Trip complete — glad you made it back safely!");
+      setTripLink(prev => prev ? { ...prev, status: 'completed' } : prev);
     } catch {
       toast.error('Could not mark complete — try again');
+    } finally {
       setCompleting(false);
     }
   };

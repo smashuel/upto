@@ -196,6 +196,35 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// ── LINZ Topo50 tile proxy ────────────────────────────────────────────────────
+// Proxies XYZ tiles for LINZ layer 767 (NZ Topo50) so the API key stays server-side.
+// Attribution required: © LINZ CC BY 4.0
+// Tiles only cover NZ bounds (~34°S–47°S, 166°E–179°E) — outside that LINZ returns empty.
+app.get('/api/tiles/topo/:z/:x/:y', async (req, res) => {
+  const apiKey = process.env.LINZ_LDS_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({ error: 'LINZ_LDS_API_KEY not configured on server' });
+  }
+  const { z, x, y } = req.params;
+  const tileUrl = `https://data.linz.govt.nz/services;key=${apiKey}/tiles/v4/layer=767/EPSG:3857/${z}/${x}/${y}.png`;
+  try {
+    const upstream = await fetch(tileUrl, {
+      headers: { 'User-Agent': 'upto-app/1.0' },
+    });
+    if (!upstream.ok) {
+      // Pass through 404 (tile outside coverage) silently
+      return res.status(upstream.status).end();
+    }
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // cache tiles 24h
+    const buffer = await upstream.arrayBuffer();
+    return res.send(Buffer.from(buffer));
+  } catch (err) {
+    console.error('LINZ tile proxy error:', err.message);
+    return res.status(502).end();
+  }
+});
+
 // ── Google OAuth config ───────────────────────────────────────────────────────
 const GOOGLE_CLIENT_ID     = process.env.GOOGLE_CLIENT_ID     || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
@@ -1139,6 +1168,48 @@ app.get('/api/doc/nearby', async (req, res) => {
   } catch (error) {
     console.error('DOC nearby error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ── Trail snap endpoint ───────────────────────────────────────────────────────
+// Returns nearby DOC tracks with full lineWgs84 geometry for client-side snapping.
+// Used by TrackDrawer when route-drawing mode is active.
+// Radius defaults to 2 km — tight enough to avoid returning half of NZ.
+app.get('/api/trails/snap', async (req, res) => {
+  const { lat, lng, radius = 2 } = req.query;
+  if (!lat || !lng) return res.status(400).json({ error: 'lat and lng required' });
+
+  const userLat = parseFloat(lat);
+  const userLng = parseFloat(lng);
+  const maxRadius = Math.min(parseFloat(radius), 10); // cap at 10 km
+
+  try {
+    const cache = await readDocCache('tracks');
+    if (!cache || !cache.data) {
+      return res.json({ trails: [] }); // no cache yet — silently return empty
+    }
+
+    const trails = cache.data
+      .filter(track => {
+        if (!track.lat || !track.lng || !track.lineWgs84?.length) return false;
+        return haversineDistance(userLat, userLng, track.lat, track.lng) <= maxRadius;
+      })
+      .sort((a, b) =>
+        haversineDistance(userLat, userLng, a.lat, a.lng) -
+        haversineDistance(userLat, userLng, b.lat, b.lng)
+      )
+      .slice(0, 10) // top 10 nearest
+      .map(track => ({
+        id: track.id || track.assetId,
+        name: track.name,
+        source: 'doc',
+        geometry: track.lineWgs84, // [[lat, lng], ...]
+      }));
+
+    res.json({ trails });
+  } catch (err) {
+    console.error('Trail snap error:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

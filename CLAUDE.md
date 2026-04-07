@@ -68,6 +68,18 @@ CORS is configured on the backend to allow requests from `localhost:5173`, `loca
 - **Auth**: None. Rate limited to 1 request/second (enforced in `NominatimGeocoder.ts`)
 - **Used by**: `NominatimGeocoder.ts` (auto-location extraction in `GlobalTrailService`)
 
+### LINZ LDS (NZ Topo50 Map)
+- **What**: LINZ Land Information NZ layer 767 — classic Topo50 paper-map style with contours, hut symbols, and track markings
+- **Tile URL**: `https://data.linz.govt.nz/services;key={LINZ_LDS_API_KEY}/tiles/v4/layer=767/EPSG:3857/{z}/{x}/{y}.png`
+- **Proxy**: Backend proxies tiles via `GET /api/tiles/topo/:z/:x/:y` — API key stays server-side
+- **Auth**: `LINZ_LDS_API_KEY` backend env var (PM2). Frontend uses `VITE_LINZ_LDS_API_KEY` for fallback only
+- **Get key**: [data.linz.govt.nz](https://data.linz.govt.nz) → Account → API Keys
+- **Coverage**: NZ bounds only (`165.8°E–178.6°E, 33.9°S–47.5°S`). Outside NZ, satellite base layer shows through
+- **Attribution**: `© LINZ CC BY 4.0` — displayed in the map header whenever Topo layer is active
+- **Toggle**: "Sat | Topo" toggle in map header, persisted to `localStorage` key `upto_map_layer`
+- **Agent**: route-planner-agent owns the toggle; data-agent owns `LinzMapService.ts`
+- **Used by**: `TripPlanningMap.tsx` (layer switching), `LinzMapService.ts` (URL/bounds helpers)
+
 ### Placeholder / Not Yet Integrated
 - **Leaflet** (`react-leaflet`): Package still installed but `MapSelector.tsx` has been removed. Could be reintroduced as a lightweight fallback map if needed.
 - **TrailForks** (`VITE_TRAILFORKS_API_KEY`): Not integrated — stubs removed from `GlobalTrailService.ts`. Would provide mountain biking and hiking trail data.
@@ -175,7 +187,8 @@ upto/
 | `src/components/map/TripPlanningMap.tsx` | Cesium 3D map viewer |
 | `src/services/CesiumManager.ts` | Abstract base for map managers (setup/retry/handler boilerplate) |
 | `src/services/WaypointManager.ts` | Map waypoint management |
-| `src/services/TrackDrawer.ts` | Route drawing on Cesium globe |
+| `src/services/TrackDrawer.ts` | Route drawing: click-to-place, undo, live stats (distance/elevation/time), elevation profile data, serialise to JSON |
+| `src/services/LinzMapService.ts` | LINZ Topo50 tile URL helpers, NZ bounds detection, attribution constant |
 | `src/services/NoteManager.ts` | Map note placement |
 | `src/services/GlobalTrailService.ts` | Trail search + Nominatim geocoding |
 | `src/services/NominatimGeocoder.ts` | Forward/reverse geocoding, location extraction |
@@ -212,6 +225,7 @@ node doc-sync.js   # Manually sync DOC data (requires DOC_API_KEY)
 | `VITE_DEV_API_URL` | Backend API URL (dev: `http://localhost:3001`) |
 | `VITE_WHAT3WORDS_API_KEY` | What3words geolocation API |
 | `VITE_CESIUM_ION_TOKEN` | Cesium 3D globe imagery + terrain |
+| `VITE_LINZ_LDS_API_KEY` | LINZ Topo50 tiles (fallback; prefer server-side `LINZ_LDS_API_KEY`) |
 | `VITE_TRAILFORKS_API_KEY` | TrailForks trail data (placeholder, not yet active) |
 | `VITE_MAPTILER_API_KEY` | MapTiler mapping (placeholder, not yet active) |
 
@@ -221,6 +235,7 @@ node doc-sync.js   # Manually sync DOC data (requires DOC_API_KEY)
 |----------|---------|
 | `PORT` | Express listen port (default: 3001) |
 | `DOC_API_KEY` | NZ Department of Conservation API key |
+| `LINZ_LDS_API_KEY` | LINZ LDS API key for Topo50 tile proxy (`/api/tiles/topo/:z/:x/:y`) |
 | `NODE_ENV` | Environment (production on Linode) |
 
 ## DOC Integration (Current State)

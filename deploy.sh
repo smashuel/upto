@@ -107,7 +107,8 @@ module.exports = {
       DATABASE_URL: 'postgresql://upto_user:Rowdy050@127.0.0.1:5432/upto_db',
       GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
       GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
-      BACKEND_URL: 'http://172.105.178.48'
+      BACKEND_URL: 'http://172.105.178.48',
+      LINZ_LDS_API_KEY: process.env.LINZ_LDS_API_KEY || ''
     },
     error_file: '/var/log/pm2/upto-backend-error.log',
     out_file: '/var/log/pm2/upto-backend-out.log',

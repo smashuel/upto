@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Row, Col, Alert, Spinner, Badge } from 'react-bootstrap';
 import { useFormContext } from 'react-hook-form';
 import { MapPin, Navigation, CheckCircle, Globe, Info, AlertTriangle, Route, TrendingUp } from 'lucide-react';
+import type { SerializableTrack } from '../../services/TrackDrawer';
 import { Input, Card, Button } from '../ui';
 import { TripPlanningMap } from '../map/TripPlanningMap';
 import { What3wordsInput } from '../what3words/What3wordsInput';
@@ -133,6 +134,16 @@ export const TripLinkLocationStep: React.FC = () => {
                   [primaryLocation.coordinates.lat, primaryLocation.coordinates.lng] :
                   undefined
                 }
+                onRouteCreated={(track: SerializableTrack) => {
+                  // Append drawn route to form — stored in TripLink data JSONB
+                  const existing = watch('routes') || [];
+                  setValue('routes', [...existing, track]);
+                  // If no primary location yet, use the first waypoint of the drawn route
+                  if (!primaryLocation && track.waypoints.length > 0) {
+                    const [lat, lng] = track.waypoints[0].coordinates;
+                    handleLocationUpdate('primary', { coordinates: { lat, lng } });
+                  }
+                }}
                 onWaypointAdded={(waypoint) => {
                   const location: What3WordsLocation = {
                     coordinates: { lat: waypoint.lat, lng: waypoint.lng },

@@ -55,12 +55,12 @@ export const Login: React.FC = () => {
           navigate('/login', { replace: true });
         });
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // intentionally run once on mount to handle OAuth redirect
 
   // If already logged in, redirect away
   useEffect(() => {
     if (isLoggedIn) navigate(from, { replace: true });
-  }, [isLoggedIn]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLoggedIn, navigate, from]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

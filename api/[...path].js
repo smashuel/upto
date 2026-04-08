@@ -1,6 +1,6 @@
 const BACKEND_URL = 'http://172.105.178.48';
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     res.status(response.status);
     if (contentType) res.setHeader('Content-Type', contentType);
 
-    // Forward cache headers from backend (important for tile caching)
+    // Forward cache headers (important for tile caching)
     const cacheControl = response.headers.get('cache-control');
     if (cacheControl) res.setHeader('Cache-Control', cacheControl);
 
@@ -54,4 +54,4 @@ export default async function handler(req, res) {
     console.error('API proxy error:', error);
     return res.status(502).json({ error: 'Backend unavailable' });
   }
-}
+};

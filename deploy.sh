@@ -109,7 +109,7 @@ module.exports = {
       GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
       GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
       BACKEND_URL: 'http://172.105.178.48',
-      LINZ_LDS_API_KEY: process.env.LINZ_LDS_API_KEY || ''
+      LINZ_LDS_API_KEY: process.env.LINZ_LDS_API_KEY || '8791473b7ddc43d5a011794bc5615247'
     },
     error_file: '/var/log/pm2/upto-backend-error.log',
     out_file: '/var/log/pm2/upto-backend-out.log',

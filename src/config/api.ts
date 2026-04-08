@@ -16,8 +16,6 @@ export const API_CONFIG = {
   ENDPOINTS: {
     HEALTH: '/api/health',
     TRAILS_SEARCH: '/api/trails/search',
-    ADVENTURES: '/api/adventures',
-    ADVENTURE_BY_ID: (id: string) => `/api/adventures/${id}`,
     DOC_TRACKS: '/api/doc/tracks',
     DOC_HUTS: '/api/doc/huts',
     DOC_CAMPSITES: '/api/doc/campsites',
@@ -110,14 +108,6 @@ export class ApiClient {
     return response;
   }
 
-  async createAdventure(adventureData: any) {
-    return this.post(API_CONFIG.ENDPOINTS.ADVENTURES, adventureData);
-  }
-
-  async getAdventure(id: string) {
-    return this.get(API_CONFIG.ENDPOINTS.ADVENTURE_BY_ID(id));
-  }
-
   async getDocAlerts(region?: string) {
     const params = region ? `?region=${encodeURIComponent(region)}` : '';
     return this.get(`${API_CONFIG.ENDPOINTS.DOC_ALERTS}${params}`);
@@ -151,22 +141,6 @@ export const api = {
     });
     const response = await fetch(`${API_BASE_URL}/api/trails/search?${params}`);
     if (!response.ok) throw new Error('Trail search failed');
-    return response.json();
-  },
-
-  async createAdventure(adventureData: any) {
-    const response = await fetch(`${API_BASE_URL}/api/adventures`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(adventureData),
-    });
-    if (!response.ok) throw new Error('Adventure creation failed');
-    return response.json();
-  },
-
-  async getAdventure(id: string) {
-    const response = await fetch(`${API_BASE_URL}/api/adventures/${id}`);
-    if (!response.ok) throw new Error('Adventure fetch failed');
     return response.json();
   },
 

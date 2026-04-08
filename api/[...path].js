@@ -41,15 +41,15 @@ export default async function handler(req, res) {
     }
 
     res.status(response.status);
-
-    if (contentType.includes('application/json')) {
-      const data = await response.json();
-      return res.json(data);
-    }
-
-    const text = await response.text();
     if (contentType) res.setHeader('Content-Type', contentType);
-    return res.send(text);
+
+    // Forward cache headers from backend (important for tile caching)
+    const cacheControl = response.headers.get('cache-control');
+    if (cacheControl) res.setHeader('Cache-Control', cacheControl);
+
+    // Use arrayBuffer for all responses — handles binary (PNG tiles) and text equally
+    const buffer = await response.arrayBuffer();
+    return res.send(Buffer.from(buffer));
   } catch (error) {
     console.error('API proxy error:', error);
     return res.status(502).json({ error: 'Backend unavailable' });

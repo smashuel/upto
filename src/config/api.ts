@@ -164,10 +164,13 @@ export const api = {
 
   // ── TripLink API ──────────────────────────────────────────────────────────
 
-  async createTripLink(tripLink: any): Promise<{ id: string; shareToken: string }> {
+  async createTripLink(sessionToken: string, tripLink: any): Promise<{ id: string; shareToken: string }> {
     const response = await fetch(`${API_BASE_URL}/api/triplinks`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${sessionToken}`,
+      },
       body: JSON.stringify(tripLink),
     });
     if (!response.ok) throw new Error('Failed to create TripLink');

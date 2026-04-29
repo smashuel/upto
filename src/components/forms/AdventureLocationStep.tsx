@@ -136,6 +136,17 @@ export const TripLinkLocationStep: React.FC = () => {
                   [primaryLocation.coordinates.lat, primaryLocation.coordinates.lng] :
                   undefined
                 }
+                initialMode="2d-topo"
+                preselectedTrail={
+                  selectedSuggestion?.source === 'doc' && selectedSuggestion.geometry
+                    ? {
+                        id: selectedSuggestion.id,
+                        name: selectedSuggestion.name,
+                        geometry: selectedSuggestion.geometry,
+                      }
+                    : undefined
+                }
+                fallbackToCurrentLocation={!selectedSuggestion}
                 onRouteCreated={(track: SerializableTrack) => {
                   // Append drawn route to form — stored in TripLink data JSONB
                   const existing = watch('routes') || [];
@@ -177,72 +188,7 @@ export const TripLinkLocationStep: React.FC = () => {
                 ]}
               />
 
-              {/* Route Info Overlay Card */}
-              {selectedSuggestion && (
-                <div style={{
-                  position: 'absolute',
-                  bottom: '20px',
-                  left: '20px',
-                  zIndex: 1000,
-                  maxWidth: '400px'
-                }}>
-                  <Card className="shadow-lg">
-                    <div className="d-flex justify-content-between align-items-start mb-2">
-                      <div>
-                        <h5 className="h6 mb-1">
-                          <MapPin size={16} className="me-2 text-primary" />
-                          {selectedSuggestion.name}
-                        </h5>
-                        <Badge bg="success" className="me-2">
-                          {Math.round(selectedSuggestion.confidence * 100)}% match
-                        </Badge>
-                        <Badge bg="secondary">
-                          {selectedSuggestion.source.toUpperCase()}
-                        </Badge>
-                      </div>
-                    </div>
-
-                    <div className="d-flex gap-3 mb-3">
-                      {selectedSuggestion.distance && (
-                        <div className="text-center">
-                          <div className="fw-bold text-primary">{selectedSuggestion.distance}km</div>
-                          <div className="small text-muted">Distance</div>
-                        </div>
-                      )}
-                      {selectedSuggestion.elevationGain && (
-                        <div className="text-center">
-                          <div className="fw-bold text-success">↗{selectedSuggestion.elevationGain}m</div>
-                          <div className="small text-muted">Elevation</div>
-                        </div>
-                      )}
-                      {selectedSuggestion.difficulty && (
-                        <div className="text-center">
-                          <div className="fw-bold text-warning">{selectedSuggestion.difficulty}</div>
-                          <div className="small text-muted">Difficulty</div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="d-flex gap-2">
-                      <Button
-                        variant="success"
-                        size="sm"
-                        onClick={() => {/* Auto-fill form with this route */}}
-                      >
-                        <CheckCircle size={16} className="me-1" />
-                        Use This Route
-                      </Button>
-                      <Button
-                        variant="outline-secondary"
-                        size="sm"
-                        onClick={() => setSelectedSuggestion(null)}
-                      >
-                        Clear
-                      </Button>
-                    </div>
-                  </Card>
-                </div>
-              )}
+              {/* Route info is shown via the map's own .map-selected-trail chip */}
             </div>
           </Card>
           </div>

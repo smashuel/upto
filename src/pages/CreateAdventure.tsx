@@ -77,13 +77,24 @@ const ExpandSection: React.FC<ExpandSectionProps> = ({
   children,
 }) => {
   const [open, setOpen] = useState(false);
+  // Lazy-mount: children only render after the section is first opened.
+  // Once mounted, they stay mounted so React/form/Cesium state survives collapse.
+  const [hasOpened, setHasOpened] = useState(false);
+
+  const toggle = () => {
+    setOpen(o => {
+      const next = !o;
+      if (next) setHasOpened(true);
+      return next;
+    });
+  };
 
   return (
     <div className="expand-section">
       <button
         type="button"
         className="expand-toggle"
-        onClick={() => setOpen(o => !o)}
+        onClick={toggle}
         aria-expanded={open}
       >
         <div className="expand-toggle-left">
@@ -106,7 +117,7 @@ const ExpandSection: React.FC<ExpandSectionProps> = ({
 
       <div className={`expand-content${open ? ' is-open' : ''}`}>
         <div className="expand-inner">
-          {children}
+          {hasOpened ? children : null}
         </div>
       </div>
     </div>
@@ -117,7 +128,7 @@ const ExpandSection: React.FC<ExpandSectionProps> = ({
 
 export const CreateTripLink: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, sessionToken } = useAuth();
   const [tripLinkId, setTripLinkId] = useState<string | null>(null);
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -158,13 +169,18 @@ export const CreateTripLink: React.FC = () => {
     : '';
 
   const onSubmit = async (data: TripLinkFormData) => {
+    if (!sessionToken || !user) {
+      toast.error('Please sign in to create a TripLink');
+      navigate('/login');
+      return;
+    }
     try {
       const id = `triplink-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const token = crypto.randomUUID();
 
       const tripLink: TripLink = {
         id,
-        userId: user?.id,
+        userId: user.id,
         title: data.title,
         description: data.description,
         activityType: (data.activityType || 'other') as ActivityType,
@@ -184,7 +200,7 @@ export const CreateTripLink: React.FC = () => {
         checkIns: [],
       };
 
-      await api.createTripLink(tripLink);
+      await api.createTripLink(sessionToken, tripLink);
 
       // Also keep in localStorage as fallback / offline cache
       const existing = JSON.parse(localStorage.getItem('triplinks') || '[]');

@@ -15,6 +15,8 @@ export interface TrailSuggestion {
   difficulty?: string;
   description?: string;
   waypoints?: Array<{ name: string; coordinates: LatLng }>;
+  /** Full polyline geometry [[lat, lng], ...] — DOC tracks only, used for map preselect */
+  geometry?: LatLng[];
 }
 
 export interface RouteQuery {
@@ -157,9 +159,13 @@ async function searchDOC(query: RouteQuery): Promise<TrailSuggestion[]> {
   return tracks
     .map((track): TrailSuggestion => {
       const coordinates: LatLng = track.lat && track.lng ? [track.lat, track.lng] : [0, 0];
-      const waypoints = (track.lineWgs84 || [])
+      // Cache stores points as [lat, lng] (see doc-sync.js:99) — pass through unchanged.
+      const geometry: LatLng[] = (track.lineWgs84 || []).map(
+        (pt: number[]) => [pt[0], pt[1]] as LatLng,
+      );
+      const waypoints = geometry
         .slice(0, 10)
-        .map((pt: number[], i: number) => ({ name: `Point ${i + 1}`, coordinates: [pt[0], pt[1]] as LatLng }));
+        .map((coords, i) => ({ name: `Point ${i + 1}`, coordinates: coords }));
 
       const regionName = Array.isArray(track.region)
         ? track.region.join(', ')
@@ -176,6 +182,7 @@ async function searchDOC(query: RouteQuery): Promise<TrailSuggestion[]> {
         difficulty: track.dificulty, // DOC API typo — intentional
         description: track.introductory,
         waypoints: waypoints.length > 0 ? waypoints : undefined,
+        geometry: geometry.length > 0 ? geometry : undefined,
       };
     })
     .filter(s => s.confidence > CONFIDENCE_THRESHOLD);

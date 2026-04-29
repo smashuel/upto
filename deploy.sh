@@ -42,6 +42,36 @@ if [ ! -f "backend-server.js" ]; then
     exit 1
 fi
 
+# Pre-flight: required env vars must be set in the deployer's shell.
+# These are interpolated into the on-server .env at deploy time — never into git.
+REQUIRED_VARS=(
+    DATABASE_URL
+    GOOGLE_CLIENT_ID
+    GOOGLE_CLIENT_SECRET
+    BACKEND_URL
+    DOC_API_KEY
+    LINZ_LDS_API_KEY
+)
+MISSING=()
+for var in "${REQUIRED_VARS[@]}"; do
+    if [ -z "${!var}" ]; then
+        MISSING+=("$var")
+    fi
+done
+if [ ${#MISSING[@]} -ne 0 ]; then
+    print_error "Missing required env vars: ${MISSING[*]}"
+    echo ""
+    echo "Set them in your shell before deploying. Example:"
+    echo "  export DATABASE_URL='postgresql://upto_user:<password>@127.0.0.1:5432/upto_db'"
+    echo "  export GOOGLE_CLIENT_ID='...'"
+    echo "  export GOOGLE_CLIENT_SECRET='...'"
+    echo "  export BACKEND_URL='https://upto.world'"
+    echo "  export DOC_API_KEY='...'"
+    echo "  export LINZ_LDS_API_KEY='...'"
+    exit 1
+fi
+print_success "All required env vars present"
+
 # Check SSH connection
 print_status "Testing SSH connection to Linode server..."
 if ! ssh -o ConnectTimeout=10 -o BatchMode=yes "$LINODE_USER@$LINODE_IP" exit 2>/dev/null; then
@@ -91,7 +121,8 @@ cp backend-package.json "$TEMP_DIR/package.json"
 cp doc-sync.js "$TEMP_DIR/"
 cp nginx-config "$TEMP_DIR/"
 
-# Create PM2 ecosystem file
+# Create PM2 ecosystem file. No secrets inline — they live in ./env on Linode,
+# sourced by start.sh before PM2 reads process.env.
 cat > "$TEMP_DIR/ecosystem.config.cjs" << EOF
 module.exports = {
   apps: [{
@@ -104,12 +135,12 @@ module.exports = {
     env: {
       NODE_ENV: 'production',
       PORT: $BACKEND_PORT,
-      DOC_API_KEY: process.env.DOC_API_KEY || '',
-      DATABASE_URL: 'postgresql://upto_user:Rowdy050@127.0.0.1:5432/upto_db',
-      GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
+      DOC_API_KEY:          process.env.DOC_API_KEY || '',
+      DATABASE_URL:         process.env.DATABASE_URL || '',
+      GOOGLE_CLIENT_ID:     process.env.GOOGLE_CLIENT_ID || '',
       GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
-      BACKEND_URL: 'http://172.105.178.48',
-      LINZ_LDS_API_KEY: process.env.LINZ_LDS_API_KEY || '8791473b7ddc43d5a011794bc5615247'
+      BACKEND_URL:          process.env.BACKEND_URL || '',
+      LINZ_LDS_API_KEY:     process.env.LINZ_LDS_API_KEY || ''
     },
     error_file: '/var/log/pm2/upto-backend-error.log',
     out_file: '/var/log/pm2/upto-backend-out.log',
@@ -118,10 +149,40 @@ module.exports = {
 };
 EOF
 
+# Write a .env bundle from the deployer's shell. This is the only place the
+# secrets touch disk — uploaded to /opt/upto-backend/.env, sourced by start.sh.
+# ${VAR@Q} quotes values safely so `source` re-reads them verbatim even if
+# they contain $, `, or spaces. Requires bash 4.4+.
+{
+    echo "DATABASE_URL=${DATABASE_URL@Q}"
+    echo "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID@Q}"
+    echo "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET@Q}"
+    echo "BACKEND_URL=${BACKEND_URL@Q}"
+    echo "DOC_API_KEY=${DOC_API_KEY@Q}"
+    echo "LINZ_LDS_API_KEY=${LINZ_LDS_API_KEY@Q}"
+} > "$TEMP_DIR/.env"
+chmod 600 "$TEMP_DIR/.env"
+
 # Create startup script
 cat > "$TEMP_DIR/start.sh" << 'EOF'
 #!/bin/bash
 set -e
+
+if [ ! -f ./.env ]; then
+    echo "ERROR: .env not found in $(pwd). deploy.sh must upload it." >&2
+    exit 1
+fi
+
+echo "Loading env from ./.env..."
+set -a
+# shellcheck disable=SC1091
+source ./.env
+set +a
+
+if [ -z "$DATABASE_URL" ]; then
+    echo "ERROR: DATABASE_URL still empty after sourcing .env" >&2
+    exit 1
+fi
 
 echo "Creating data directory for DOC cache..."
 mkdir -p ./data
@@ -130,7 +191,8 @@ echo "Installing dependencies..."
 npm install --production
 
 echo "Starting application with PM2..."
-pm2 restart upto-backend 2>/dev/null || pm2 start ecosystem.config.cjs
+# --update-env so a rotated secret in .env propagates on restart, not just on cold start
+pm2 restart upto-backend --update-env 2>/dev/null || pm2 start ecosystem.config.cjs --update-env
 
 echo "Setting up PM2 to start on boot..."
 pm2 save
@@ -138,7 +200,7 @@ pm2 startup | tail -1 | sudo bash
 
 echo "Backend deployment complete!"
 echo "Use 'pm2 logs upto-backend' to view logs"
-echo "Use 'pm2 restart upto-backend' to restart"
+echo "Use 'pm2 restart upto-backend --update-env' to restart (preserves rotated env)"
 EOF
 
 chmod +x "$TEMP_DIR/start.sh"
@@ -148,7 +210,10 @@ print_success "Deployment bundle created"
 # Upload files to server
 print_status "Uploading files to Linode server..."
 ssh "$LINODE_USER@$LINODE_IP" "mkdir -p $REMOTE_PATH"
+# Glob (*) skips dotfiles by default — .env is uploaded explicitly below
 scp -r "$TEMP_DIR"/* "$LINODE_USER@$LINODE_IP:$REMOTE_PATH/"
+scp "$TEMP_DIR/.env" "$LINODE_USER@$LINODE_IP:$REMOTE_PATH/.env"
+ssh "$LINODE_USER@$LINODE_IP" "chmod 600 $REMOTE_PATH/.env"
 
 # Install Node.js and PM2 if not present
 print_status "Setting up Node.js environment..."

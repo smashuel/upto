@@ -11,7 +11,45 @@ The core workflow is a multi-step wizard (`/create`) that walks the user through
 4. **Emergency Contacts** — who to notify, escalation settings, notification preferences
 5. **Review & Share** — preview the plan, generate a shareable link
 
-TripLinks are currently stored in localStorage (no database yet). The app is designed for safety-critical outdoor use, so accuracy in location data, time estimates, and alert information matters.
+TripLinks persist to a Linode-local PostgreSQL database, with a localStorage copy kept as an offline fallback (see Known Issues — this dual-write should be demoted to fallback-only). The app is designed for safety-critical outdoor use, so accuracy in location data, time estimates, and alert information matters.
+
+## Project Brain
+
+The persistent second brain lives in [brain/](brain/) — start here before any non-trivial task.
+
+- [brain/project/status.md](brain/project/status.md) — always-true snapshot; read first
+- [brain/project/roadmap.md](brain/project/roadmap.md) — shipped / in-progress / planned
+- [brain/project/vision.md](brain/project/vision.md) — why this app exists, users, safety posture
+- [brain/project/deployment.md](brain/project/deployment.md) — Vercel + Linode + Nginx + PM2
+- [brain/features/](brain/features/) — one file per shipped feature
+- [brain/plans/](brain/plans/) — multi-phase implementation plans
+- [brain/decisions/](brain/decisions/) — ADRs (why we chose X)
+- [brain/agents/](brain/agents/) — skills registry (`/build-check`, `/deploy`, `/review-map`, `/map-ux`, `/check-backend`)
+
+The vault is the repo itself — no MCP server needed. Editing a file under `brain/` updates both Claude's context and your Obsidian view.
+
+### Brain maintenance (read this — it's your job, not the user's)
+
+The brain only stays useful if it's updated as work lands. Treat it like code — if the brain and the repo disagree, the brain is broken.
+
+**Read before acting** (non-trivial task = anything >10 min of work):
+1. [brain/project/status.md](brain/project/status.md) — current focus, recent shipped
+2. The relevant file in [brain/features/](brain/features/) or [brain/plans/](brain/plans/)
+3. Grep [brain/journal/](brain/journal/) for the symptom/area if debugging — may already have notes
+
+**Update after acting** (do this yourself, don't wait to be asked):
+- **Feature shipped** → tick the box in [roadmap.md](brain/project/roadmap.md), bump the feature file's `status`, update "Recent shipped" in [status.md](brain/project/status.md)
+- **Non-trivial bug fix** → write a dated entry in [brain/journal/](brain/journal/) with symptom + root cause + fix. If the root cause reflects an invariant ("never cache X", "always pass Y"), promote it to an ADR in [brain/decisions/](brain/decisions/)
+- **Architecture choice** (chose A over B) → new numbered ADR in [brain/decisions/](brain/decisions/) with Context / Decision / Alternatives / Consequences / Reconsider-if
+- **New multi-phase work** → new file under [brain/plans/](brain/plans/) with status + phase table
+- **Feature file diverged from code** (you notice while working) → fix it in the same PR; stale brain is worse than no brain
+
+**Proactively suggest updates** before claiming done. End turns with an explicit "Brain: updated X / nothing to update" so the user can see it was considered, not skipped.
+
+**Don't write to the brain** for:
+- User preferences about how to collaborate → those go to the auto-memory system in `~/.claude/projects/`
+- Ephemeral conversation context — the brain is for future sessions, not current scratch
+- Things already obvious from reading the code (file structure, function signatures)
 
 ## Architecture
 
@@ -102,13 +140,15 @@ upto/
 │   ├── doc-tracks.json             # ~3,200 NZ tracks with WGS84 coords
 │   ├── doc-huts.json               # ~890 NZ huts with WGS84 coords
 │   └── doc-campsites.json          # ~1,850 NZ campsites with WGS84 coords
-├── markdown/                       # Project documentation (reference)
-│   ├── DEPLOYMENT_SETUP.md
-│   ├── GUIDEPACE_FEATURE.md
-│   ├── MAPPING.md
-│   ├── NGINX_PROXY_SETUP.md
-│   ├── WHAT3WORDS_IMPLEMENTATION.md
-│   └── WHAT3WORDS_SETUP.md
+├── brain/                          # Persistent second-brain (Obsidian vault)
+│   ├── README.md                   # Entry map — what each folder contains
+│   ├── project/                    # Vision, roadmap, status, deployment
+│   ├── features/                   # One file per shipped feature
+│   ├── plans/                      # Phased implementation plans (e.g. map-ux-overhaul)
+│   ├── research/                   # Competitor audits, UX research, spikes
+│   ├── decisions/                  # ADRs — why we chose X over Y
+│   ├── agents/                     # Skills + (future) agents registry
+│   └── journal/                    # Dated scratch for in-progress threads
 ├── public/                         # Static assets (logos, hero images)
 ├── src/
 │   ├── App.tsx                     # Router, QueryClient, Layout, Toaster
@@ -133,7 +173,7 @@ upto/
 │   │   │   └── TimeEstimateSummary.tsx
 │   │   ├── layout/                 # Header, Footer, Layout wrapper
 │   │   ├── map/
-│   │   │   └── TripPlanningMap.tsx  # Cesium 3D globe (primary map)
+│   │   │   └── TripPlanningMap.tsx  # Cesium 2D/3D map (defaults to 2D topo in wizard)
 │   │   ├── ui/                     # Reusable UI components (Button, Card, Input)
 │   │   └── what3words/             # What3words input, display, emergency share
 │   │       ├── What3wordsInput.tsx
@@ -176,20 +216,22 @@ upto/
 ├── package.json                    # Frontend dependencies + scripts
 ├── tsconfig.json                   # TypeScript config
 ├── vite.config.ts                  # Vite build config
-├── DOC-INTEGRATION.md              # Detailed DOC API integration docs
-└── DOC-INTEGRATION-SUMMARY.txt     # Short DOC integration summary
 ```
 
 ## Key Paths
 
 | Path | Purpose |
 |------|---------|
-| `src/components/map/TripPlanningMap.tsx` | Cesium 3D map viewer |
+| `src/components/map/TripPlanningMap.tsx` | Cesium 2D/3D map viewer (opens in 2D topo by default in the wizard, with `2D ↔ 3D` toggle) |
 | `src/services/CesiumManager.ts` | Abstract base for map managers (setup/retry/handler boilerplate) |
 | `src/services/WaypointManager.ts` | Map waypoint management |
 | `src/services/TrackDrawer.ts` | Route drawing: click-to-place, undo, live stats (distance/elevation/time), elevation profile data, serialise to JSON |
 | `src/services/LinzMapService.ts` | LINZ Topo50 tile URL helpers, NZ bounds detection, attribution constant |
+| `src/services/AusMapService.ts` | AU topo bounds (AU + NSW), key-less ArcGIS tile URLs (GA National, NSW Topo), attribution constants |
+| `src/services/BasemapSuggest.ts` | Pure viewport → basemap resolution; canonical `MapLayer` type; durable-override model for auto-switch |
+| `src/services/MapCamera.ts` | Shared `flyToRouteBounds` — tight `BoundingSphere` fit with 2D/3D pitch switch; used by `TrailLayerManager.preselect` and wizard fly-tos |
 | `src/services/NoteManager.ts` | Map note placement |
+| `src/services/TrailLayerManager.ts` | DOC track discovery layer — renders nearby tracks in viewport, click to highlight |
 | `src/services/GlobalTrailService.ts` | Trail search + Nominatim geocoding |
 | `src/services/NominatimGeocoder.ts` | Forward/reverse geocoding, location extraction |
 | `src/services/what3words.ts` | What3words API wrapper |
@@ -211,7 +253,7 @@ npm run dev        # Start Vite dev server (port 5173)
 npm run build      # TypeScript compile + Vite build
 npm run lint       # ESLint check
 npm run preview    # Preview production build
-sh deploy.sh       # Deploy backend to Linode
+bash deploy.sh     # Deploy backend to Linode (requires DATABASE_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, BACKEND_URL, DOC_API_KEY, LINZ_LDS_API_KEY in deployer's shell env — see [deploy.sh](deploy.sh) pre-flight)
 node doc-sync.js   # Manually sync DOC data (requires DOC_API_KEY)
 ```
 
@@ -234,8 +276,12 @@ node doc-sync.js   # Manually sync DOC data (requires DOC_API_KEY)
 | Variable | Purpose |
 |----------|---------|
 | `PORT` | Express listen port (default: 3001) |
+| `DATABASE_URL` | PostgreSQL connection string for `upto_db`. **Required** — backend throws on startup if missing. Deploy script reads it from the deployer's shell and writes it to `/opt/upto-backend/.env` on Linode (never committed) |
 | `DOC_API_KEY` | NZ Department of Conservation API key |
 | `LINZ_LDS_API_KEY` | LINZ LDS API key for Topo50 tile proxy (`/api/tiles/topo/:z/:x/:y`) |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID (for `/api/auth/google`) |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
+| `BACKEND_URL` | Public backend origin used in OAuth callback redirect (e.g. `http://172.105.178.48`) |
 | `NODE_ENV` | Environment (production on Linode) |
 
 ## DOC Integration (Current State)
@@ -248,6 +294,7 @@ The DOC (Department of Conservation) integration is **fully implemented** and pr
 - **Campsites**: ~1,850 campsites via `GET /api/doc/campsites?region=`
 - **Alerts**: Live safety alerts (closures, hazards, weather) via `GET /api/doc/alerts` — always fetched fresh, never cached
 - **Nearby search**: Combined tracks + huts + campsites + alerts within a radius via `GET /api/doc/nearby?lat=&lng=&radius=`
+- **Bbox trail query**: `GET /api/trails/bbox?west=&south=&east=&north=&limit=` returns up to 50 tracks whose centroid falls inside the bbox, sorted by distance from bbox centre. Drives the map's track-discovery layer (rejects bboxes wider than ~5° to avoid dumping all tracks)
 - **Coordinate conversion**: `doc-sync.js` converts NZTM2000 to WGS84 at sync time so downstream consumers don't need projection math
 - **Auto-detection**: `GlobalTrailService.ts` only queries DOC when the search location overlaps NZ bounds or contains "New Zealand"/"NZ"
 - **Frontend integration**: DOC results appear in trail suggestions on the Location step, ranked alongside OSM results
@@ -258,28 +305,36 @@ The DOC (Department of Conservation) integration is **fully implemented** and pr
 - Huts and campsites use simple `lat`/`lng` fields (converted from NZTM2000 `x`/`y` during sync)
 
 ### Detailed Docs
-See `DOC-INTEGRATION.md` for full endpoint documentation, setup instructions, caching strategy, and troubleshooting.
+See [brain/features/doc-integration.md](brain/features/doc-integration.md) for full endpoint documentation, setup instructions, caching strategy, and troubleshooting.
 
 ## Known Issues and Incomplete Features
 
-### Not Yet Implemented
-- **Database persistence**: TripLinks are saved to `localStorage` only — no backend database. The adventure POST/GET endpoints are stubs returning placeholder responses
-- **User authentication**: No auth system. Profile page exists but has no real user management
-- **Check-in system**: The data model defines check-ins, escalation, and notifications, but none of the check-in logic is implemented
-- **Notification delivery**: Emergency contact notification preferences are collected but no email/SMS sending is wired up
-- **Adventure sharing**: Share tokens and QR codes are generated client-side but the backend doesn't serve public adventure views
+### Shipped but needs hardening (see [brain/plans/persistence-and-auth.md](brain/plans/persistence-and-auth.md))
+- **Database persistence**: Linode Postgres (`upto_db`) live. Schema: `users`, `contacts`, `triplinks` (JSONB `data`), `check_ins`. Idempotent `initDB()` in [backend-server.js](backend-server.js). **Gap**: plaintext DB password fallback in source at [backend-server.js:13](backend-server.js#L13).
+- **User authentication**: Native scrypt password hashing + session tokens (UUID, stored on `users.session_token`), `requireAuth` middleware verifies `Authorization: Bearer`. Google OAuth redirect + callback works. Frontend [useAuth.ts](src/hooks/useAuth.ts) persists session in localStorage.
+- **Contacts CRUD**: Fully shipped and protected. [Profile.tsx](src/pages/Profile.tsx) runs live against backend.
+- **Check-in system**: TripLink lifecycle endpoints exist (`/start`, `/checkin`, `/complete`). 60s overdue checker with 15-min grace, SSE broadcast (`status`/`checkin`/`overdue`). **Gap**: mutating endpoints are not `requireAuth`-protected (capability-model via share_token) — needs ADR + hardening.
+- **Adventure sharing**: `GET /api/triplinks/:shareToken` serves the stored TripLink with joined check-ins. **Gap**: [PublicAdventureView.tsx](src/pages/PublicAdventureView.tsx) not end-to-end verified against DB-backed fetch.
+
+### Not yet implemented
+- **Notification delivery**: `overdue` is set in the DB and broadcast over SSE, but no email/SMS transport reaches a human who isn't currently on the page. Phase 3 of the persistence plan picks Resend vs SES.
+- **Emergency-contact linkage on TripLinks**: Account-level contacts exist, but the wizard still collects them inline per trip. See [brain/features/emergency-contacts-account-level.md](brain/features/emergency-contacts-account-level.md).
 - **TrailForks integration**: Stub returns empty array — needs API credentials
 - **Hiking Project integration**: Stub returns empty array — US-only, needs API credentials
 - **MapTiler integration**: Not started, env var placeholder only
 - **GuidePace UI connection**: `GuidePaceEstimator`, `PaceFactorControls`, `RouteBreakdown`, and `TimeEstimateSummary` components exist and the calculator logic works, but they aren't wired into the main trip creation flow
 - **AdventureScheduleStep**: Component exists but was pulled out of the wizard steps — schedule is not currently part of the creation flow
 - **NoteManager UX**: Uses `window.prompt()` for note input instead of a proper modal/form
+- **Route persisted on TripLink**: `SerializableTrack` + `MapLayer` not yet written into the TripLink's JSONB `data` at save time. See [brain/features/triplink-route-persistence.md](brain/features/triplink-route-persistence.md).
 
 ### Known Quirks
 - Cesium is loaded via CDN (not npm) and accessed through `window.Cesium` global — all map services use `any` types for Cesium objects
-- The three map managers (WaypointManager, TrackDrawer, NoteManager) extend `CesiumManager` base class which handles setup/retry and gives each its own `ScreenSpaceEventHandler` to avoid overwriting each other's click handlers
+- The four map managers (WaypointManager, TrackDrawer, NoteManager, TrailLayerManager) extend `CesiumManager` base class which handles setup/retry and gives each its own `ScreenSpaceEventHandler` to avoid overwriting each other's click handlers
 - Each manager retries initialization up to 50 times (5 seconds) waiting for the Cesium viewer to be ready
 - Default camera position is NZ overview (`172.0, -41.5, 2500000m`)
+- The map is **lazy-mounted** in the wizard via `ExpandSection`'s `hasOpened` flag in [src/pages/CreateAdventure.tsx](src/pages/CreateAdventure.tsx) — Cesium does not load until the user expands `Route & Map`. This applies to `Time Estimation` and `Emergency Contacts` too.
+- When mounted from the wizard, `TripPlanningMap` opens in `SceneMode.SCENE2D` with the LINZ Topo50 layer applied. The user can switch to 3D via the `2D ↔ 3D` ButtonGroup in the map header (persisted to `localStorage` key `upto_scene_mode`). Other call sites get the legacy 3D-satellite default.
+- `scene3DOnly` is **not** set on the Cesium viewer — required for `morphTo2D` to work.
 - NoteManager still uses `window.prompt()` for note input — needs a proper modal
 - `Adventure` is re-exported as a type alias from `adventure.ts` for backward compat — use `TripLink` directly in new code
 

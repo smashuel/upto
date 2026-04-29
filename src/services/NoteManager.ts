@@ -21,40 +21,55 @@ const NOTE_ICONS: Record<MapNote['type'], string> = {
   general:       'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 12H3M12 3v18" stroke="%236B7280" stroke-width="2"/></svg>',
 };
 
+export type NoteRequestCallback = (
+  position: any,
+  onSubmit: (data: { content: string; title: string; type: MapNote['type'] }) => void,
+) => void;
+
 export default class NoteManager extends CesiumManager {
   private notes: MapNote[] = [];
   private active = false;
   private onAdded?: (note: MapNote) => void;
+  private onRequestNote?: NoteRequestCallback;
 
-  constructor(viewer: any, onAdded?: (note: MapNote) => void) {
+  constructor(
+    viewer: any,
+    onAdded?: (note: MapNote) => void,
+    onRequestNote?: NoteRequestCallback,
+  ) {
     super(viewer);
     this.onAdded = onAdded;
+    this.onRequestNote = onRequestNote;
   }
 
   protected setup(handler: any) {
     handler.setInputAction((event: any) => {
       if (!this.active) return;
       const pos = this.pickPosition(event.position);
-      if (pos) this.promptAndAdd(pos);
+      if (!pos) return;
+
+      if (this.onRequestNote) {
+        // Delegate to React modal
+        this.onRequestNote(pos, (data) => {
+          this.addNote(pos, data);
+        });
+      } else {
+        // Fallback to window.prompt (for non-React contexts)
+        const content = window.prompt('Note content:');
+        if (!content) return;
+        const title = window.prompt('Note title (optional):') || 'Map Note';
+        const typeRaw = window.prompt('Type: accommodation / warning / info / photo / general') || 'general';
+        const type = (['accommodation', 'warning', 'info', 'photo', 'general'].includes(typeRaw)
+          ? typeRaw
+          : 'general') as MapNote['type'];
+        this.addNote(pos, { content, title, type });
+      }
     }, window.Cesium.ScreenSpaceEventType.LEFT_CLICK);
   }
 
   setMode(enabled: boolean) {
     this.active = enabled;
     this.setCursor(enabled ? 'help' : '');
-  }
-
-  private promptAndAdd(position: any) {
-    // TODO: replace with a proper modal — window.prompt doesn't work on mobile
-    const content = window.prompt('Note content:');
-    if (!content) return;
-    const title = window.prompt('Note title (optional):') || 'Map Note';
-    const typeRaw = window.prompt('Type: accommodation / warning / info / photo / general') || 'general';
-    const type = (['accommodation', 'warning', 'info', 'photo', 'general'].includes(typeRaw)
-      ? typeRaw
-      : 'general') as MapNote['type'];
-
-    this.addNote(position, { content, title, type });
   }
 
   addNote(position: any, data: { content: string; title: string; type: MapNote['type'] }): MapNote {

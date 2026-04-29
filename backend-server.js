@@ -9,9 +9,10 @@ import crypto from 'crypto';
 const { Pool } = pg;
 
 // ── PostgreSQL connection ──────────────────────────────────────────────────────
-const db = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://upto_user:Rowdy050@127.0.0.1:5432/upto_db'
-});
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL is required — set it in the PM2 env (ecosystem.config.js) or shell');
+}
+const db = new Pool({ connectionString: process.env.DATABASE_URL });
 
 // ── Password hashing (no bcrypt dep — uses Node built-in crypto) ──────────────
 function hashPassword(password) {
@@ -157,7 +158,9 @@ const corsOptions = {
   origin: [
     'http://localhost:3000',
     'http://localhost:5173',
+    'http://localhost:5174',
     'http://127.0.0.1:5173',
+    'http://127.0.0.1:5174',
     'https://upto-six.vercel.app',
     'https://upto.world',
     'https://www.upto.world',
@@ -671,22 +674,31 @@ async function searchDocTracks(query) {
 
 // ── TripLink endpoints ────────────────────────────────────────────────────────
 
-// POST /api/triplinks — create and persist a new TripLink
-app.post('/api/triplinks', async (req, res) => {
+// POST /api/triplinks — create or update a TripLink. Owner-only (requireAuth).
+// user_id is derived from the session, never trusted from the body.
+app.post('/api/triplinks', requireAuth, async (req, res) => {
   try {
     const tripLink = req.body;
     if (!tripLink || !tripLink.id || !tripLink.shareToken) {
       return res.status(400).json({ error: 'Missing required fields: id, shareToken' });
     }
+
+    const { rows: existing } = await db.query(
+      `SELECT user_id FROM triplinks WHERE id = $1`, [tripLink.id]
+    );
+    if (existing.length && existing[0].user_id && existing[0].user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Not owner' });
+    }
+
     await db.query(
       `INSERT INTO triplinks (id, user_id, share_token, data, status, expected_return_time)
        VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data`,
       [
         tripLink.id,
-        tripLink.userId || null,
+        req.user.id,
         tripLink.shareToken,
-        JSON.stringify(tripLink),
+        JSON.stringify({ ...tripLink, userId: req.user.id }),
         tripLink.status || 'planned',
         tripLink.expectedReturnTime || null,
       ]
@@ -1209,6 +1221,69 @@ app.get('/api/trails/snap', async (req, res) => {
     res.json({ trails });
   } catch (err) {
     console.error('Trail snap error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Bounding-box trail query for the map's track-discovery layer.
+ * Returns DOC tracks whose centroid falls inside the given bbox.
+ *
+ * Caps:
+ *  - bbox span > ~5° in either axis → 400 (would dump all NZ tracks)
+ *  - max 100 trails per response (default 50)
+ */
+app.get('/api/trails/bbox', async (req, res) => {
+  const { west, south, east, north } = req.query;
+  if (west === undefined || south === undefined || east === undefined || north === undefined) {
+    return res.status(400).json({ error: 'west, south, east, north required' });
+  }
+
+  const w = parseFloat(west);
+  const s = parseFloat(south);
+  const e = parseFloat(east);
+  const n = parseFloat(north);
+  if ([w, s, e, n].some(Number.isNaN)) {
+    return res.status(400).json({ error: 'bounds must be numbers' });
+  }
+  if (n <= s || e <= w) {
+    return res.status(400).json({ error: 'invalid bbox: north must exceed south, east must exceed west' });
+  }
+  if ((n - s) > 5 || (e - w) > 5) {
+    return res.status(400).json({ error: 'bbox too large (max ~5° per axis)' });
+  }
+
+  const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+  const cLat = (n + s) / 2;
+  const cLng = (e + w) / 2;
+
+  try {
+    const cache = await readDocCache('tracks');
+    if (!cache || !cache.data) {
+      return res.json({ trails: [] });
+    }
+
+    const trails = cache.data
+      .filter(track => {
+        if (!track.lineWgs84?.length) return false;
+        if (typeof track.lat !== 'number' || typeof track.lng !== 'number') return false;
+        return track.lat >= s && track.lat <= n && track.lng >= w && track.lng <= e;
+      })
+      .sort((a, b) =>
+        haversineDistance(cLat, cLng, a.lat, a.lng) -
+        haversineDistance(cLat, cLng, b.lat, b.lng)
+      )
+      .slice(0, limit)
+      .map(track => ({
+        id: String(track.id || track.assetId),
+        name: track.name,
+        source: 'doc',
+        geometry: track.lineWgs84,
+      }));
+
+    res.json({ trails });
+  } catch (err) {
+    console.error('Trail bbox error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

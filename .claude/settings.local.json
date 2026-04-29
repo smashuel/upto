@@ -24,8 +24,27 @@
       "Bash(curl -s -X POST http://localhost:3001/api/auth/register -H 'Content-Type: application/json' -d '{\"email\":\"test2@test.com\",\"name\":\"Test\",\"password\":\"test1234\"}')",
       "Bash(curl -s -X POST http://172.105.178.48/api/auth/register -H 'Content-Type: application/json' -d '{\"email\":\"devtest@upto.world\",\"name\":\"Dev Test\",\"password\":\"devtest123\"}')",
       "Bash(git check-ignore:*)",
-      "Bash(echo \"EXIT:$?\")"
+      "Bash(echo \"EXIT:$?\")",
+      "mcp__context7__query-docs",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "Bash(dig api.upto.world +short)",
+      "Bash(dig api.upto.world @1.1.1.1 +short)",
+      "Bash(dig api.upto.world @8.8.8.8 +short)",
+      "Bash(dig NS upto.world +short)",
+      "Bash(curl -s https://api.upto.world/api/health)",
+      "Bash(curl -sI http://172.105.178.48/api/health)",
+      "Bash(dig upto.world +short)",
+      "Bash(dig www.upto.world +short)",
+      "Bash(dig upto.world NS +short)",
+      "WebSearch"
     ],
     "deny": []
-  }
+  },
+  "disabledMcpjsonServers": [
+    "linode",
+    "context7",
+    "postgres"
+  ]
 }

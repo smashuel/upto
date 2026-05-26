@@ -83,6 +83,10 @@ async function initDB() {
     await db.query(`
       ALTER TABLE triplinks ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id) ON DELETE SET NULL;
     `);
+    // Phase 2: account-level emergency contacts
+    await db.query(`
+      ALTER TABLE contacts ADD COLUMN IF NOT EXISTS is_emergency BOOLEAN DEFAULT FALSE;
+    `);
     console.log('Database schema ready');
   } catch (err) {
     console.error('DB init error:', err.message);
@@ -419,13 +423,13 @@ app.get('/api/auth/google/callback', async (req, res) => {
 
 // ── Contacts endpoints ────────────────────────────────────────────────────────
 
-// GET /api/contacts — list contacts for authenticated user (favourites first)
+// GET /api/contacts — list contacts for authenticated user (emergency first, then favourites)
 app.get('/api/contacts', requireAuth, async (req, res) => {
   try {
     const { rows } = await db.query(
-      `SELECT id, name, email, phone, relationship, is_favourite, created_at
+      `SELECT id, name, email, phone, relationship, is_favourite, is_emergency, created_at
        FROM contacts WHERE user_id = $1
-       ORDER BY is_favourite DESC, name ASC`,
+       ORDER BY is_emergency DESC, is_favourite DESC, name ASC`,
       [req.user.id]
     );
     res.json(rows);
@@ -435,16 +439,20 @@ app.get('/api/contacts', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/contacts — create a contact
+// POST /api/contacts — create a contact.
+// Accepts snake_case (what the frontend sends today) and camelCase (legacy) for both flags.
 app.post('/api/contacts', requireAuth, async (req, res) => {
-  const { name, email, phone, relationship, isFavourite } = req.body || {};
+  const body = req.body || {};
+  const { name, email, phone, relationship } = body;
+  const isFavourite = body.is_favourite ?? body.isFavourite ?? false;
+  const isEmergency = body.is_emergency ?? body.isEmergency ?? false;
   if (!name) return res.status(400).json({ error: 'name is required' });
   try {
     const { rows } = await db.query(
-      `INSERT INTO contacts (user_id, name, email, phone, relationship, is_favourite)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, name, email, phone, relationship, is_favourite`,
-      [req.user.id, name.trim(), email || null, phone || null, relationship || null, isFavourite || false]
+      `INSERT INTO contacts (user_id, name, email, phone, relationship, is_favourite, is_emergency)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, name, email, phone, relationship, is_favourite, is_emergency`,
+      [req.user.id, name.trim(), email || null, phone || null, relationship || null, isFavourite, isEmergency]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -453,22 +461,29 @@ app.post('/api/contacts', requireAuth, async (req, res) => {
   }
 });
 
-// PATCH /api/contacts/:id — update a contact
+// PATCH /api/contacts/:id — partial update. Same camelCase/snake_case tolerance as POST.
 app.patch('/api/contacts/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
-  const { name, email, phone, relationship, isFavourite } = req.body || {};
+  const body = req.body || {};
+  const { name, email, phone, relationship } = body;
+  // Read both casings; null means "field not present in request → keep existing"
+  const isFavouriteRaw = body.is_favourite ?? body.isFavourite;
+  const isEmergencyRaw = body.is_emergency ?? body.isEmergency;
   try {
     const { rows } = await db.query(
       `UPDATE contacts
-       SET name = COALESCE($1, name),
-           email = COALESCE($2, email),
-           phone = COALESCE($3, phone),
+       SET name         = COALESCE($1, name),
+           email        = COALESCE($2, email),
+           phone        = COALESCE($3, phone),
            relationship = COALESCE($4, relationship),
-           is_favourite = COALESCE($5, is_favourite)
-       WHERE id = $6 AND user_id = $7
-       RETURNING id, name, email, phone, relationship, is_favourite`,
+           is_favourite = COALESCE($5, is_favourite),
+           is_emergency = COALESCE($6, is_emergency)
+       WHERE id = $7 AND user_id = $8
+       RETURNING id, name, email, phone, relationship, is_favourite, is_emergency`,
       [name || null, email || null, phone || null, relationship || null,
-       isFavourite !== undefined ? isFavourite : null, id, req.user.id]
+       isFavouriteRaw !== undefined ? isFavouriteRaw : null,
+       isEmergencyRaw !== undefined ? isEmergencyRaw : null,
+       id, req.user.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Contact not found' });
     res.json(rows[0]);

@@ -1,48 +1,40 @@
 ---
 type: feature
-status: planned
-related: [src/components/forms/AdventureContactsStep.tsx, src/pages/Profile.tsx, src/types/adventure.ts, src/types/user.ts]
+status: shipped
+related: [src/components/forms/AdventureContactsStep.tsx, src/pages/Profile.tsx, src/config/api.ts, backend-server.js]
 tags: [wizard, auth, emergency, contacts, safety]
 ---
 
 # Emergency Contacts — Account-Level, Not Per-Trip
 
-Move emergency contacts out of the trip creation wizard and onto the user's account. Every trip inherits the account's contacts; the wizard confirms "who will be notified" rather than re-collecting them.
+Emergency contacts now live on the user's account. Every new trip auto-inherits them; the wizard confirms "who will be notified" with per-trip opt-out toggles instead of re-asking.
 
-## Problem
+## Shipped (Phase 2 of [plans/persistence-and-auth.md](../plans/persistence-and-auth.md), 2026-05-04)
 
-`AdventureContactsStep` currently asks the user to enter names, phones, emails, and escalation preferences every single trip. In reality, a recreationalist's emergency circle doesn't change between a Monday tramp and a weekend climbing mission — it's the same 2–4 people. Consequences:
+- **Schema**: `is_emergency BOOLEAN DEFAULT FALSE` added to `contacts` via idempotent `ALTER TABLE` in [backend-server.js](../../backend-server.js) `initDB()`. GET returns it. POST/PATCH accept both `is_emergency` (snake_case, what the frontend sends) and `isEmergency` (camelCase, legacy).
+- **Profile** ([Profile.tsx](../../src/pages/Profile.tsx)): Shield-icon toggle on each contact row + a small explainer line ("N in your emergency circle — auto-included on every new trip"). The Add-contact form has paired emergency / favourite checkboxes.
+- **Wizard step** ([AdventureContactsStep.tsx](../../src/components/forms/AdventureContactsStep.tsx)) is now structured as:
+  1. **Your emergency circle** — auto-populated from the account on first mount with per-trip include checkboxes, a "Primary" star toggle, and a `↗ Edit on Profile` link.
+  2. **For this trip only** — ad-hoc contacts added during this wizard run (one-off hut warden, etc.).
+  3. **Collapsible `<details>`** to add from any other (non-emergency) saved contact.
+  4. Manual add form, with optional "save to my contacts for next time".
+- **Auto-populate guard**: `useRef` ensures we populate the form *once* when the page mounts with an empty `emergencyContacts` form field and a non-empty emergency circle. User-driven removals don't re-trigger.
+- **TripLink schema unchanged**: the wizard still embeds `emergencyContacts: Contact[]` snapshot at save-time. This preserves the audit trail (who *was* notified at this moment) and means existing TripLinks + the watcher view keep working without migration.
 
-- Friction on trip creation. Users copy/paste or re-type the same contacts.
-- Inconsistency risk. One trip might forget a contact who matters; another might have an outdated number.
-- It's unclear *which* contacts receive the SOS / check-in / TripLink delivery today — the wizard collects them but the transport layer isn't wired, so the mapping has never been made explicit.
+## Pre-existing bug fixed alongside
 
-## Proposal
+The contacts API was destructuring `isFavourite` (camelCase) from the request body while the frontend sent `is_favourite` (snake_case), so the favourite toggle had never actually persisted via the API — the UI was faking it optimistically. Backend now reads both casings. Favourites work properly for the first time.
 
-- Contacts live on the **user account** (Profile page). One place to edit.
-- SOS, check-in reminders, overdue escalation, and TripLink delivery all read from the account list.
-- The wizard's contacts step becomes a **read-only confirmation**: "These contacts will be notified" with a link to Profile to edit. Users can still opt a specific contact out of a specific trip (toggle), but the default is "all".
-- Make the notification channels explicit on the account screen: per-contact choice of email / SMS / both, mirroring the data model that already exists in `adventure.ts`.
+## Guest / not-logged-in users
 
-## Files
+The step shows a sign-in nudge ("Sign in to use your saved emergency circle") plus the manual-add form. Guests can still add per-trip contacts; they just don't get the auto-include behaviour.
 
-- [src/pages/Profile.tsx](../../src/pages/Profile.tsx) — currently a stub; gains a contacts CRUD UI
-- [src/components/forms/AdventureContactsStep.tsx](../../src/components/forms/AdventureContactsStep.tsx) — becomes a read-only confirm screen with per-trip opt-out toggles
-- [src/types/user.ts](../../src/types/user.ts) — add `emergencyContacts: Contact[]` to the User type
-- [src/types/adventure.ts](../../src/types/adventure.ts) — contacts stored on the TripLink become a **reference** (array of contact IDs) rather than a full copy, plus per-trip overrides
+## Out of scope (intentional)
 
-## Blocker
-
-Needs user auth + account model. Both unshipped. This is the same prereq gate as [triplink-route-persistence.md](triplink-route-persistence.md) and [../plans/social-triplink-sharing.md](../plans/social-triplink-sharing.md).
-
-## Migration
-
-Existing localStorage TripLinks have full contact objects embedded. When the account model lands:
-
-- First sign-in flow imports contacts from the user's most recent TripLink (if any) into their account, to avoid a cold-start empty state.
-- Historical TripLinks keep their embedded contacts (snapshot of who *was* notified at that time — useful for audit).
+- **Per-contact notification channels** (email / SMS / both) — the data model exists but Phase 3 (email transport) is the right time to surface that UI.
+- **TripLink `data` JSONB referencing contact IDs by ref** — the snapshot-on-save model is the chosen design. Audit trail > update-in-place. Means a later edit on Profile doesn't retroactively change historical TripLinks (which is correct for safety logs).
 
 ## Relationship to other backlog
 
-- Pairs naturally with [../plans/social-triplink-sharing.md](../plans/social-triplink-sharing.md): the account's contact list doubles as the "who can I invite on a trip" pool (with a `is_favourite` flag separating the emergency circle from casual invitees).
-- Enables the **notification transports** work (SES/Resend + Twilio) to have a single source of truth for recipients.
+- Pairs naturally with [../plans/social-triplink-sharing.md](../plans/social-triplink-sharing.md): the same account contact list will gain `is_squad` / `is_home_base` flags when that work picks up — same row, more roles.
+- Unblocks Phase 3 (email transport) — the overdue checker now has a clear "who do we email" target via the snapshot embedded on each TripLink.

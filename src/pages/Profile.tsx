@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Star, Trash2, Plus, LogOut, LogIn } from 'lucide-react';
+import { Star, Trash2, Plus, LogOut, LogIn, Shield } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../config/api';
 import type { SavedContact } from '../config/api';
@@ -19,6 +19,7 @@ const AddContactForm: React.FC<AddContactFormProps> = ({ sessionToken, onAdded, 
   const [email, setEmail] = useState('');
   const [relationship, setRelationship] = useState('');
   const [isFavourite, setIsFavourite] = useState(false);
+  const [isEmergency, setIsEmergency] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -34,6 +35,7 @@ const AddContactForm: React.FC<AddContactFormProps> = ({ sessionToken, onAdded, 
         email: email.trim() || undefined,
         relationship: relationship.trim() || undefined,
         is_favourite: isFavourite,
+        is_emergency: isEmergency,
       });
       onAdded(saved);
     } catch (err: unknown) {
@@ -81,8 +83,15 @@ const AddContactForm: React.FC<AddContactFormProps> = ({ sessionToken, onAdded, 
           </div>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontSize: '0.875rem', color: 'var(--upto-text-secondary)' }}>
+            <input type="checkbox" checked={isEmergency} onChange={e => setIsEmergency(e.target.checked)} />
+            <Shield size={13} style={{ color: 'var(--upto-danger, oklch(60% 0.18 25))', flexShrink: 0 }} />
+            Part of my emergency circle — auto-included on every trip
+          </label>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontSize: '0.875rem', color: 'var(--upto-text-secondary)' }}>
             <input type="checkbox" checked={isFavourite} onChange={e => setIsFavourite(e.target.checked)} />
-            Mark as favourite (appears first on every trip)
+            <Star size={13} style={{ color: 'oklch(72% 0.14 70)', flexShrink: 0 }} />
+            Favourite (suggested first when picking contacts)
           </label>
 
           {error && <p className="create-error">{error}</p>}
@@ -130,6 +139,17 @@ export const Profile: React.FC = () => {
       await api.updateContact(sessionToken, contact.id, { is_favourite: updated.is_favourite });
     } catch {
       // Revert on failure
+      setContacts(prev => prev.map(c => c.id === contact.id ? contact : c));
+    }
+  };
+
+  const handleToggleEmergency = async (contact: SavedContact) => {
+    if (!sessionToken) return;
+    const updated = { ...contact, is_emergency: !contact.is_emergency };
+    setContacts(prev => prev.map(c => c.id === contact.id ? updated : c));
+    try {
+      await api.updateContact(sessionToken, contact.id, { is_emergency: updated.is_emergency });
+    } catch {
       setContacts(prev => prev.map(c => c.id === contact.id ? contact : c));
     }
   };
@@ -190,9 +210,12 @@ export const Profile: React.FC = () => {
     );
   }
 
-  const favourites = contacts.filter(c => c.is_favourite);
-  const others = contacts.filter(c => !c.is_favourite);
-  const sortedContacts = [...favourites, ...others];
+  // Sort: emergency circle first, then favourites, then the rest. Matches the backend's ORDER BY.
+  const emergency  = contacts.filter(c => c.is_emergency);
+  const favourites = contacts.filter(c => !c.is_emergency && c.is_favourite);
+  const others     = contacts.filter(c => !c.is_emergency && !c.is_favourite);
+  const sortedContacts = [...emergency, ...favourites, ...others];
+  const emergencyCount = emergency.length;
 
   return (
     <div className="profile-page">
@@ -208,6 +231,17 @@ export const Profile: React.FC = () => {
         <section className="profile-section">
           <h2 className="profile-section-label">Saved contacts</h2>
 
+          {/* Emergency-circle explainer */}
+          {!loadingContacts && contacts.length > 0 && (
+            <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.8125rem', color: 'var(--upto-text-muted)', marginTop: -8, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Shield size={13} style={{ color: 'var(--upto-danger, oklch(60% 0.18 25))', flexShrink: 0 }} />
+              <span>
+                <strong style={{ color: 'var(--upto-text-secondary)' }}>{emergencyCount}</strong>{' '}
+                in your <strong>emergency circle</strong> — auto-included on every new trip.
+              </span>
+            </p>
+          )}
+
           {loadingContacts && (
             <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.875rem', color: 'var(--upto-text-muted)' }}>
               Loading…
@@ -218,7 +252,7 @@ export const Profile: React.FC = () => {
             <div className="profile-empty-state">
               <p>No saved contacts yet.</p>
               <p style={{ fontSize: '0.8125rem', marginTop: 4 }}>
-                Add the people who should know where you are — they'll be available to select on every trip.
+                Add the people who should know where you are — mark them as part of your <strong>emergency circle</strong> and they'll auto-fill on every trip.
               </p>
             </div>
           )}
@@ -229,7 +263,10 @@ export const Profile: React.FC = () => {
                 <div key={contact.id} className="profile-contact-row">
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="profile-contact-name">
-                      {contact.is_favourite && (
+                      {contact.is_emergency && (
+                        <Shield size={12} style={{ color: 'var(--upto-danger, oklch(60% 0.18 25))', flexShrink: 0 }} />
+                      )}
+                      {contact.is_favourite && !contact.is_emergency && (
                         <Star size={12} style={{ color: 'oklch(72% 0.14 70)', flexShrink: 0 }} />
                       )}
                       {contact.name}
@@ -245,6 +282,15 @@ export const Profile: React.FC = () => {
                   </div>
 
                   <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    <button
+                      type="button"
+                      className={`profile-contact-fav${contact.is_emergency ? ' is-fav' : ''}`}
+                      onClick={() => handleToggleEmergency(contact)}
+                      title={contact.is_emergency ? 'Remove from emergency circle' : 'Add to emergency circle'}
+                      style={contact.is_emergency ? { color: 'var(--upto-danger, oklch(60% 0.18 25))' } : undefined}
+                    >
+                      <Shield size={15} fill={contact.is_emergency ? 'currentColor' : 'none'} />
+                    </button>
                     <button
                       type="button"
                       className={`profile-contact-fav${contact.is_favourite ? ' is-fav' : ''}`}

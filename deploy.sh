@@ -1,7 +1,16 @@
 #!/bin/bash
 
 # Upto Backend Deployment Script for Linode
-# This script deploys the Node.js backend to your Linode server
+# This script deploys the Node.js backend to your Linode server.
+# Must run under bash (uses arrays, ${!var}, ${VAR@Q}). Run as `bash deploy.sh`
+# or `./deploy.sh`, NOT `sh deploy.sh` (sh is dash on most Linuxes and breaks).
+
+if [ -z "$BASH_VERSION" ]; then
+    echo "ERROR: deploy.sh requires bash (got dash/sh). Run with:" >&2
+    echo "  bash deploy.sh         # or" >&2
+    echo "  ./deploy.sh            # if executable" >&2
+    exit 1
+fi
 
 set -e  # Exit on any error
 
@@ -42,7 +51,18 @@ if [ ! -f "backend-server.js" ]; then
     exit 1
 fi
 
-# Pre-flight: required env vars must be set in the deployer's shell.
+# Auto-source .env if present, so the deployer doesn't have to remember to
+# `export` everything in their shell. .env is gitignored. Bash itself doesn't
+# read .env files — this is the bridge.
+if [ -f .env ]; then
+    set -a
+    # shellcheck disable=SC1091
+    source .env
+    set +a
+    print_status "Loaded env from ./.env"
+fi
+
+# Pre-flight: required env vars must be set (either in the shell or in .env above).
 # These are interpolated into the on-server .env at deploy time — never into git.
 REQUIRED_VARS=(
     DATABASE_URL
@@ -194,9 +214,18 @@ echo "Starting application with PM2..."
 # --update-env so a rotated secret in .env propagates on restart, not just on cold start
 pm2 restart upto-backend --update-env 2>/dev/null || pm2 start ecosystem.config.cjs --update-env
 
-echo "Setting up PM2 to start on boot..."
+echo "Saving PM2 process list..."
 pm2 save
-pm2 startup | tail -1 | sudo bash
+
+# Only configure PM2 boot-persistence once. After the first successful deploy
+# the systemd unit exists; re-running `pm2 startup | tail -1 | sudo bash`
+# emits noise like `$: command not found` for no benefit.
+if [ ! -f /etc/systemd/system/pm2-root.service ]; then
+    echo "Configuring PM2 to start on boot..."
+    pm2 startup systemd -u root --hp /root | tail -1 | sudo bash
+else
+    echo "PM2 boot-persistence already configured — skipping."
+fi
 
 echo "Backend deployment complete!"
 echo "Use 'pm2 logs upto-backend' to view logs"

@@ -318,5 +318,6 @@ export interface SavedContact {
   phone?: string;
   relationship?: string;
   is_favourite: boolean;
+  is_emergency: boolean;
   created_at?: string;
 }

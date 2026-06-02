@@ -85,17 +85,28 @@ Implements [features/emergency-contacts-account-level.md](../features/emergency-
 
 **Gate:** a user can edit their emergency circle once on Profile; a new trip picks them up automatically without re-typing.
 
-## Phase 3 — Email transport + overdue delivery
+## Phase 3 — SMS transport + overdue delivery — SHIPPED 2026-05-27
 
-Turns `overdue` from a DB state into a notification that reaches a human.
+Turns `overdue` from a DB state into an outbound message. User chose SMS-only over email; transport is **Twilio**, stub-mode-pending-creds. See [features/notification-transport.md](../features/notification-transport.md) for the full shipped surface and [status.md](../project/status.md) for the going-live checklist.
 
-- Pick a transport: Resend (simple, free tier) vs AWS SES (cheaper at volume but more setup). Decide + write an ADR.
-- `backend/transports/email.js` (new) — `sendEmail(to, subject, html)`. Templates: overdue alert, share-notification, (later) check-in reminder.
-- Hook into the existing overdue checker at [backend-server.js](../../backend-server.js) (lines 119-143). When a TripLink flips to `overdue`, look up the owner's `is_emergency` contacts (from Phase 2) and send email.
-- Include: trip title, share URL, last check-in time, what3words for the primary / emergency-exit locations.
-- Rate-limit: only send once per TripLink per overdue transition (idempotency key on `triplink_id + overdue_since`).
+Built:
 
-**Gate:** create a TripLink with `expected_return_time` 2 minutes from now, skip the check-in, confirm the email lands.
+- [notifications.js](../../notifications.js) — `sendSms(to, body)` calls Twilio REST via native `fetch`; stubs to console when `TWILIO_*` env vars are unset
+- `notifyTripStart(tripLink)` — fires on `PATCH /api/triplinks/:token/start`. Messages every embedded contact with a phone, regardless of `isEmergency`
+- `notifyTripOverdue(tripLink)` — fires from the 60s overdue checker on status transition. Messages only contacts where `isEmergency === true` AND phone is present
+- `isEmergency` snapshot added to the embedded contact shape ([src/types/adventure.ts](../../src/types/adventure.ts) `Contact` type, [AdventureContactsStep.tsx](../../src/components/forms/AdventureContactsStep.tsx) `buildEmbeddedContact`)
+- Wizard warns inline on included contacts missing a phone number
+- `deploy.sh` bundles `notifications.js` and conditionally pass-throughs `TWILIO_*` env vars
+
+Smoke test on prod: `PATCH /start` against a planned TripLink — dispatcher fired, log line `[notify] start: no contacts with phones for trip ...` confirmed wiring, status rolled back via SQL.
+
+**Out of scope (deliberate)**:
+- Email fallback for phone-less contacts (user accepted this trade-off)
+- Trip completion notification (user said no — avoid fatigue)
+- Idempotency log table (the `WHERE status = 'active'` filter on the overdue checker makes transitions one-shot)
+- Phone E.164 normalization (Twilio errors on invalid; we log and move on)
+
+**Going-live:** user creates Twilio account, exports the three env vars, redeploys. No code change needed.
 
 ## Phase 4 — Tie-up + verification
 

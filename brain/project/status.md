@@ -4,16 +4,20 @@ status: in-progress
 tags: [status, current]
 ---
 
-# Status — 2026-05-04
+# Status — 2026-05-27
 
 Always-true snapshot of the project. Bump this whenever a phase ships or priorities shift.
 
 ## Current focus
 
-**Persistence + auth — Phase 3 next: email transport for overdue alerts.** Phases 1 (security hardening, DB password rotated) and 2 (account-level emergency contacts) are shipped. Phase 3 picks a transport (Resend vs SES) and hooks it into the existing 60s overdue checker so a human actually gets notified when a trip goes overdue. After Phase 3 the safety story is complete end-to-end. See [plans/persistence-and-auth.md](../plans/persistence-and-auth.md).
+**Persistence + auth — Phase 4 (tie-up + localStorage demote) is what's left.** Phases 1 (security hardening), 2 (account-level emergency contacts), and 3 (SMS notification transport via Twilio, stub-mode-pending-creds) are all shipped. The safety story is **functionally complete end-to-end** — once the user wires Twilio creds, real SMS go out on `/start` and overdue transitions. See [plans/persistence-and-auth.md](../plans/persistence-and-auth.md).
+
+**Going-live checklist** (Phase 3 follow-up): create Twilio account, buy a sender number, export `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_PHONE_NUMBER` in shell or `.env`, redeploy. Backend logs will switch from `[sms STUB] would send...` to actual Twilio confirmations.
 
 ## Recent shipped (last ~30 days)
 
+- **Persistence Phase 3 — SMS notification transport (Twilio, stub mode)** (2026-05-27) — new [notifications.js](../../notifications.js) at repo root. `sendSms(to, body)` calls Twilio REST via native fetch; logs `[sms STUB] would send to ...` when creds aren't set. Two dispatchers: `notifyTripStart` (all included contacts with phones) and `notifyTripOverdue` (emergency-circle only). Hooked into `PATCH /start` and the 60s overdue checker as fire-and-forget. Wizard now snapshots `isEmergency` per contact at save time + warns inline on phone-less contacts. `deploy.sh` bundles the new file and conditionally pass-throughs `TWILIO_*` env vars. Smoke-tested in prod — Start dispatcher fired correctly. See [features/notification-transport.md](../features/notification-transport.md).
+- **Vercel→Linode HTTPS proxy fix** (2026-05-27) — `vercel.json` had always proxied to `https://api.upto.world` but the Linode never had a port-443 listener. Every `deploy.sh` was overwriting any hand-added HTTPS config. Added a 443 server block to [nginx-config](../../nginx-config) using the existing Let's Encrypt cert. Google sign-in unblocked. See [journal/2026-05-27-https-on-linode.md](../journal/2026-05-27-https-on-linode.md).
 - **Persistence hardening Phase 2 — account-level emergency contacts** (2026-05-04) — added `is_emergency BOOLEAN` column to `contacts` via idempotent `ALTER`. Shield toggle on Profile contact rows. Wizard step now auto-populates from the user's emergency circle with per-trip opt-out checkboxes + an Edit-on-Profile link; ad-hoc contacts remain as a "for this trip only" subsection. TripLink schema unchanged — `emergencyContacts` snapshot embedded at save-time for audit-trail integrity. Side-fix: contacts API was destructuring `isFavourite` (camelCase) while the frontend sent `is_favourite` — favourites never actually persisted via the API. Backend now reads both casings.
 - **Fullscreen map mode** (2026-04-22) — `Maximize2` button at top-right of [TripPlanningMap.tsx](../../src/components/map/TripPlanningMap.tsx) using the Fullscreen API; `:fullscreen` CSS handles the resize, Cesium's internal `ResizeObserver` reflows the canvas. CSS-overlay fallback (`.map-viewport-fullscreen-fallback`) for browsers where the API rejects. Esc / browser exit gesture / button click all exit cleanly.
 - **Persistence hardening Phase 1** (2026-04-22) — removed plaintext DB password fallback (required `DATABASE_URL` now throws on startup); added `requireAuth` + ownership check to `POST /api/triplinks` (`user_id` now derived from session, not body); wired `sessionToken` through `api.createTripLink` and [CreateAdventure.tsx](../../src/pages/CreateAdventure.tsx) — unauthenticated submits redirect to `/login`. Decision captured in [decisions/009-native-auth-capability-share-tokens.md](../decisions/009-native-auth-capability-share-tokens.md).

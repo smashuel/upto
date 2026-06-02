@@ -57,6 +57,12 @@ export interface Contact {
   phone: string;
   relationship: string;
   isPrimary: boolean;
+  // Snapshotted from the account's contacts.is_emergency at TripLink save time.
+  // Drives who gets the overdue SMS (emergency-circle only). Ad-hoc contacts
+  // added during the wizard default to false.
+  isEmergency?: boolean;
+  // The account-level contact id this snapshot was derived from, when applicable.
+  savedContactId?: number;
 }
 
 // Re-export the old name as an alias during migration so nothing breaks at import time.

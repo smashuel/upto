@@ -151,8 +151,23 @@ Either should return `{ status: "Backend connected successfully!", server: "Lino
 - **Env var not picked up** — PM2 caches env; use `pm2 restart upto-backend --update-env` or `pm2 reload`
 - **Tile proxy fails** — `LINZ_LDS_API_KEY` missing or expired on the Linode box; check `pm2 env 0`
 
+## TLS / HTTPS
+
+Linode serves both `http://172.105.178.48` (port 80, direct-IP access + ACME challenges) and `https://api.upto.world` (port 443, the hostname Vercel proxies through). Both are configured in [`nginx-config`](../../nginx-config) in the repo — **anything edited live on the box is overwritten on the next deploy**.
+
+- Cert: Let's Encrypt for `api.upto.world` at `/etc/letsencrypt/live/api.upto.world/`. Auto-renewed by certbot (webroot mode, uses `/var/www/html/.well-known/acme-challenge/`).
+- The port-80 block includes `location ^~ /.well-known/acme-challenge/` so renewals don't break.
+- The port-443 block uses `listen 443 ssl http2;` (old-style — `http2 on;` standalone needs nginx 1.25+).
+
+Verify the full pipeline (not just the IP):
+```bash
+curl -sL https://upto.world/api/health   # Vercel→Linode HTTPS
+curl -sk https://api.upto.world/api/health
+```
+
+See [journal/2026-05-27-https-on-linode.md](../journal/2026-05-27-https-on-linode.md) for the incident that taught us this.
+
 ## Not yet set up
 
-- HTTPS/TLS on the Linode box (backend is HTTP-only; the proxy passes through HTTPS from Vercel)
 - CI (no automated tests; `/build-check` skill is the manual substitute)
 - Rate-limiting on capability-guarded TripLink endpoints — see [plans/persistence-and-auth.md](../plans/persistence-and-auth.md) Phase 1 tail

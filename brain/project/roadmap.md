@@ -82,9 +82,9 @@ Snapshot of what's **shipped**, **in-progress**, and **planned** across the Upto
 - [ ] **Squad social vision (low priority — long-horizon)** — full "Anti-Strava" spec captured: network-effect positioning, squad feed, post-mission recap, quiet streaks, live GPS, PWA. Not the next phase; revisit after persistence Phase 3 (email transport). See [features/squad-social-vision.md](../features/squad-social-vision.md)
 
 ### Safety system (delivery layer)
-- [ ] **Email transport** — choose Resend vs SES, write `backend/transports/email.js`, hook into the existing overdue checker so emergency contacts actually hear about `overdue` events
+- [x] **SMS transport via Twilio** — `notifications.js` adapter (stub-when-no-creds), `notifyTripStart` on `/start`, `notifyTripOverdue` on the 60s overdue transition. Wizard warns on phone-less included contacts. See [features/notification-transport.md](../features/notification-transport.md). **Follow-up**: user creates Twilio account + sets `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_PHONE_NUMBER` in their shell or `.env` and redeploys to take it live.
+- [ ] **Email fallback for phone-less contacts** — user chose SMS-only for now. Revisit if missing-phone contacts become a real adoption blocker.
 - [ ] **Check-in reminder schedule** — cron to nudge the traveller before `expected_return_time` (separate from overdue)
-- [ ] **SMS transport (Twilio)** — deferred until email is proven in prod
 - [ ] **Public shared adventure view — E2E verify** — `GET /api/triplinks/:shareToken` works; [PublicAdventureView.tsx](../../src/pages/PublicAdventureView.tsx) not confirmed end-to-end
 - [ ] **SAR-friendly overdue summary** — eventually surface a printable/shareable escalation packet
 

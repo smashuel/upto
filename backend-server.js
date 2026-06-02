@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import pg from 'pg';
 import crypto from 'crypto';
+import { notifyTripStart, notifyTripOverdue } from './notifications.js';
 
 const { Pool } = pg;
 
@@ -124,7 +125,7 @@ const OVERDUE_GRACE_MS = 15 * 60 * 1000; // 15 minutes
 setInterval(async () => {
   try {
     const { rows } = await db.query(`
-      SELECT id, share_token, expected_return_time
+      SELECT id, share_token, expected_return_time, data, last_check_in
       FROM   triplinks
       WHERE  status = 'active'
         AND  expected_return_time IS NOT NULL
@@ -140,6 +141,15 @@ setInterval(async () => {
         );
         broadcast(row.share_token, 'overdue', { overdueSince });
         console.log(`TripLink ${row.id} marked overdue`);
+        // Fire-and-forget SMS to the user's emergency circle. Failures log; they
+        // don't block the overdue transition or other trips in the same sweep.
+        notifyTripOverdue({
+          ...row.data,
+          id:                 row.id,
+          shareToken:         row.share_token,
+          expectedReturnTime: row.expected_return_time,
+          lastCheckIn:        row.last_check_in,
+        }).catch(err => console.error('notifyTripOverdue threw:', err.message));
       }
     }
   } catch (err) {
@@ -775,12 +785,22 @@ app.patch('/api/triplinks/:token/start', async (req, res) => {
       `UPDATE triplinks
        SET status = 'active', started_at = NOW()
        WHERE share_token = $1
-       RETURNING id`,
+       RETURNING id, data, expected_return_time`,
       [token]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'TripLink not found' });
     broadcast(token, 'status', { status: 'active', startedAt: new Date().toISOString() });
     res.json({ ok: true });
+
+    // Fire-and-forget SMS to every embedded contact with a phone number.
+    // Runs after the response so a slow Twilio call doesn't delay the user's "Start" tap.
+    const row = rows[0];
+    notifyTripStart({
+      ...row.data,
+      id:                 row.id,
+      shareToken:         token,
+      expectedReturnTime: row.expected_return_time,
+    }).catch(err => console.error('notifyTripStart threw:', err.message));
   } catch (err) {
     console.error('Start trip error:', err.message);
     res.status(500).json({ error: 'Failed to start trip' });

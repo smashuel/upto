@@ -137,6 +137,7 @@ fi
 print_status "Creating deployment bundle..."
 TEMP_DIR=$(mktemp -d)
 cp backend-server.js "$TEMP_DIR/"
+cp notifications.js "$TEMP_DIR/"
 cp backend-package.json "$TEMP_DIR/package.json"
 cp doc-sync.js "$TEMP_DIR/"
 cp nginx-config "$TEMP_DIR/"
@@ -160,7 +161,10 @@ module.exports = {
       GOOGLE_CLIENT_ID:     process.env.GOOGLE_CLIENT_ID || '',
       GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
       BACKEND_URL:          process.env.BACKEND_URL || '',
-      LINZ_LDS_API_KEY:     process.env.LINZ_LDS_API_KEY || ''
+      LINZ_LDS_API_KEY:     process.env.LINZ_LDS_API_KEY || '',
+      TWILIO_ACCOUNT_SID:   process.env.TWILIO_ACCOUNT_SID || '',
+      TWILIO_AUTH_TOKEN:    process.env.TWILIO_AUTH_TOKEN || '',
+      TWILIO_PHONE_NUMBER:  process.env.TWILIO_PHONE_NUMBER || ''
     },
     error_file: '/var/log/pm2/upto-backend-error.log',
     out_file: '/var/log/pm2/upto-backend-out.log',
@@ -180,6 +184,12 @@ EOF
     echo "BACKEND_URL=${BACKEND_URL@Q}"
     echo "DOC_API_KEY=${DOC_API_KEY@Q}"
     echo "LINZ_LDS_API_KEY=${LINZ_LDS_API_KEY@Q}"
+    # Twilio creds are optional — if absent, notifications.js runs in stub mode
+    # (logs would-have-sent messages instead of calling Twilio). Wire creds in
+    # later without redeploying any code.
+    [ -n "${TWILIO_ACCOUNT_SID-}"   ] && echo "TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID@Q}"
+    [ -n "${TWILIO_AUTH_TOKEN-}"    ] && echo "TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN@Q}"
+    [ -n "${TWILIO_PHONE_NUMBER-}"  ] && echo "TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER@Q}"
 } > "$TEMP_DIR/.env"
 chmod 600 "$TEMP_DIR/.env"
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useFormContext } from 'react-hook-form';
-import { Plus, Trash2, Star, LogIn, Shield, ExternalLink } from 'lucide-react';
+import { Plus, Trash2, Star, LogIn, Shield, ExternalLink, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { TripLinkFormData } from '../../pages/CreateAdventure';
 import { useAuth } from '../../hooks/useAuth';
@@ -26,6 +26,7 @@ function buildEmbeddedContact(sc: SavedContact, isPrimary: boolean) {
     phone: sc.phone || '',
     email: sc.email || '',
     isPrimary,
+    isEmergency: sc.is_emergency,   // snapshot at save time — drives overdue SMS targeting
     savedContactId: sc.id,
   };
 }
@@ -226,6 +227,12 @@ export const TripLinkContactsStep: React.FC = () => {
                     <div style={{ fontFamily: 'var(--font-ui)', fontSize: '0.8125rem', color: 'var(--upto-text-muted)' }}>
                       {[sc.phone, sc.email].filter(Boolean).join(' · ')}
                     </div>
+                    {included && !sc.phone && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, fontFamily: 'var(--font-ui)', fontSize: '0.75rem', color: EMERGENCY_RED }}>
+                        <AlertTriangle size={11} style={{ flexShrink: 0 }} />
+                        <span>Won't be notified — add a phone number</span>
+                      </div>
+                    )}
                   </div>
                   {included && !isPrimary && (
                     <button
@@ -321,6 +328,12 @@ export const TripLinkContactsStep: React.FC = () => {
                   <div style={{ fontFamily: 'var(--font-ui)', fontSize: '0.8125rem', color: 'var(--upto-text-muted)' }}>
                     {[contact.phone, contact.email].filter(Boolean).join(' · ')}
                   </div>
+                  {!contact.phone && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, fontFamily: 'var(--font-ui)', fontSize: '0.75rem', color: EMERGENCY_RED }}>
+                      <AlertTriangle size={11} style={{ flexShrink: 0 }} />
+                      <span>Won't be notified — add a phone number</span>
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   {!contact.isPrimary && (

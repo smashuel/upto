@@ -164,7 +164,9 @@ module.exports = {
       LINZ_LDS_API_KEY:     process.env.LINZ_LDS_API_KEY || '',
       TWILIO_ACCOUNT_SID:   process.env.TWILIO_ACCOUNT_SID || '',
       TWILIO_AUTH_TOKEN:    process.env.TWILIO_AUTH_TOKEN || '',
-      TWILIO_PHONE_NUMBER:  process.env.TWILIO_PHONE_NUMBER || ''
+      TWILIO_PHONE_NUMBER:  process.env.TWILIO_PHONE_NUMBER || '',
+      RESEND_API_KEY:       process.env.RESEND_API_KEY || '',
+      RESEND_FROM:          process.env.RESEND_FROM || ''
     },
     error_file: '/var/log/pm2/upto-backend-error.log',
     out_file: '/var/log/pm2/upto-backend-out.log',
@@ -184,12 +186,14 @@ EOF
     echo "BACKEND_URL=${BACKEND_URL@Q}"
     echo "DOC_API_KEY=${DOC_API_KEY@Q}"
     echo "LINZ_LDS_API_KEY=${LINZ_LDS_API_KEY@Q}"
-    # Twilio creds are optional — if absent, notifications.js runs in stub mode
-    # (logs would-have-sent messages instead of calling Twilio). Wire creds in
-    # later without redeploying any code.
+    # Notification provider creds are optional — if absent, notifications.js runs
+    # in stub mode (logs would-have-sent messages instead of calling the API).
+    # Wire creds in later without redeploying any code.
     [ -n "${TWILIO_ACCOUNT_SID-}"   ] && echo "TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID@Q}"
     [ -n "${TWILIO_AUTH_TOKEN-}"    ] && echo "TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN@Q}"
     [ -n "${TWILIO_PHONE_NUMBER-}"  ] && echo "TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER@Q}"
+    [ -n "${RESEND_API_KEY-}"       ] && echo "RESEND_API_KEY=${RESEND_API_KEY@Q}"
+    [ -n "${RESEND_FROM-}"          ] && echo "RESEND_FROM=${RESEND_FROM@Q}"
 } > "$TEMP_DIR/.env"
 chmod 600 "$TEMP_DIR/.env"
 

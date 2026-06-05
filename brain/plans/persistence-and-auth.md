@@ -85,28 +85,34 @@ Implements [features/emergency-contacts-account-level.md](../features/emergency-
 
 **Gate:** a user can edit their emergency circle once on Profile; a new trip picks them up automatically without re-typing.
 
-## Phase 3 — SMS transport + overdue delivery — SHIPPED 2026-05-27
+## Phase 3 — Notification transport — SHIPPED 2026-05-27
 
-Turns `overdue` from a DB state into an outbound message. User chose SMS-only over email; transport is **Twilio**, stub-mode-pending-creds. See [features/notification-transport.md](../features/notification-transport.md) for the full shipped surface and [status.md](../project/status.md) for the going-live checklist.
+Turns `overdue` from a DB state into an outbound message. Two passes:
+
+- **v1**: Twilio-only scaffold, stub-when-no-creds.
+- **v2**: Added Resend (email) as the primary channel because the user prefers email-first while solo-dev (Twilio has per-message cost; Resend is free at this scale). Twilio path remains; flipping it on later is set-three-env-vars + redeploy.
+
+See [features/notification-transport.md](../features/notification-transport.md) for the full shipped surface, channel-priority table, and going-live checklists for both providers.
 
 Built:
 
-- [notifications.js](../../notifications.js) — `sendSms(to, body)` calls Twilio REST via native `fetch`; stubs to console when `TWILIO_*` env vars are unset
-- `notifyTripStart(tripLink)` — fires on `PATCH /api/triplinks/:token/start`. Messages every embedded contact with a phone, regardless of `isEmergency`
-- `notifyTripOverdue(tripLink)` — fires from the 60s overdue checker on status transition. Messages only contacts where `isEmergency === true` AND phone is present
-- `isEmergency` snapshot added to the embedded contact shape ([src/types/adventure.ts](../../src/types/adventure.ts) `Contact` type, [AdventureContactsStep.tsx](../../src/components/forms/AdventureContactsStep.tsx) `buildEmbeddedContact`)
-- Wizard warns inline on included contacts missing a phone number
-- `deploy.sh` bundles `notifications.js` and conditionally pass-throughs `TWILIO_*` env vars
+- [notifications.js](../../notifications.js) — `sendSms` (Twilio) + `sendEmail` (Resend) + `dispatchToContact` channel-picker + `notifyTripStart` + `notifyTripOverdue`. Each adapter stubs to console when its creds are absent.
+- Hooked into `PATCH /api/triplinks/:token/start` (all included contacts) and the 60s overdue checker on status transition (emergency-circle subset only).
+- `isEmergency` snapshot added to the embedded contact shape so the overdue dispatcher knows who to filter by.
+- Wizard warns inline when a contact has neither phone nor email — i.e. wouldn't be reached by any channel.
+- `deploy.sh` bundles `notifications.js` and conditionally pass-throughs `RESEND_API_KEY`, `RESEND_FROM`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`.
 
-Smoke test on prod: `PATCH /start` against a planned TripLink — dispatcher fired, log line `[notify] start: no contacts with phones for trip ...` confirmed wiring, status rolled back via SQL.
+Smoke test: `PATCH /start` against a planned TripLink twice (once per pass) — dispatcher fired, log lines confirmed wiring, status rolled back via SQL each time.
+
+**Investigated and rejected**: Gmail "send-as-user" via OAuth `gmail.send` scope. Google classifies it as a restricted scope requiring a full app-verification + CASA audit before production use — weeks of process for marginal trust benefit. Resend with a verified `upto.world` domain gets us ~90% of the deliverability win for ~20 min of DNS setup.
 
 **Out of scope (deliberate)**:
-- Email fallback for phone-less contacts (user accepted this trade-off)
+- UI confirmation on Start (fire-and-forget; small follow-up: `/start` returns `{ notified, skipped }` → frontend toasts)
 - Trip completion notification (user said no — avoid fatigue)
-- Idempotency log table (the `WHERE status = 'active'` filter on the overdue checker makes transitions one-shot)
+- Idempotency log table (`WHERE status = 'active'` on the overdue checker makes transitions one-shot)
 - Phone E.164 normalization (Twilio errors on invalid; we log and move on)
 
-**Going-live:** user creates Twilio account, exports the three env vars, redeploys. No code change needed.
+**Going-live (email-first)**: verify `upto.world` in Resend → set `RESEND_API_KEY` → redeploy. Then `[email STUB]` logs flip to real sends. Twilio creds can be added later anytime to add SMS for phone-bearing contacts.
 
 ## Phase 4 — Tie-up + verification
 

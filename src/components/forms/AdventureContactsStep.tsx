@@ -227,10 +227,10 @@ export const TripLinkContactsStep: React.FC = () => {
                     <div style={{ fontFamily: 'var(--font-ui)', fontSize: '0.8125rem', color: 'var(--upto-text-muted)' }}>
                       {[sc.phone, sc.email].filter(Boolean).join(' · ')}
                     </div>
-                    {included && !sc.phone && (
+                    {included && !sc.phone && !sc.email && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, fontFamily: 'var(--font-ui)', fontSize: '0.75rem', color: EMERGENCY_RED }}>
                         <AlertTriangle size={11} style={{ flexShrink: 0 }} />
-                        <span>Won't be notified — add a phone number</span>
+                        <span>Won't be notified — add a phone or email</span>
                       </div>
                     )}
                   </div>
@@ -328,10 +328,10 @@ export const TripLinkContactsStep: React.FC = () => {
                   <div style={{ fontFamily: 'var(--font-ui)', fontSize: '0.8125rem', color: 'var(--upto-text-muted)' }}>
                     {[contact.phone, contact.email].filter(Boolean).join(' · ')}
                   </div>
-                  {!contact.phone && (
+                  {!contact.phone && !contact.email && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, fontFamily: 'var(--font-ui)', fontSize: '0.75rem', color: EMERGENCY_RED }}>
                       <AlertTriangle size={11} style={{ flexShrink: 0 }} />
-                      <span>Won't be notified — add a phone number</span>
+                      <span>Won't be notified — add a phone or email</span>
                     </div>
                   )}
                 </div>

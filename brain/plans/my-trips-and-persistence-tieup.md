@@ -122,3 +122,13 @@ Downstream, "My Trips" is also where the teased **Strava sync** eventually lands
 - **Phase 5** — confirmed already covered: useAuth's on-mount `getMe` failure path calls `clearSession()` + nulls state (stale token on app load); MyTrips calls `logout()` + redirects to `/login` on an in-session `401` (detected via `ApiError.status`). No new global interceptor needed.
 
 **Deferred / next**: capability-endpoint hardening (rate-limit `/start`/`/checkin`/`/complete`, idempotent transitions) — the remaining open security item, intentionally kept out of this plan. Strava sync attaches to `/trips` later.
+
+## Future enhancement — per-trip row actions (not yet built)
+
+Each saved trip on `/trips` (and the Profile preview) should grow inline actions. Down the road, not now:
+
+- **Share** — re-surface the watcher share link / recipient picker for an existing trip (today you can only share at create time). Lets a user add a watcher after the fact or resend the link.
+- **Delete** — soft-delete a trip (needs a `deleted_at` column + a `DELETE /api/triplinks/:id` owner-guarded endpoint; the list query filters out soft-deleted rows). Confirm-modal before destroying.
+- **Add to Strava** — push a completed trip's route/summary to the user's Strava account. Depends on the larger Strava OAuth integration; this button is the entry point. Only meaningful for `completed` trips with route geometry.
+
+UI shape: a small overflow/kebab menu on each `TripRow`, or a row of icon buttons revealed on the trip's own detail view. Keep it out of the way — the list's job is scanning status at a glance, not managing each trip. Likely pairs with building a proper read-only **trip detail page** for completed trips (currently completed trips reuse the ActiveTrip completed layout).

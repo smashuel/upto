@@ -161,6 +161,7 @@ module.exports = {
       GOOGLE_CLIENT_ID:     process.env.GOOGLE_CLIENT_ID || '',
       GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
       BACKEND_URL:          process.env.BACKEND_URL || '',
+      FRONTEND_URL:         process.env.FRONTEND_URL || '',
       LINZ_LDS_API_KEY:     process.env.LINZ_LDS_API_KEY || '',
       TWILIO_ACCOUNT_SID:   process.env.TWILIO_ACCOUNT_SID || '',
       TWILIO_AUTH_TOKEN:    process.env.TWILIO_AUTH_TOKEN || '',
@@ -184,6 +185,7 @@ EOF
     echo "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID@Q}"
     echo "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET@Q}"
     echo "BACKEND_URL=${BACKEND_URL@Q}"
+    [ -n "${FRONTEND_URL-}"         ] && echo "FRONTEND_URL=${FRONTEND_URL@Q}"
     echo "DOC_API_KEY=${DOC_API_KEY@Q}"
     echo "LINZ_LDS_API_KEY=${LINZ_LDS_API_KEY@Q}"
     # Notification provider creds are optional — if absent, notifications.js runs

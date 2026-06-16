@@ -125,10 +125,12 @@ const OVERDUE_GRACE_MS = 15 * 60 * 1000; // 15 minutes
 setInterval(async () => {
   try {
     const { rows } = await db.query(`
-      SELECT id, share_token, expected_return_time, data, last_check_in
-      FROM   triplinks
-      WHERE  status = 'active'
-        AND  expected_return_time IS NOT NULL
+      SELECT t.id, t.share_token, t.expected_return_time, t.data, t.last_check_in,
+             u.name AS creator_name
+      FROM   triplinks t
+      LEFT JOIN users u ON u.id = t.user_id
+      WHERE  t.status = 'active'
+        AND  t.expected_return_time IS NOT NULL
     `);
     const now = Date.now();
     for (const row of rows) {
@@ -149,6 +151,7 @@ setInterval(async () => {
           shareToken:         row.share_token,
           expectedReturnTime: row.expected_return_time,
           lastCheckIn:        row.last_check_in,
+          creatorName:        row.creator_name,
         }).catch(err => console.error('notifyTripOverdue threw:', err.message));
       }
     }
@@ -788,17 +791,23 @@ app.patch('/api/triplinks/:token/start', async (req, res) => {
     const incomingContacts = Array.isArray(req.body?.emergencyContacts) ? req.body.emergencyContacts : null;
 
     // Conditional update: replace emergencyContacts inside the JSONB only when provided.
-    const updateSql = incomingContacts
+    // Wrapped in a CTE so we can join `users` for the creator's name (used to
+    // personalise the watcher notification) in a single round-trip.
+    const updateCte = incomingContacts
       ? `UPDATE triplinks
          SET status = 'active',
              started_at = NOW(),
              data = jsonb_set(data, '{emergencyContacts}', $2::jsonb)
          WHERE share_token = $1
-         RETURNING id, data, expected_return_time`
+         RETURNING id, data, expected_return_time, user_id`
       : `UPDATE triplinks
          SET status = 'active', started_at = NOW()
          WHERE share_token = $1
-         RETURNING id, data, expected_return_time`;
+         RETURNING id, data, expected_return_time, user_id`;
+    const updateSql = `WITH updated AS (${updateCte})
+      SELECT updated.id, updated.data, updated.expected_return_time, u.name AS creator_name
+      FROM updated
+      LEFT JOIN users u ON u.id = updated.user_id`;
     const params = incomingContacts
       ? [token, JSON.stringify(incomingContacts)]
       : [token];
@@ -818,6 +827,7 @@ app.patch('/api/triplinks/:token/start', async (req, res) => {
         id:                 row.id,
         shareToken:         token,
         expectedReturnTime: row.expected_return_time,
+        creatorName:        row.creator_name,
       });
     } catch (err) {
       console.error('notifyTripStart threw:', err.message);

@@ -37,8 +37,8 @@ Single file at the repo root, deployed to Linode alongside `backend-server.js`. 
 
 ### Triggers — [backend-server.js](../../backend-server.js)
 
-- `PATCH /api/triplinks/:token/start` accepts **optional `emergencyContacts: Contact[]`** in the request body. When present, the embedded snapshot in `data.emergencyContacts` is replaced via `jsonb_set(data, '{emergencyContacts}', $2::jsonb)` before the status transition. Then `notifyTripStart` runs **synchronously** so the response can carry a `{ notified, skipped }` summary back to the UI. Adds ~100–500ms latency vs. fire-and-forget; acceptable for a deliberate "I'm heading out" tap.
-- The 60-second overdue checker → after `UPDATE ... SET status = 'overdue'` succeeds and the SSE broadcast goes, fire `notifyTripOverdue` fire-and-forget (errors log).
+- `PATCH /api/triplinks/:token/start` accepts **optional `emergencyContacts: Contact[]`** in the request body. When present, the embedded snapshot in `data.emergencyContacts` is replaced via `jsonb_set(data, '{emergencyContacts}', $2::jsonb)` before the status transition. The UPDATE is wrapped in a **CTE that joins `users`** to pull `creator_name` in one round-trip (passed to the dispatcher as `creatorName` for email personalisation). Then `notifyTripStart` runs **synchronously** so the response can carry a `{ notified, skipped }` summary back to the UI. Adds ~100–500ms latency vs. fire-and-forget; acceptable for a deliberate "I'm heading out" tap.
+- The 60-second overdue checker → its `SELECT` now **LEFT JOINs `users`** for `creator_name`. After `UPDATE ... SET status = 'overdue'` succeeds and the SSE broadcast goes, fire `notifyTripOverdue` fire-and-forget (errors log).
 
 `notifyTripStart` returns `{ notified: [{name, channel, stubbed?}], skipped: [{name, reason}] }`. The frontend toasts off this shape:
 - `Notified 2 watchers (1 SMS, 1 email)` — success
@@ -118,20 +118,41 @@ Hit `PATCH /api/triplinks/<token>/start` against a planned TripLink. Backend log
 ```
 Confirms the dispatcher ran end-to-end. Status was rolled back via SQL afterwards to leave the test TripLink untouched.
 
-## Message format
+## Message format (rewritten 2026-06-16 — channel-specific bodies)
 
-Start (single segment, ~140 chars):
+Content is now **per-channel**: SMS stays a single terse segment; email gets a full branded HTML briefing. `dispatchToContact(contact, content)` takes `{ sms, email: { subject, text, html } }` and picks the field for the chosen channel. `sendEmail(to, subject, text, html)` sends both `text` (plain fallback) and `html` to Resend.
+
+**Personalisation**: both dispatchers receive `creatorName` (the trip owner's `users.name`, joined in at the SQL layer — see Triggers). `firstNameOf()` derives the first name; falls back to "Your contact" / "Someone you know" when absent.
+
+**Email is built from small inline-styled helpers** in [notifications.js](../../notifications.js): `emailShell()` (branded wrapper, Upto wordmark + footer), `emailButton()` (green CTA), `tripCard()` (title + meta rows), `paragraph()`, `sectionHeading()`. All inline styles — no external CSS/images, so it renders in every mail client. `escapeHtml()` guards every interpolated value (trip titles, names) against HTML injection.
+
+### Start email
+- Subject: `<creator> is heading out — <title>`
+- Heading: "<creator> is heading out"
+- Explains the recipient was added as a safety contact, shows trip card (expected back), CTA "View <first>'s trip plan"
+- **"What you need to do"** — nothing right now; Upto is a safety tool not a chat app
+- **"If something seems wrong"** — overdue auto-email; if worried, call 111 (NZ) / 000 (AU) and share the link
+
+### Start SMS (terse)
 ```
-Upto: <title> just started. Track them: <url>. Expected back ~<HH:MM>.
-You'll only hear from us again if something's wrong.
+<first> started "<title>" on Upto & added you as a safety contact. Back ~<HH:MM>. Live plan: <url>
 ```
 
-Overdue:
+### Overdue email
+- Subject: `⚠️ <creator> is overdue — <title>`
+- Red "Overdue" pill, heading "<creator> hasn't returned"
+- Trip card (was due back, last check-in), CTA
+- **"What to do now"** — numbered: (1) call/text them, (2) check route+exit points in the plan, (3) can't reach + worried → call 111/000 and share link
+- Closing nudge: "Don't wait if you're genuinely concerned"
+
+### Overdue SMS (terse)
 ```
-⚠️ Upto: <title> is OVERDUE. Expected back <HH:MM>. Last check-in: <HH:MM or 'no check-in'>. Details: <url>
+⚠️ Upto: <first> is OVERDUE — due ~<HH:MM>, last check-in <…>. Try to reach them. If worried, call 111 & share: <url>
 ```
 
 Times formatted in `Pacific/Auckland` (NZ default). Worth revisiting if we ever ship to AU/EU.
+
+**Share-URL hardening**: `shareUrl()` now reads `FRONTEND_URL` (default `https://upto.world`), decoupled from `BACKEND_URL` (the OAuth callback origin, which may legitimately be the API host). Prevents links breaking if `BACKEND_URL` is ever pointed at the API.
 
 ## Explicitly NOT done in this phase
 

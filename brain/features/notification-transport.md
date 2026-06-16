@@ -37,10 +37,13 @@ Single file at the repo root, deployed to Linode alongside `backend-server.js`. 
 
 ### Triggers — [backend-server.js](../../backend-server.js)
 
-- `PATCH /api/triplinks/:token/start` → after broadcasting the status change to SSE, fire `notifyTripStart` asynchronously (fire-and-forget; doesn't delay the response, errors log)
-- The 60-second overdue checker → after the `UPDATE ... SET status = 'overdue'` succeeds and the SSE broadcast goes, fire `notifyTripOverdue` on that row only
+- `PATCH /api/triplinks/:token/start` accepts **optional `emergencyContacts: Contact[]`** in the request body. When present, the embedded snapshot in `data.emergencyContacts` is replaced via `jsonb_set(data, '{emergencyContacts}', $2::jsonb)` before the status transition. Then `notifyTripStart` runs **synchronously** so the response can carry a `{ notified, skipped }` summary back to the UI. Adds ~100–500ms latency vs. fire-and-forget; acceptable for a deliberate "I'm heading out" tap.
+- The 60-second overdue checker → after `UPDATE ... SET status = 'overdue'` succeeds and the SSE broadcast goes, fire `notifyTripOverdue` fire-and-forget (errors log).
 
-Both use `.catch(err => console.error(...))` so a Twilio outage never blocks state transitions or other trips in the same sweep.
+`notifyTripStart` returns `{ notified: [{name, channel, stubbed?}], skipped: [{name, reason}] }`. The frontend toasts off this shape:
+- `Notified 2 watchers (1 SMS, 1 email)` — success
+- `Notified 2 watchers (1 email) — stub mode` — Resend/Twilio not configured
+- `Couldn't notify 1: <names>` — failures shown as a second error toast
 
 ### `isEmergency` snapshot on embedded contacts
 
@@ -48,10 +51,30 @@ Adds `isEmergency?: boolean` to the `Contact` type in [src/types/adventure.ts](.
 
 Snapshot model preserves the audit trail — a later toggle on Profile doesn't retroactively change which historical trips would have alerted whom.
 
-### Wizard UX
+### Wizard UX (redesigned 2026-06-05 after `/critique`)
 
-- Inline warning under any included contact missing **both** phone and email: `⚠ Won't be notified — add a phone or email` (in danger-red). Shown on the emergency-circle list and the ad-hoc list.
-- No banner-level summary — the per-row warnings are enough.
+The wizard's Emergency Contacts ExpandSection has been **removed**. The post-submit success screen now hosts a `RecipientPicker` ([src/components/forms/RecipientPicker.tsx](../../src/components/forms/RecipientPicker.tsx)) showing:
+
+- **Emergency Circle** group (pre-checked from `is_emergency`)
+- **Favourites** group (sorted second)
+- **Other contacts** group
+- Per-trip ad-hoc contacts ("for this trip only")
+- Add-a-one-off-contact form
+- Channel hints per row (📱 SMS / ✉ Email)
+- Phone+email = both shown; missing channel = row disabled with `⚠ No phone or email — can't be notified`
+
+Start button text becomes dynamic:
+- 0 picked: `I'm heading out — Start with no watchers` (muted color) + sub-line: "No one will be told if you don't check in."
+- N picked: `I'm heading out — Notify N watcher(s)`
+
+Tapping Start with 0 picked surfaces a **confirm modal** (`AlertTriangle`, "Start with no watchers? No one will be notified..."). Picking "Pick contacts instead" dismisses; "Start anyway" calls `performStartTrip()` directly.
+
+This redesign closed four critical issues identified in [journal/2026-06-05-critique-and-redesign.md](../journal/) (notification flow critique):
+
+1. Silent zero-watcher TripLinks (the contacts step was lazy-mounted; users skipped it)
+2. Invisible dispatch on Start (no toast, no confirmation)
+3. Two share paradigms (manual `sms:`/`mailto:` buttons + auto-dispatch coexisted)
+4. ActiveTrip showed no proof anyone was notified
 
 ### Env handling
 

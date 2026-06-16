@@ -777,30 +777,52 @@ app.get('/api/triplinks/:token', async (req, res) => {
   }
 });
 
-// PATCH /api/triplinks/:token/start — creator starts the trip
+// PATCH /api/triplinks/:token/start — creator starts the trip.
+// Optionally accepts `emergencyContacts: Contact[]` in the body — when present,
+// the embedded contact snapshot in `data.emergencyContacts` is REPLACED before
+// notifyTripStart runs. This is how the post-create Recipient Picker hands
+// over the final selection: contacts come in via the body, not the wizard.
 app.patch('/api/triplinks/:token/start', async (req, res) => {
   try {
     const { token } = req.params;
-    const { rows } = await db.query(
-      `UPDATE triplinks
-       SET status = 'active', started_at = NOW()
-       WHERE share_token = $1
-       RETURNING id, data, expected_return_time`,
-      [token]
-    );
-    if (rows.length === 0) return res.status(404).json({ error: 'TripLink not found' });
-    broadcast(token, 'status', { status: 'active', startedAt: new Date().toISOString() });
-    res.json({ ok: true });
+    const incomingContacts = Array.isArray(req.body?.emergencyContacts) ? req.body.emergencyContacts : null;
 
-    // Fire-and-forget SMS to every embedded contact with a phone number.
-    // Runs after the response so a slow Twilio call doesn't delay the user's "Start" tap.
+    // Conditional update: replace emergencyContacts inside the JSONB only when provided.
+    const updateSql = incomingContacts
+      ? `UPDATE triplinks
+         SET status = 'active',
+             started_at = NOW(),
+             data = jsonb_set(data, '{emergencyContacts}', $2::jsonb)
+         WHERE share_token = $1
+         RETURNING id, data, expected_return_time`
+      : `UPDATE triplinks
+         SET status = 'active', started_at = NOW()
+         WHERE share_token = $1
+         RETURNING id, data, expected_return_time`;
+    const params = incomingContacts
+      ? [token, JSON.stringify(incomingContacts)]
+      : [token];
+
+    const { rows } = await db.query(updateSql, params);
+    if (rows.length === 0) return res.status(404).json({ error: 'TripLink not found' });
+
+    broadcast(token, 'status', { status: 'active', startedAt: new Date().toISOString() });
+
+    // Synchronously dispatch so we can return delivery summary to the caller.
+    // ~100–500ms with Resend; acceptable for "I'm heading out" tap latency.
     const row = rows[0];
-    notifyTripStart({
-      ...row.data,
-      id:                 row.id,
-      shareToken:         token,
-      expectedReturnTime: row.expected_return_time,
-    }).catch(err => console.error('notifyTripStart threw:', err.message));
+    let summary = { notified: [], skipped: [] };
+    try {
+      summary = await notifyTripStart({
+        ...row.data,
+        id:                 row.id,
+        shareToken:         token,
+        expectedReturnTime: row.expected_return_time,
+      });
+    } catch (err) {
+      console.error('notifyTripStart threw:', err.message);
+    }
+    res.json({ ok: true, ...summary });
   } catch (err) {
     console.error('Start trip error:', err.message);
     res.status(500).json({ error: 'Failed to start trip' });

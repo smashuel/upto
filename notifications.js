@@ -163,7 +163,7 @@ export async function notifyTripStart(tripLink) {
   const contacts = tripLink?.emergencyContacts || [];
   if (contacts.length === 0) {
     console.log(`[notify] start: no contacts on trip ${tripLink?.id || '?'}`);
-    return;
+    return { notified: [], skipped: [] };
   }
   const url = shareUrl(tripLink.shareToken);
   const back = formatTime(tripLink.expectedReturnTime);
@@ -175,6 +175,13 @@ export async function notifyTripStart(tripLink) {
   const results = await Promise.all(contacts.map(c => dispatchToContact(c, content)));
   const t = summarise(results);
   console.log(`[notify] start trip=${tripLink.id} → sms=${t.sms} email=${t.email} stubbed=${t.stubbed} failed=${t.failed} skipped=${t.skipped}`);
+  const notified = results
+    .filter(r => r.channel !== 'none' && r.result?.ok)
+    .map(r => ({ name: r.contact.name, channel: r.channel, stubbed: !!r.result.stubbed }));
+  const skipped = results
+    .filter(r => r.channel === 'none' || !r.result?.ok)
+    .map(r => ({ name: r.contact.name, reason: r.channel === 'none' ? 'no-channel' : (r.result?.reason || 'failed') }));
+  return { notified, skipped };
 }
 
 /**

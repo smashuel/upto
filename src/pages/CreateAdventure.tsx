@@ -3,13 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import {
   Mountain, Bike, Waves, Snowflake, MapPin,
   Activity, Footprints, ChevronDown, Route,
-  Users, Clock, ArrowRight, Check, Copy, ExternalLink, Play,
+  Clock, ArrowRight, Check, Copy, ExternalLink, Play, AlertTriangle, Shield,
   type LucideIcon
 } from 'lucide-react';
 import { useForm, FormProvider } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { TripLinkLocationStep } from '../components/forms/AdventureLocationStep';
-import { TripLinkContactsStep } from '../components/forms/AdventureContactsStep';
+import { RecipientPicker, type PickedContact } from '../components/forms/RecipientPicker';
 import { GuidePaceEstimator } from '../components/guidepace/GuidePaceEstimator';
 import { api } from '../config/api';
 import { useAuth } from '../hooks/useAuth';
@@ -132,8 +132,12 @@ export const CreateTripLink: React.FC = () => {
   const [tripLinkId, setTripLinkId] = useState<string | null>(null);
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [copiedFor, setCopiedFor] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  // Live selection from the post-create RecipientPicker. The user picks who gets
+  // SMS/email on Start; the array is replayed into the TripLink at /start time.
+  const [pickedContacts, setPickedContacts] = useState<PickedContact[]>([]);
+  // Confirm-on-zero modal — fires only if the user taps Start with no recipients selected.
+  const [confirmNoWatchers, setConfirmNoWatchers] = useState(false);
 
   const methods = useForm<TripLinkFormData>({
     mode: 'onBlur',
@@ -162,7 +166,6 @@ export const CreateTripLink: React.FC = () => {
 
   // Derive badge text for optional sections
   const hasLocation = !!(formData.location?.name || (formData.waypoints?.length ?? 0) > 0);
-  const hasContacts = (formData.emergencyContacts?.length ?? 0) > 0;
 
   const shareUrl = shareToken
     ? `${window.location.origin}/triplink/${shareToken}`
@@ -215,16 +218,48 @@ export const CreateTripLink: React.FC = () => {
     }
   };
 
-  const handleStartTrip = async () => {
+  // The actual fire — called either directly or after the no-watchers confirm modal.
+  const performStartTrip = async () => {
     if (!shareToken || !tripLinkId) return;
     setStarting(true);
     try {
-      await api.startTrip(shareToken);
+      const summary = await api.startTrip(shareToken, { emergencyContacts: pickedContacts });
+      // Surface what actually happened so the user knows their people were told.
+      if (summary.notified.length > 0) {
+        const sms   = summary.notified.filter(n => n.channel === 'sms').length;
+        const email = summary.notified.filter(n => n.channel === 'email').length;
+        const parts = [];
+        if (sms)   parts.push(`${sms} SMS`);
+        if (email) parts.push(`${email} email`);
+        const stubbed = summary.notified.some(n => n.stubbed);
+        toast.success(
+          `Notified ${summary.notified.length} watcher${summary.notified.length === 1 ? '' : 's'}` +
+          (parts.length ? ` (${parts.join(', ')})` : '') +
+          (stubbed ? ' — stub mode' : ''),
+          { duration: 5000 },
+        );
+      } else if (pickedContacts.length === 0) {
+        toast('Trip started — no watchers notified', { icon: '🏕️', duration: 4000 });
+      }
+      if (summary.skipped.length > 0) {
+        toast.error(
+          `Couldn't notify ${summary.skipped.length}: ${summary.skipped.map(s => s.name).join(', ')}`,
+          { duration: 6000 },
+        );
+      }
       navigate(`/my-trip/${tripLinkId}?token=${shareToken}`);
     } catch {
       toast.error('Could not start trip — try again');
       setStarting(false);
     }
+  };
+
+  const handleStartTrip = () => {
+    if (pickedContacts.length === 0) {
+      setConfirmNoWatchers(true);
+      return;
+    }
+    performStartTrip();
   };
 
   const handleCopy = async () => {
@@ -236,18 +271,6 @@ export const CreateTripLink: React.FC = () => {
       setTimeout(() => setCopied(false), 2500);
     } catch {
       toast.error('Could not copy — try manually');
-    }
-  };
-
-  const handleCopyFor = async (contactName: string) => {
-    if (!shareUrl) return;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopiedFor(contactName);
-      toast.success(`Link copied — send to ${contactName}`);
-      setTimeout(() => setCopiedFor(null), 2500);
-    } catch {
-      toast.error('Could not copy');
     }
   };
 
@@ -417,74 +440,94 @@ export const CreateTripLink: React.FC = () => {
                     Send this link to your emergency contacts before you head out.
                   </p>
 
-                  {/* ── Contact sender — show contacts to copy link for each ── */}
-                  {formData.emergencyContacts.length > 0 && (
-                    <div style={{ marginTop: 16 }}>
-                      <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--upto-text-secondary)', marginBottom: 8 }}>
-                        Send to your contacts
-                      </p>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 1, border: '1.5px solid var(--upto-border)', borderRadius: 8, overflow: 'hidden' }}>
-                        {formData.emergencyContacts.map(contact => (
-                          <div key={contact.id} style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            gap: 12, padding: '10px 14px', background: 'white',
-                            borderBottom: '1px solid var(--upto-border)',
-                          }}>
-                            <div>
-                              <span style={{ fontFamily: 'var(--font-ui)', fontWeight: 500, fontSize: '0.875rem', color: 'var(--upto-text)' }}>
-                                {contact.name}
-                              </span>
-                              {contact.relationship && (
-                                <span style={{ fontFamily: 'var(--font-ui)', fontSize: '0.775rem', color: 'var(--upto-text-muted)', marginLeft: 6 }}>
-                                  {contact.relationship}
-                                </span>
-                              )}
-                            </div>
-                            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                              {contact.phone && (
-                                <a
-                                  href={`sms:${contact.phone}?body=${encodeURIComponent(`My trip plan: ${shareUrl}`)}`}
-                                  className="active-trip-action-btn"
-                                  style={{ padding: '5px 10px', fontSize: '0.8125rem', textDecoration: 'none' }}
-                                >
-                                  Text
-                                </a>
-                              )}
-                              {contact.email && (
-                                <a
-                                  href={`mailto:${contact.email}?subject=${encodeURIComponent('My trip plan')}&body=${encodeURIComponent(`Hi ${contact.name},\n\nHere's my trip plan in case anything goes wrong:\n${shareUrl}\n\nI'll check in when I'm back safely.`)}`}
-                                  className="active-trip-action-btn"
-                                  style={{ padding: '5px 10px', fontSize: '0.8125rem', textDecoration: 'none' }}
-                                >
-                                  Email
-                                </a>
-                              )}
-                              <button
-                                type="button"
-                                className="active-trip-action-btn"
-                                onClick={() => handleCopyFor(contact.name)}
-                                style={{ padding: '5px 10px', fontSize: '0.8125rem', color: copiedFor === contact.name ? 'var(--upto-success)' : undefined }}
-                              >
-                                {copiedFor === contact.name ? <Check size={12} /> : <Copy size={12} />}
-                                {copiedFor === contact.name ? 'Copied' : 'Copy'}
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                  {/* ── Recipient Picker — pick who gets SMS/email on Start ── */}
+                  {sessionToken && (
+                    <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid var(--upto-border)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                        <Shield size={15} style={{ color: 'var(--upto-danger, oklch(60% 0.18 25))' }} />
+                        <h3 style={{ fontFamily: 'var(--font-ui)', fontSize: '0.95rem', fontWeight: 600, color: 'var(--upto-text)', margin: 0 }}>
+                          Who should we tell?
+                        </h3>
                       </div>
+                      <RecipientPicker sessionToken={sessionToken} onChange={setPickedContacts} />
                     </div>
                   )}
 
+                  {/* ── Start Trip ── */}
                   <button
                     type="button"
                     className="create-submit"
-                    style={{ marginTop: 16, width: '100%', justifyContent: 'center', background: 'var(--upto-success)' }}
+                    style={{
+                      marginTop: 20,
+                      width: '100%',
+                      justifyContent: 'center',
+                      background: pickedContacts.length > 0 ? 'var(--upto-success)' : 'var(--upto-text-muted)',
+                    }}
                     onClick={handleStartTrip}
                     disabled={starting}
                   >
                     <Play size={16} />
-                    {starting ? 'Starting…' : "I'm heading out — Start Trip"}
+                    {starting
+                      ? 'Starting…'
+                      : pickedContacts.length > 0
+                        ? `I'm heading out — Notify ${pickedContacts.length} watcher${pickedContacts.length === 1 ? '' : 's'}`
+                        : "I'm heading out — Start with no watchers"}
                   </button>
+                  {pickedContacts.length === 0 && (
+                    <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.78rem', color: 'var(--upto-text-muted)', textAlign: 'center', marginTop: 6 }}>
+                      No one will be told if you don't check in.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── Confirm-no-watchers modal ── */}
+            {confirmNoWatchers && (
+              <div
+                onClick={() => setConfirmNoWatchers(false)}
+                style={{
+                  position: 'fixed', inset: 0, background: 'oklch(20% 0 0 / 0.55)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, zIndex: 1000,
+                }}
+              >
+                <div
+                  onClick={e => e.stopPropagation()}
+                  style={{
+                    maxWidth: 420, width: '100%', background: 'white', borderRadius: 14,
+                    padding: 24, boxShadow: '0 12px 48px rgba(0,0,0,0.25)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                    <AlertTriangle size={22} style={{ color: 'var(--upto-danger, oklch(60% 0.18 25))', flexShrink: 0 }} />
+                    <h3 style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: '1.05rem', margin: 0, color: 'var(--upto-text)' }}>
+                      Start with no watchers?
+                    </h3>
+                  </div>
+                  <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.875rem', color: 'var(--upto-text-secondary)', lineHeight: 1.5, marginBottom: 18 }}>
+                    No one will be notified that you've started, and no one will be alerted if you don't check in.
+                    Are you sure?
+                  </p>
+                  <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                    <button
+                      type="button"
+                      className="active-trip-action-btn"
+                      onClick={() => setConfirmNoWatchers(false)}
+                    >
+                      Pick contacts instead
+                    </button>
+                    <button
+                      type="button"
+                      className="create-submit"
+                      style={{ background: 'var(--upto-danger, oklch(60% 0.18 25))', alignSelf: 'auto' }}
+                      onClick={() => {
+                        setConfirmNoWatchers(false);
+                        performStartTrip();
+                      }}
+                    >
+                      Start anyway
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -504,15 +547,6 @@ export const CreateTripLink: React.FC = () => {
                 badge={hasLocation ? 'Added' : undefined}
               >
                 <TripLinkLocationStep />
-              </ExpandSection>
-
-              <ExpandSection
-                icon={Users}
-                label="Emergency Contacts"
-                hint="Who should we call if you don't check in?"
-                badge={hasContacts ? `${formData.emergencyContacts.length} added` : undefined}
-              >
-                <TripLinkContactsStep />
               </ExpandSection>
 
               <ExpandSection

@@ -183,11 +183,22 @@ export const api = {
     return response.json();
   },
 
-  async startTrip(shareToken: string): Promise<void> {
+  /**
+   * Start a trip. Optionally hand over the final selected contacts at the same time —
+   * backend replaces the embedded snapshot with this list before dispatching SMS/email,
+   * and returns a delivery summary so the UI can confirm reach.
+   */
+  async startTrip(
+    shareToken: string,
+    opts?: { emergencyContacts?: unknown[] }
+  ): Promise<{ ok: boolean; notified: { name: string; channel: string; stubbed?: boolean }[]; skipped: { name: string; reason: string }[] }> {
     const response = await fetch(`${API_BASE_URL}/api/triplinks/${shareToken}/start`, {
       method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(opts || {}),
     });
     if (!response.ok) throw new Error('Failed to start trip');
+    return response.json();
   },
 
   async checkIn(shareToken: string, data: { message?: string; locationW3w?: string } = {}): Promise<{ timestamp: string }> {

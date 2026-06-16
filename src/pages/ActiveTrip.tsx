@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
-import { Check, MapPin, Clock, Share2, Copy, CheckCircle2 } from 'lucide-react';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
+import { Check, MapPin, Clock, Share2, Copy, CheckCircle2, Shield, MessageSquare, Mail, Star, CheckCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../config/api';
 import { what3wordsService } from '../services/what3words';
@@ -160,16 +160,33 @@ export const ActiveTrip: React.FC = () => {
     ? `${window.location.origin}/triplink/${shareToken}`
     : '';
 
-  // Load from localStorage fallback (trip was just created, backend confirmed)
+  // Prefer the backend's current state (it reflects who got notified on Start),
+  // fall back to localStorage if offline.
   useEffect(() => {
-    const stored = JSON.parse(localStorage.getItem('triplinks') || '[]');
-    const found = stored.find((t: TripLink) => t.id === tripLinkId);
-    if (found) {
-      setTripLink(found);
-      setLastCheckIn(found.lastCheckIn || null);
+    let cancelled = false;
+    const localFallback = () => {
+      const stored = JSON.parse(localStorage.getItem('triplinks') || '[]');
+      const found = stored.find((t: TripLink) => t.id === tripLinkId);
+      if (found) {
+        setTripLink(found);
+        setLastCheckIn(found.lastCheckIn || null);
+      }
+    };
+    if (shareToken) {
+      api.getTripLink(shareToken)
+        .then(t => {
+          if (cancelled) return;
+          setTripLink(t);
+          setLastCheckIn(t.lastCheckIn || null);
+        })
+        .catch(() => { if (!cancelled) localFallback(); })
+        .finally(() => { if (!cancelled) setLoading(false); });
+    } else {
+      localFallback();
+      setLoading(false);
     }
-    setLoading(false);
-  }, [tripLinkId]);
+    return () => { cancelled = true; };
+  }, [tripLinkId, shareToken]);
 
   const handleCheckedIn = useCallback((timestamp: string) => {
     setLastCheckIn(timestamp);
@@ -191,11 +208,9 @@ export const ActiveTrip: React.FC = () => {
     setCompleting(true);
     try {
       await api.completeTrip(shareToken);
-      toast.success("Trip complete — glad you made it back safely!");
       setTripLink(prev => prev ? { ...prev, status: 'completed' } : prev);
     } catch {
       toast.error('Could not mark complete — try again');
-    } finally {
       setCompleting(false);
     }
   };
@@ -211,6 +226,70 @@ export const ActiveTrip: React.FC = () => {
     );
   }
 
+  // ── Completed state ───────────────────────────────────────────────────────────
+  if (tripLink?.status === 'completed') {
+    const startedAt = tripLink.startedAt ? new Date(tripLink.startedAt) : null;
+    const completedMs = startedAt ? Date.now() - startedAt.getTime() : null;
+    return (
+      <div className="create-page">
+        <div className="create-container" style={{ paddingTop: 80, textAlign: 'center' }}>
+          <div style={{
+            width: 72, height: 72, borderRadius: '50%',
+            background: 'oklch(49% 0.14 155 / 0.12)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 24px',
+          }}>
+            <CheckCheck size={36} style={{ color: 'var(--upto-success)' }} />
+          </div>
+
+          <h1 className="create-title" style={{ fontSize: 'clamp(1.75rem, 5vw, 3rem)', marginBottom: 8 }}>
+            Trip complete
+          </h1>
+          <p style={{ fontFamily: 'var(--font-ui)', fontSize: '1.1rem', color: 'var(--upto-text-secondary)', marginBottom: 4 }}>
+            Glad you're back safely.
+          </p>
+          {tripLink.title && (
+            <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.9rem', color: 'var(--upto-text-muted)', marginBottom: 32 }}>
+              {tripLink.title}
+              {completedMs ? ` · ${formatDuration(completedMs)}` : ''}
+            </p>
+          )}
+
+          {tripLink.emergencyContacts && tripLink.emergencyContacts.length > 0 && (
+            <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.875rem', color: 'var(--upto-text-secondary)', marginBottom: 32, maxWidth: 320, margin: '0 auto 32px' }}>
+              Your {tripLink.emergencyContacts.length} watcher{tripLink.emergencyContacts.length === 1 ? '' : 's'} can see you're back — no further alerts will be sent.
+            </p>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 320, margin: '0 auto' }}>
+            <Link
+              to="/profile"
+              className="create-submit"
+              style={{ justifyContent: 'center', textDecoration: 'none' }}
+            >
+              View my account
+            </Link>
+            <Link
+              to="/create"
+              className="active-trip-action-btn"
+              style={{ justifyContent: 'center', textDecoration: 'none' }}
+            >
+              Plan another trip
+            </Link>
+          </div>
+
+          <p style={{
+            fontFamily: 'var(--font-ui)', fontSize: '0.78rem',
+            color: 'var(--upto-text-muted)', marginTop: 40,
+          }}>
+            Strava sync coming soon — your trip data will be waiting.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Active / overdue state ─────────────────────────────────────────────────
   // Timing
   const startedAt = tripLink?.startedAt ? new Date(tripLink.startedAt) : null;
   const expectedReturn = tripLink?.expectedReturnTime ? new Date(tripLink.expectedReturnTime) : null;
@@ -277,6 +356,63 @@ export const ActiveTrip: React.FC = () => {
           )}
         </div>
 
+        {/* ── Watchers panel — who got the Start notification ── */}
+        {tripLink?.emergencyContacts && tripLink.emergencyContacts.length > 0 && (
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Shield size={14} style={{ color: 'var(--upto-danger, oklch(60% 0.18 25))' }} />
+              <h2 style={{ fontFamily: 'var(--font-ui)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--upto-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
+                Watchers notified
+              </h2>
+            </div>
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1,
+              border: '1.5px solid var(--upto-border)',
+              borderRadius: 10,
+              overflow: 'hidden',
+            }}>
+              {tripLink.emergencyContacts.map(c => {
+                const channels = [];
+                if (c.phone) channels.push(<span key="sms" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.75rem', color: 'var(--upto-text-muted)' }}><MessageSquare size={11} />SMS</span>);
+                if (c.email && !c.phone) channels.push(<span key="email" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.75rem', color: 'var(--upto-text-muted)' }}><Mail size={11} />Email</span>);
+                return (
+                  <div key={c.id} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 12, padding: '10px 14px', background: 'white',
+                    borderBottom: '1px solid var(--upto-border)',
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: '0.9rem', color: 'var(--upto-text)' }}>
+                          {c.name}
+                        </span>
+                        {c.relationship && (
+                          <span style={{ fontFamily: 'var(--font-ui)', fontSize: '0.78rem', color: 'var(--upto-text-muted)' }}>
+                            {c.relationship}
+                          </span>
+                        )}
+                        {c.isPrimary && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontFamily: 'var(--font-ui)', fontSize: '0.68rem', fontWeight: 600, color: 'var(--upto-success)', background: 'oklch(49% 0.14 155 / 0.12)', borderRadius: 4, padding: '1px 6px' }}>
+                            <Star size={9} />Primary
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
+                      {channels}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.75rem', color: 'var(--upto-text-muted)', marginTop: 6, marginBottom: 0 }}>
+              Notified when you started. They'll get an alert if you go overdue.
+            </p>
+          </div>
+        )}
+
         {/* ── Check-in ── */}
         {shareToken && (
           <CheckInPanel shareToken={shareToken} onCheckedIn={handleCheckedIn} />
@@ -329,11 +465,8 @@ export const ActiveTrip: React.FC = () => {
             onClick={handleComplete}
             disabled={completing}
           >
-            {completing ? 'Completing…' : 'I\'m back — Complete Trip'}
+            {completing ? 'Completing…' : "I'm back — Complete Trip"}
           </button>
-          <p className="create-submit-hint" style={{ textAlign: 'center', marginTop: 8 }}>
-            This will notify your watchers that you returned safely.
-          </p>
         </div>
 
       </div>

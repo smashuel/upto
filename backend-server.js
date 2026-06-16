@@ -738,6 +738,59 @@ app.post('/api/triplinks', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/triplinks — list the authenticated user's own trips.
+// Lightweight projection only (no route geometry) — the list view doesn't need
+// the full JSONB blob. Registered before the `:token` route for clarity (no
+// real collision: this path has no param segment).
+app.get('/api/triplinks', requireAuth, async (req, res) => {
+  try {
+    const { status } = req.query;
+    const params = [req.user.id];
+    let where = `WHERE user_id = $1`;
+    if (status && typeof status === 'string') {
+      params.push(status);
+      where += ` AND status = $2`;
+    }
+    const { rows } = await db.query(
+      `SELECT id, share_token, status, created_at, started_at,
+              expected_return_time, overdue_since, last_check_in,
+              data->>'title'              AS title,
+              data->>'activityType'       AS activity_type,
+              data->'location'->>'name'   AS location_name,
+              jsonb_array_length(COALESCE(data->'emergencyContacts', '[]'::jsonb)) AS watcher_count
+       FROM   triplinks
+       ${where}
+       ORDER  BY
+         CASE status
+           WHEN 'overdue'   THEN 0
+           WHEN 'active'    THEN 1
+           WHEN 'planned'   THEN 2
+           ELSE 3
+         END,
+         created_at DESC`,
+      params
+    );
+    const trips = rows.map(r => ({
+      id:                 r.id,
+      shareToken:         r.share_token,
+      status:             r.status,
+      createdAt:          r.created_at,
+      startedAt:          r.started_at,
+      expectedReturnTime: r.expected_return_time,
+      overdueSince:       r.overdue_since,
+      lastCheckIn:        r.last_check_in,
+      title:              r.title,
+      activityType:       r.activity_type,
+      locationName:       r.location_name,
+      watcherCount:       Number(r.watcher_count) || 0,
+    }));
+    res.json({ trips });
+  } catch (err) {
+    console.error('List triplinks error:', err.message);
+    res.status(500).json({ error: 'Failed to list TripLinks' });
+  }
+});
+
 // GET /api/triplinks/:token — fetch a TripLink with its check-ins
 app.get('/api/triplinks/:token', async (req, res) => {
   try {

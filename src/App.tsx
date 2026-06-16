@@ -9,6 +9,7 @@ import { PublicAdventureView } from './pages/PublicAdventureView';
 import { ViewAdventure } from './pages/ViewAdventure';
 import { Login } from './pages/Login';
 import { Profile } from './pages/Profile';
+import { MyTrips } from './pages/MyTrips';
 import { NotFound } from './pages/NotFound';
 import './styles/globals.css';
 
@@ -35,6 +36,7 @@ function App() {
             <Route path="/triplink/:id" element={<ViewAdventure />} />
             <Route path="/login" element={<Login />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/trips" element={<MyTrips />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Layout>

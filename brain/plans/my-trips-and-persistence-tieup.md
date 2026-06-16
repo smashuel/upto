@@ -1,12 +1,15 @@
 ---
 type: plan
-status: planned
+status: shipped
 created: 2026-06-16
-related: [src/pages/Profile.tsx, src/pages/ActiveTrip.tsx, src/pages/CreateAdventure.tsx, src/config/api.ts, backend-server.js, brain/plans/persistence-and-auth.md]
+shipped: 2026-06-16
+related: [src/pages/MyTrips.tsx, src/components/trips/TripRow.tsx, src/pages/Profile.tsx, src/pages/ActiveTrip.tsx, src/pages/CreateAdventure.tsx, src/config/api.ts, backend-server.js, brain/plans/persistence-and-auth.md]
 tags: [my-trips, persistence, phase-4, backend, frontend]
 ---
 
 # Plan — My Trips + Persistence Phase 4 tie-up
+
+> **SHIPPED 2026-06-16.** All 5 phases landed in one pass. Backend smoke-tested (401 guard + authed projection). See "What shipped" at the bottom.
 
 ## Why now
 
@@ -34,11 +37,11 @@ Downstream, "My Trips" is also where the teased **Strava sync** eventually lands
 
 | Phase | Scope | Status |
 |-------|-------|--------|
-| 1 | Backend: `GET /api/triplinks` (list mine) | planned |
-| 2 | Frontend: `api.listMyTrips()` + `/trips` page | planned |
-| 3 | Profile "Your trips" preview + completion-screen CTA retarget | planned |
-| 4 | Demote localStorage dual-write to offline fallback | planned |
-| 5 | Stale-session hygiene + e2e verify | planned |
+| 1 | Backend: `GET /api/triplinks` (list mine) | ✅ shipped |
+| 2 | Frontend: `api.listMyTrips()` + `/trips` page | ✅ shipped |
+| 3 | Profile "Your trips" preview + completion-screen CTA retarget | ✅ shipped |
+| 4 | Demote localStorage dual-write to offline fallback | ✅ shipped |
+| 5 | Stale-session hygiene + e2e verify | ✅ shipped |
 
 ---
 
@@ -107,3 +110,15 @@ Downstream, "My Trips" is also where the teased **Strava sync** eventually lands
 - The backend is the source of truth; localStorage is demoted to an offline-read cache that can't mislead.
 - A stale session no longer wedges the UI.
 - The full create→start→notify→complete loop verified on prod, with the watcher view confirmed.
+
+---
+
+## What shipped (2026-06-16)
+
+- **Phase 1** — `GET /api/triplinks` ([backend-server.js](../../backend-server.js)). `requireAuth`, `user_id` from session, lightweight projection (title/activity/location/watcherCount, no route geometry), ordered overdue→active→planned→completed then `created_at DESC`. Optional `?status=` filter. Smoke-tested: 401 without auth, full projection with auth.
+- **Phase 2** — `api.listMyTrips()` + new `TripSummary`/`TripStatus` types + an `ApiError` class carrying HTTP status ([api.ts](../../src/config/api.ts)). New page [MyTrips.tsx](../../src/pages/MyTrips.tsx) at `/trips` (registered in [App.tsx](../../src/App.tsx)), grouped sections (Needs attention / Active now / Planned / Completed), empty state → `/create`. Shared row component [TripRow.tsx](../../src/components/trips/TripRow.tsx) (status pill, activity icon, location, watcher count, relative time).
+- **Phase 3** — "Your trips" preview section on [Profile.tsx](../../src/pages/Profile.tsx) (3 most recent + "See all" → `/trips`), reusing `TripRow`. Completion-screen CTA in [ActiveTrip.tsx](../../src/pages/ActiveTrip.tsx) retargeted "View my account" → **"View my trips"** → `/trips`.
+- **Phase 4** — `cacheTripLinkOffline()` helper in [CreateAdventure.tsx](../../src/pages/CreateAdventure.tsx): bounded (20 most recent), deduped by id, non-throwing (swallows quota/private-mode). Written *after* the authoritative API call so the cache can never contradict the server. ActiveTrip already reads it backend-first (from the v3 work).
+- **Phase 5** — confirmed already covered: useAuth's on-mount `getMe` failure path calls `clearSession()` + nulls state (stale token on app load); MyTrips calls `logout()` + redirects to `/login` on an in-session `401` (detected via `ApiError.status`). No new global interceptor needed.
+
+**Deferred / next**: capability-endpoint hardening (rate-limit `/start`/`/checkin`/`/complete`, idempotent transitions) — the remaining open security item, intentionally kept out of this plan. Strava sync attaches to `/trips` later.

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Star, Trash2, Plus, LogOut, LogIn, Shield } from 'lucide-react';
+import { Star, Trash2, Plus, LogOut, LogIn, Shield, ChevronRight } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../config/api';
-import type { SavedContact } from '../config/api';
+import type { SavedContact, TripSummary } from '../config/api';
+import { TripRow } from '../components/trips/TripRow';
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -120,6 +121,7 @@ export const Profile: React.FC = () => {
   const [loadingContacts, setLoadingContacts] = useState(false);
   const [addingContact, setAddingContact] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [recentTrips, setRecentTrips] = useState<TripSummary[]>([]);
 
   useEffect(() => {
     if (!isLoggedIn || !sessionToken) return;
@@ -128,6 +130,10 @@ export const Profile: React.FC = () => {
       .then(setContacts)
       .catch(() => { /* silently fail */ })
       .finally(() => setLoadingContacts(false));
+    // Recent-trips preview — best-effort; full list lives at /trips.
+    api.listMyTrips(sessionToken)
+      .then(setRecentTrips)
+      .catch(() => { /* silently fail */ });
   }, [isLoggedIn, sessionToken]);
 
   const handleToggleFavourite = async (contact: SavedContact) => {
@@ -226,6 +232,36 @@ export const Profile: React.FC = () => {
           <h1 className="profile-name">{user!.name}</h1>
           <p className="profile-email">{user!.email}</p>
         </header>
+
+        {/* ── Your trips (preview) ── */}
+        {recentTrips.length > 0 && (
+          <section className="profile-section">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <h2 className="profile-section-label" style={{ marginBottom: 0 }}>Your trips</h2>
+              <button
+                type="button"
+                onClick={() => navigate('/trips')}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 2,
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontFamily: 'var(--font-ui)', fontSize: '0.82rem', fontWeight: 600,
+                  color: 'var(--upto-primary)', padding: '4px 0',
+                }}
+              >
+                See all
+                <ChevronRight size={14} />
+              </button>
+            </div>
+            <div style={{
+              marginTop: 10,
+              border: '1.5px solid var(--upto-border)',
+              borderRadius: 12,
+              overflow: 'hidden',
+            }}>
+              {recentTrips.slice(0, 3).map(trip => <TripRow key={trip.id} trip={trip} />)}
+            </div>
+          </section>
+        )}
 
         {/* ── Saved contacts ── */}
         <section className="profile-section">

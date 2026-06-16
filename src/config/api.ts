@@ -219,6 +219,19 @@ export const api = {
   },
 
   /**
+   * List the authenticated user's own trips (lightweight summaries — no route geometry).
+   * Throws an ApiError with status 401 if the session is stale, so callers can sign out.
+   */
+  async listMyTrips(sessionToken: string): Promise<TripSummary[]> {
+    const response = await fetch(`${API_BASE_URL}/api/triplinks`, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+    });
+    if (!response.ok) throw new ApiError('Failed to list trips', response.status);
+    const data = await response.json();
+    return data.trips as TripSummary[];
+  },
+
+  /**
    * Subscribe to server-sent events for a TripLink.
    * Returns the EventSource so the caller can close it on unmount.
    */
@@ -331,4 +344,32 @@ export interface SavedContact {
   is_favourite: boolean;
   is_emergency: boolean;
   created_at?: string;
+}
+
+/** Error carrying the HTTP status so callers can react to 401 (stale session). */
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
+export type TripStatus = 'planned' | 'active' | 'overdue' | 'completed';
+
+/** Lightweight trip summary returned by `GET /api/triplinks` (the list view). */
+export interface TripSummary {
+  id: string;
+  shareToken: string;
+  status: TripStatus;
+  createdAt: string;
+  startedAt: string | null;
+  expectedReturnTime: string | null;
+  overdueSince: string | null;
+  lastCheckIn: string | null;
+  title: string | null;
+  activityType: string | null;
+  locationName: string | null;
+  watcherCount: number;
 }

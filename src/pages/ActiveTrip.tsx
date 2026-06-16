@@ -263,11 +263,11 @@ export const ActiveTrip: React.FC = () => {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 320, margin: '0 auto' }}>
             <Link
-              to="/profile"
+              to="/trips"
               className="create-submit"
               style={{ justifyContent: 'center', textDecoration: 'none' }}
             >
-              View my account
+              View my trips
             </Link>
             <Link
               to="/create"

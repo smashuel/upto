@@ -43,6 +43,20 @@ export interface TripLinkFormData {
   useGuidePace?: boolean;
 }
 
+// Best-effort offline-read cache. NOT a source of truth — the backend is.
+// Bounded + deduped + non-throwing so it can never grow unbounded, throw on
+// quota, or hold data that contradicts the server.
+function cacheTripLinkOffline(tripLink: { id: string }): void {
+  try {
+    const existing = JSON.parse(localStorage.getItem('triplinks') || '[]');
+    const deduped = Array.isArray(existing) ? existing.filter((t: { id: string }) => t.id !== tripLink.id) : [];
+    deduped.unshift(tripLink);
+    localStorage.setItem('triplinks', JSON.stringify(deduped.slice(0, 20)));
+  } catch {
+    /* quota / private mode — losing the offline cache is harmless */
+  }
+}
+
 // ── Activity Types ────────────────────────────────────────────────
 
 const ACTIVITIES: Array<{
@@ -203,12 +217,16 @@ export const CreateTripLink: React.FC = () => {
         checkIns: [],
       };
 
+      // The backend is the source of truth. This await must succeed for the trip
+      // to exist — if it throws we fall into catch and surface an error, and the
+      // cache below is never written (so the cache can't disagree with the server).
       await api.createTripLink(sessionToken, tripLink);
 
-      // Also keep in localStorage as fallback / offline cache
-      const existing = JSON.parse(localStorage.getItem('triplinks') || '[]');
-      existing.push(tripLink);
-      localStorage.setItem('triplinks', JSON.stringify(existing));
+      // Best-effort offline-read cache only — never a write of record. Bounded to
+      // the 20 most recent and deduped by id; failures (quota, private mode) are
+      // swallowed because losing the cache is harmless. ActiveTrip reads this only
+      // when the backend fetch fails.
+      cacheTripLinkOffline(tripLink);
 
       setTripLinkId(id);
       setShareToken(token);

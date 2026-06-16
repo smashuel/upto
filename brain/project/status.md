@@ -10,9 +10,11 @@ Always-true snapshot of the project. Bump this whenever a phase ships or priorit
 
 ## Current focus
 
-**Next phase: My Trips page + Persistence Phase 4 tie-up.** Plan written at [plans/my-trips-and-persistence-tieup.md](../plans/my-trips-and-persistence-tieup.md). Build a `/trips` list (new `GET /api/triplinks` endpoint), retarget the completion-screen CTA there, and demote the localStorage dual-write to an offline-read fallback in the same pass. Closes the dangling "View my account" link the completion screen created, and makes the Linode Postgres row the single source of truth.
+**Next phase: harden capability endpoints.** With My Trips shipped, the top open item is rate-limiting `/start`/`/checkin`/`/complete` per share_token, making transitions idempotent, and never logging share_tokens. See the ADR [decisions/009-native-auth-capability-share-tokens.md](../decisions/009-native-auth-capability-share-tokens.md) for why these stay capability-guarded.
 
-**Done and live:** notification transport is fully shipped and **email is verified on Resend** — real emails go out on Start (smoke-tested 2026-06-16). Phases 1 (security hardening), 2 (account-level emergency contacts), and 3 (notification transport, RecipientPicker, rich personalised emails, completion screen) are all in prod. Twilio remains scaffolded — set `TWILIO_*` to add SMS, no code change.
+**Just shipped (2026-06-16): My Trips + Persistence Phase 4.** `/trips` page lists trips grouped by status (new `GET /api/triplinks` endpoint); Profile preview; completion CTA retargeted; localStorage demoted to a bounded offline-read cache; stale-session 401 signs out. Backend is now the single source of truth. See [plans/my-trips-and-persistence-tieup.md](../plans/my-trips-and-persistence-tieup.md).
+
+**Done and live:** notification transport is fully shipped and **email is verified on Resend** — real personalised emails go out on Start. Twilio remains scaffolded — set `TWILIO_*` to add SMS, no code change.
 
 ## Recent shipped (last ~30 days)
 

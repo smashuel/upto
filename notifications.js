@@ -206,6 +206,13 @@ function paragraph(html) {
   return `<p style="font-size:15px;line-height:1.6;color:#3a443d;margin:0 0 14px;">${html}</p>`;
 }
 
+// Warm per-recipient greeting. Falls back to a plain "Hi," when we have no name.
+function greeting(contact) {
+  const name = firstNameOf(contact?.name);
+  const who = name === 'Your contact' ? '' : ` ${escapeHtml(name)}`;
+  return `<p style="font-size:15px;line-height:1.6;color:#3a443d;margin:0 0 14px;">Hi${who},</p>`;
+}
+
 function sectionHeading(text) {
   return `<div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:${MUTED};margin:22px 0 8px;">${escapeHtml(text)}</div>`;
 }
@@ -241,26 +248,31 @@ export async function notifyTripStart(tripLink) {
   const creator = tripLink.creatorName || 'Someone you know';
   const first = firstNameOf(tripLink.creatorName);
 
-  const inner = `
-    <h1 style="font-size:21px;font-weight:800;color:${INK};margin:0 0 14px;">${escapeHtml(creator)} is heading out</h1>
-    ${paragraph(`<strong>${escapeHtml(first)}</strong> just started a trip on Upto and added you as a safety contact — someone they trust to know where they are and when they're due back.`)}
-    ${tripCard(title, [{ label: 'Expected back', value: `~${back}` }])}
-    <div style="margin:4px 0 6px;">${emailButton(url, `View ${first}'s trip plan`)}</div>
-    ${sectionHeading('What you need to do')}
-    ${paragraph(`Nothing right now. Upto is a safety tool, not a chat app — ${escapeHtml(first)} will check in along the way, and you'll only hear from us again if they don't make it back on time. You can open the link any time to see their planned route and latest check-in.`)}
-    ${sectionHeading('If something seems wrong')}
-    ${paragraph(`If ${escapeHtml(first)} becomes overdue we'll email you automatically. If you can't reach them and you're genuinely worried, contact local emergency services (dial <strong>111</strong> in New Zealand, <strong>000</strong> in Australia) and share this trip link — it has their route and precise location details to help responders.`)}
-  `;
-
-  const content = {
-    sms: `${first} started "${title}" on Upto & added you as a safety contact. Back ~${back}. Live plan: ${url}`,
-    email: {
-      subject: `${creator} is heading out — ${title}`,
-      text: `${creator} just started a trip on Upto and added you as a safety contact.\n\n${title}\nExpected back ~${back}\n\nView the live trip plan: ${url}\n\nWhat you need to do: nothing right now. Upto is a safety tool — ${first} will check in along the way, and you'll only hear from us again if they don't make it back on time.\n\nIf something seems wrong: if ${first} becomes overdue we'll email you. If you can't reach them and you're worried, contact local emergency services (111 in NZ, 000 in AU) and share this link — it has their route and location details.\n\nupto.world`,
-      html: emailShell({ title: `${creator} is heading out`, inner }),
-    },
+  // Content is built per-recipient so the email greeting can be personalised.
+  const buildContent = (contact) => {
+    const inner = `
+      ${greeting(contact)}
+      <h1 style="font-size:21px;font-weight:800;color:${INK};margin:0 0 14px;">${escapeHtml(creator)} is heading out</h1>
+      ${paragraph(`<strong>${escapeHtml(first)}</strong> just started a trip on Upto and added you as a safety contact — someone they trust to know where they are and when they're due back.`)}
+      ${tripCard(title, [{ label: 'Expected back', value: `~${back}` }])}
+      <div style="margin:4px 0 6px;">${emailButton(url, `View ${first}'s trip plan`)}</div>
+      ${sectionHeading('What you need to do')}
+      ${paragraph(`Nothing right now. Upto is a safety tool, not a chat app — ${escapeHtml(first)} will check in along the way, and you'll only hear from us again if they don't make it back on time. You can open the link any time to see their planned route and latest check-in.`)}
+      ${sectionHeading('If something seems wrong')}
+      ${paragraph(`If ${escapeHtml(first)} becomes overdue we'll email you automatically. If you can't reach them and you're genuinely worried, contact local emergency services (dial <strong>111</strong> in New Zealand, <strong>000</strong> in Australia) and share this trip link — it has their route and precise location details to help responders.`)}
+    `;
+    const hiName = firstNameOf(contact?.name);
+    const hi = hiName === 'Your contact' ? 'Hi,' : `Hi ${hiName},`;
+    return {
+      sms: `${first} started "${title}" on Upto & added you as a safety contact. Back ~${back}. Live plan: ${url}`,
+      email: {
+        subject: `${creator} is heading out — ${title}`,
+        text: `${hi}\n\n${creator} just started a trip on Upto and added you as a safety contact.\n\n${title}\nExpected back ~${back}\n\nView the live trip plan: ${url}\n\nWhat you need to do: nothing right now. Upto is a safety tool — ${first} will check in along the way, and you'll only hear from us again if they don't make it back on time.\n\nIf something seems wrong: if ${first} becomes overdue we'll email you. If you can't reach them and you're worried, contact local emergency services (111 in NZ, 000 in AU) and share this link — it has their route and location details.\n\nupto.world`,
+        html: emailShell({ title: `${creator} is heading out`, inner }),
+      },
+    };
   };
-  const results = await Promise.all(contacts.map(c => dispatchToContact(c, content)));
+  const results = await Promise.all(contacts.map(c => dispatchToContact(c, buildContent(c))));
   const t = summarise(results);
   console.log(`[notify] start trip=${tripLink.id} → sms=${t.sms} email=${t.email} stubbed=${t.stubbed} failed=${t.failed} skipped=${t.skipped}`);
   const notified = results
@@ -289,28 +301,32 @@ export async function notifyTripOverdue(tripLink) {
   const creator = tripLink.creatorName || 'Someone you know';
   const first = firstNameOf(tripLink.creatorName);
 
-  const inner = `
-    <div style="display:inline-block;background:#fdecea;color:#b3261e;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;padding:5px 11px;border-radius:6px;margin-bottom:14px;">⚠ Overdue</div>
-    <h1 style="font-size:21px;font-weight:800;color:${INK};margin:0 0 14px;">${escapeHtml(creator)} hasn't returned</h1>
-    ${paragraph(`${escapeHtml(first)} was due back at <strong>${back}</strong> and hasn't checked in or marked their trip complete. This might be nothing — phones lose signal and plans run late — but as one of ${escapeHtml(first)}'s emergency contacts, you should know.`)}
-    ${tripCard(title, [{ label: 'Was due back', value: back }, { label: 'Last check-in', value: lastCi }])}
-    <div style="margin:4px 0 6px;">${emailButton(url, `View ${first}'s trip plan`)}</div>
-    ${sectionHeading('What to do now')}
-    ${paragraph(`<strong>1.</strong> Try to reach ${escapeHtml(first)} directly — call and text.<br>
-      <strong>2.</strong> Open the trip plan above for their planned route, exit points and last known location.<br>
-      <strong>3.</strong> If you still can't reach them and you're worried, contact local emergency services (dial <strong>111</strong> in New Zealand, <strong>000</strong> in Australia) and share this trip link with them.`)}
-    ${paragraph(`<span style="color:${MUTED};font-size:13px;">Don't wait if you're genuinely concerned — it's always better to raise the alarm early.</span>`)}
-  `;
-
-  const content = {
-    sms: `⚠️ Upto: ${first} is OVERDUE — due ~${back}, last check-in ${lastCi}. Try to reach them. If worried, call 111 & share: ${url}`,
-    email: {
-      subject: `⚠️ ${creator} is overdue — ${title}`,
-      text: `${creator} is OVERDUE.\n\n${first} was due back at ${back} and hasn't checked in or marked their trip complete.\n\n${title}\nWas due back: ${back}\nLast check-in: ${lastCi}\n\nView the trip plan: ${url}\n\nWhat to do now:\n1. Try to reach ${first} directly — call and text.\n2. Open the trip plan for their route, exit points and last known location.\n3. If you can't reach them and you're worried, contact local emergency services (111 in NZ, 000 in AU) and share this trip link.\n\nDon't wait if you're genuinely concerned — better to raise the alarm early.\n\nupto.world`,
-      html: emailShell({ title: `${creator} is overdue`, inner }),
-    },
+  const buildContent = (contact) => {
+    const inner = `
+      ${greeting(contact)}
+      <div style="display:inline-block;background:#fdecea;color:#b3261e;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;padding:5px 11px;border-radius:6px;margin-bottom:14px;">⚠ Overdue</div>
+      <h1 style="font-size:21px;font-weight:800;color:${INK};margin:0 0 14px;">${escapeHtml(creator)} hasn't returned</h1>
+      ${paragraph(`${escapeHtml(first)} was due back at <strong>${back}</strong> and hasn't checked in or marked their trip complete. This might be nothing — phones lose signal and plans run late — but as one of ${escapeHtml(first)}'s emergency contacts, you should know.`)}
+      ${tripCard(title, [{ label: 'Was due back', value: back }, { label: 'Last check-in', value: lastCi }])}
+      <div style="margin:4px 0 6px;">${emailButton(url, `View ${first}'s trip plan`)}</div>
+      ${sectionHeading('What to do now')}
+      ${paragraph(`<strong>1.</strong> Try to reach ${escapeHtml(first)} directly — call and text.<br>
+        <strong>2.</strong> Open the trip plan above for their planned route, exit points and last known location.<br>
+        <strong>3.</strong> If you still can't reach them and you're worried, contact local emergency services (dial <strong>111</strong> in New Zealand, <strong>000</strong> in Australia) and share this trip link with them.`)}
+      ${paragraph(`<span style="color:${MUTED};font-size:13px;">Don't wait if you're genuinely concerned — it's always better to raise the alarm early.</span>`)}
+    `;
+    const hiName = firstNameOf(contact?.name);
+    const hi = hiName === 'Your contact' ? 'Hi,' : `Hi ${hiName},`;
+    return {
+      sms: `⚠️ Upto: ${first} is OVERDUE — due ~${back}, last check-in ${lastCi}. Try to reach them. If worried, call 111 & share: ${url}`,
+      email: {
+        subject: `⚠️ ${creator} is overdue — ${title}`,
+        text: `${hi}\n\n${creator} is OVERDUE.\n\n${first} was due back at ${back} and hasn't checked in or marked their trip complete.\n\n${title}\nWas due back: ${back}\nLast check-in: ${lastCi}\n\nView the trip plan: ${url}\n\nWhat to do now:\n1. Try to reach ${first} directly — call and text.\n2. Open the trip plan for their route, exit points and last known location.\n3. If you can't reach them and you're worried, contact local emergency services (111 in NZ, 000 in AU) and share this trip link.\n\nDon't wait if you're genuinely concerned — better to raise the alarm early.\n\nupto.world`,
+        html: emailShell({ title: `${creator} is overdue`, inner }),
+      },
+    };
   };
-  const results = await Promise.all(contacts.map(c => dispatchToContact(c, content)));
+  const results = await Promise.all(contacts.map(c => dispatchToContact(c, buildContent(c))));
   const t = summarise(results);
   console.log(`[notify] overdue trip=${tripLink.id} → sms=${t.sms} email=${t.email} stubbed=${t.stubbed} failed=${t.failed} skipped=${t.skipped}`);
 }

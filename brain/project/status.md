@@ -10,9 +10,9 @@ Always-true snapshot of the project. Bump this whenever a phase ships or priorit
 
 ## Current focus
 
-**Persistence + auth — Phase 4 (tie-up + localStorage demote) is what's left.** Phases 1 (security hardening), 2 (account-level emergency contacts), and 3 (notification transport — email-first via Resend, SMS-ready via Twilio) are all shipped. Both providers stub gracefully when their creds aren't set, so the safety story is **functionally complete end-to-end** the moment the user verifies a Resend domain. See [plans/persistence-and-auth.md](../plans/persistence-and-auth.md).
+**Next phase: My Trips page + Persistence Phase 4 tie-up.** Plan written at [plans/my-trips-and-persistence-tieup.md](../plans/my-trips-and-persistence-tieup.md). Build a `/trips` list (new `GET /api/triplinks` endpoint), retarget the completion-screen CTA there, and demote the localStorage dual-write to an offline-read fallback in the same pass. Closes the dangling "View my account" link the completion screen created, and makes the Linode Postgres row the single source of truth.
 
-**Going-live (email-first path)**: create a Resend account, add `upto.world` as a verified domain (3 DNS records → ~minutes), generate an API key, set `RESEND_API_KEY` in shell or `.env`, redeploy. Stub logs flip to real email. Twilio creds can be added later without code changes.
+**Done and live:** notification transport is fully shipped and **email is verified on Resend** — real emails go out on Start (smoke-tested 2026-06-16). Phases 1 (security hardening), 2 (account-level emergency contacts), and 3 (notification transport, RecipientPicker, rich personalised emails, completion screen) are all in prod. Twilio remains scaffolded — set `TWILIO_*` to add SMS, no code change.
 
 ## Recent shipped (last ~30 days)
 

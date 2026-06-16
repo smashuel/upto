@@ -122,7 +122,7 @@ Confirms the dispatcher ran end-to-end. Status was rolled back via SQL afterward
 
 Content is now **per-channel**: SMS stays a single terse segment; email gets a full branded HTML briefing. `dispatchToContact(contact, content)` takes `{ sms, email: { subject, text, html } }` and picks the field for the chosen channel. `sendEmail(to, subject, text, html)` sends both `text` (plain fallback) and `html` to Resend.
 
-**Personalisation**: both dispatchers receive `creatorName` (the trip owner's `users.name`, joined in at the SQL layer — see Triggers). `firstNameOf()` derives the first name; falls back to "Your contact" / "Someone you know" when absent.
+**Personalisation**: both dispatchers receive `creatorName` (the trip owner's `users.name`, joined in at the SQL layer — see Triggers). `firstNameOf()` derives the first name; falls back to "Your contact" / "Someone you know" when absent (basically never, since `users.name` is `NOT NULL`). Email content is built **per-recipient** (`buildContent(contact)`) so each email opens with a `Hi <recipient first name>,` greeting via `greeting(contact)` — degrades to a plain `Hi,` when the contact has no name. SMS stays un-greeted (terse).
 
 **Email is built from small inline-styled helpers** in [notifications.js](../../notifications.js): `emailShell()` (branded wrapper, Upto wordmark + footer), `emailButton()` (green CTA), `tripCard()` (title + meta rows), `paragraph()`, `sectionHeading()`. All inline styles — no external CSS/images, so it renders in every mail client. `escapeHtml()` guards every interpolated value (trip titles, names) against HTML injection.
 

@@ -37,10 +37,12 @@ Always-true snapshot of the project. Bump this whenever a phase ships or priorit
 
 1. **Rotate the Linode DB password** — the plaintext fallback is out of the source but the old password still lives in git history. SSH to Linode, `ALTER USER upto_user WITH PASSWORD ...`, update `DATABASE_URL` in PM2 env, `pm2 restart`.
 2. **Harden capability endpoints** — `/start`, `/checkin`, `/complete` remain capability-guarded by share_token (see [decisions/009-native-auth-capability-share-tokens.md](../decisions/009-native-auth-capability-share-tokens.md) for why). To reduce griefing surface: add per-token rate limit (1 req/sec), make `/start` and `/complete` idempotent, never log `share_token`.
-3. **Overdue → no human** — DB flips `status = 'overdue'` and SSE broadcasts, but there's no email/SMS transport yet. Phase 3.
-4. **GuidePace not wired** — calculator + UI both exist; just needs integration in `TripDetailsStep`.
-5. **NoteManager still uses `window.prompt()`** — broken on mobile. NoteModal scaffolded but not wired.
-6. **`CreateAdventure.tsx` writes to both API and localStorage on every save** — the two paths will drift. Demote localStorage to offline-write fallback (Phase 4).
+3. **No trips list page** — Profile page shows contacts CRUD only. Users have no in-app view of their past/active TripLinks. The completion success screen CTAs link to `/profile` for now. A "My Trips" page is Phase 4.
+4. **Strava sync** — teased on completion screen as "coming soon". Long-horizon backlog — needs OAuth + Strava API integration. See [features/squad-social-vision.md](../features/squad-social-vision.md) for related social roadmap thinking.
+5. **GuidePace not wired** — calculator + UI both exist; just needs integration in `TripDetailsStep`.
+6. **NoteManager still uses `window.prompt()`** — broken on mobile. NoteModal scaffolded but not wired.
+7. **`CreateAdventure.tsx` writes to both API and localStorage on every save** — the two paths will drift. Demote localStorage to offline-write fallback (Phase 4).
+8. **Completion notification** — when a trip completes, watchers are not notified. Deliberately out of scope for now (avoid fatigue). Revisit when there's a "My Trips" page for watchers too.
 
 ## Environment health
 

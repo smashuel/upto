@@ -12,6 +12,7 @@ import {
   NSW_ATTRIBUTION,
 } from '../../services/AusMapService';
 import { resolveBasemap, type MapLayer } from '../../services/BasemapSuggest';
+import { detectDeviceTier, applyPerformanceProfile } from '../../services/MapPerformance';
 import { API_CONFIG } from '../../config/api';
 import type { DrawingStats, SerializableTrack } from '../../services/TrackDrawer';
 import type { TrailSelection } from '../../services/TrailLayerManager';
@@ -435,22 +436,21 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
 
         viewer.scene.globe.enableLighting = false;
         viewer.scene.globe.depthTestAgainstTerrain = true;
-        viewer.scene.fog.enabled = true;
         viewer.scene.fog.density = 0.0002;
 
         // Render at native device resolution for crisp tiles on retina/high-DPI screens
         viewer.useBrowserRecommendedResolution = false;
         // Disable FXAA — it blurs tile text and contour lines
         viewer.scene.postProcessStages.fxaa.enabled = false;
-        // Push LOD harder so foreground tiles request a finer zoom level.
-        // Default is 2 — lower value = more/higher-res tiles. 1.333 roughly matches
-        // Google/Mapbox crispness without killing mobile bandwidth.
-        viewer.scene.globe.maximumScreenSpaceError = 1.333;
-        // MSAA smooths polyline edges & contour lines without the blur FXAA introduces.
-        // if (Cesium.FeatureDetection?.supportsWebgl2?.(viewer.scene.context) !== false) {
-        //   viewer.scene.msaaSamples = 4;
-        // }
-        try { viewer.scene.msaaSamples = 4; } catch { /* unsupported in this env */ }
+
+        // Device-tier performance profile. Desktop ('high') reproduces the previous
+        // hand-tuned settings exactly — SSE 1.333, MSAA 4×, native resolution, fog +
+        // atmosphere on — so there's no desktop regression. Mobile tiers relax
+        // resolution/SSE and drop MSAA + atmosphere to recover framerate. All values
+        // live in MapPerformance.ts for empirical tuning on real devices.
+        const perfTier = detectDeviceTier();
+        applyPerformanceProfile(viewer, perfTier);
+        console.log(`TripPlanningMap: performance tier = ${perfTier}`);
 
         viewer.cesiumWidget.screenSpaceEventHandler.removeInputAction(
           Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK,

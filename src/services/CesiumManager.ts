@@ -61,10 +61,29 @@ export abstract class CesiumManager {
   }
 
   protected pickPosition(screenPosition: any): any | null {
+    const Cesium = window.Cesium;
+    const scene = this.viewer?.scene;
+    // In 3D, pick the actual rendered terrain surface via the depth buffer so a
+    // click lands where the cursor is — not on the sea-level ellipsoid that sits
+    // *below* the terrain (which caused drawn routes/notes to appear offset, and
+    // gave every point a height of ~0). Falls back to ellipsoid picking in 2D or
+    // when the depth pick misses (e.g. clicking sky / unloaded terrain tile).
+    try {
+      if (
+        scene &&
+        scene.mode === Cesium.SceneMode.SCENE3D &&
+        scene.pickPositionSupported
+      ) {
+        const cart = scene.pickPosition(screenPosition);
+        if (Cesium.defined(cart)) return cart;
+      }
+    } catch {
+      // fall through to ellipsoid pick
+    }
     try {
       return this.viewer.camera.pickEllipsoid(
         screenPosition,
-        this.viewer.scene?.globe?.ellipsoid
+        scene?.globe?.ellipsoid
       ) ?? null;
     } catch {
       return null;

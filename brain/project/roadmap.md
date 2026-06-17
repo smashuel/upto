@@ -101,9 +101,10 @@ Snapshot of what's **shipped**, **in-progress**, and **planned** across the Upto
 ### Map performance & polish (see [plans/compass_artifact.md](../plans/compass_artifact.md))
 - [x] **Device-tier performance preset** — [MapPerformance.ts](../../src/services/MapPerformance.ts); desktop keeps crisp settings, mobile relaxes resolution/SSE/MSAA/atmosphere for FPS. Shipped 2026-06-17.
 - [x] **Optional note content + de-cluttered location step** — notes no longer require a comment; removed the messy w3w banner + Primary/Parking/Exit cards. 2026-06-17. See [journal/2026-06-17-map-runthrough-issues.md](../journal/2026-06-17-map-runthrough-issues.md).
-- [ ] **Terrain-accurate picking** — `pickEllipsoid` → `scene.pickPosition` + `sampleTerrainMostDetailed`. **Highest safety value: fixes elevation reading 0 AND the 3D draw-offset.** From the run-through.
-- [ ] **`requestRenderMode`** — biggest CPU/battery win; turnkey, call-sites mapped in the plan.
-- [ ] **TripLink route overview on view pages** — render the planned route + last check-in on ActiveTrip & PublicAdventureView (needs route persistence). From the run-through.
+- [ ] **Terrain-accurate picking** — `pickEllipsoid` → `scene.pickPosition` + `sampleTerrainMostDetailed`. **Highest safety value: fixes elevation reading 0 AND the 3D draw-offset.** From the run-through. **(Stream 1 — in progress.)**
+- [ ] **TripLink route overview on view pages** — read-only map on ActiveTrip & PublicAdventureView showing the planned route highlighted + **last check-in location** pin (needs route persistence into TripLink JSONB). From the run-through. **(Stream 1 — "item A".)**
+- [ ] **`requestRenderMode`** — biggest CPU/battery win; turnkey, call-sites mapped in the plan. **(Stream 1.)**
+- [ ] **🔭 Live location on the TripLink map (item B) — wants exploring** — stream the traveller's *current* GPS position to watchers in real time on the TripLink map: background geolocation → a position channel over SSE → a live marker that moves. Distinct from the shipped "last check-in location" (a static pin) and from "item A" (the planned route). **Big:** needs a PWA/mobile shell for reliable iOS background location, battery-aware sampling, and a privacy model (share with-trip / owner-only / off). User explicitly wants to explore this. Overlaps the live-GPS bet in [features/squad-social-vision.md](../features/squad-social-vision.md) — when picked up, scope it as its own plan.
 - [ ] **Note-mode shouldn't drop an in-progress route** — auto-finish on mode switch. From the run-through.
 - [ ] **npm Cesium bundle + official TS types** — kills the all-`any` map surface; isolated PR.
 - [ ] **Valhalla + Meili routing** — real OSM trail snapping, replaces DOC-only ad-hoc snap. Own project.

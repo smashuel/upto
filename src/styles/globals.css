@@ -769,7 +769,12 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   backdrop-filter: blur(12px);
   border-radius: 10px;
   padding: 12px;
-  min-width: 180px;
+  /* Fixed width stops the panel jumping as sections with different thumb counts
+     render; max-height + scroll keeps it inside short embedded maps (e.g. the
+     320px read-only route map) instead of being clipped by the viewport. */
+  width: 212px;
+  max-height: min(72vh, 300px);
+  overflow-y: auto;
   box-shadow: 0 4px 16px rgba(0,0,0,0.18);
   margin-top: 4px;
 }

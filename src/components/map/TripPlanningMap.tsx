@@ -374,6 +374,9 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   /** "Last check-in" pin entity (view pages) */
   const checkInMarkerRef = useRef<any>(null);
   const flyoverRef = useRef<any>(null);
+  // True while a flyover is animating — suppresses the viewport basemap
+  // auto-switch so the forced 3D-satellite view sticks for the whole flyover.
+  const flyoverActiveRef = useRef(false);
   const [flyoverRunning, setFlyoverRunning] = useState(false);
   const [hasFinishedRoute, setHasFinishedRoute] = useState<boolean>(
     () => (initialRoutes?.length ?? 0) > 0,
@@ -732,6 +735,8 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     const recompute = () => {
+      // Don't fight the forced satellite view during a flyover.
+      if (flyoverActiveRef.current) return;
       const carto = viewer.camera.positionCartographic;
       if (!carto) return;
       const lat = Cesium.Math.toDegrees(carto.latitude);
@@ -904,14 +909,35 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
     }
     const positions = trackDrawerRef.current?.getLatestTrackPositions();
     if (!positions || positions.length < 2) return;
-    // Flyover only makes sense in 3D — morph if needed before starting
+
+    // Flyover looks best as 3D satellite (topo tiles distort draped on terrain).
+    // Remember the working view, force 3D + satellite, and restore on stop.
+    const prevLayer = mapLayer;
+    const prevScene = sceneMode;
+    flyoverActiveRef.current = true; // suppress auto basemap switch during the flight
+
+    if (mapLayer !== 'satellite') {
+      applyBasemap(viewerRef.current, window.Cesium, 'satellite');
+      setMapLayer('satellite');
+    }
     if (sceneMode !== '3d') {
       await handleSceneModeChange('3d');
     }
+
     const started = flyover.start(positions, {
-      onStop: () => setFlyoverRunning(false),
+      onStop: () => {
+        flyoverActiveRef.current = false;
+        // Restore the working view the user had before the flyover.
+        if (prevScene !== '3d') handleSceneModeChange(prevScene);
+        if (prevLayer !== 'satellite') {
+          applyBasemap(viewerRef.current, window.Cesium, prevLayer);
+          setMapLayer(prevLayer);
+        }
+        setFlyoverRunning(false);
+      },
     });
     if (started) setFlyoverRunning(true);
+    else flyoverActiveRef.current = false; // start failed — drop the suppression
   };
 
   // ── Elevation profile ↔ map sync ──────────────────────────────────────────

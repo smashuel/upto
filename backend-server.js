@@ -275,6 +275,40 @@ async function requireAuth(req, res, next) {
   }
 }
 
+// ── Per-share-token rate limiter (capability endpoints) ───────────────────────
+// The TripLink lifecycle endpoints (/start, /checkin, /complete) are guarded by
+// the share_token capability, not a session — so a leaked token could be hammered
+// to grief a trip (spam check-ins, flip status). This fixed-window limiter caps
+// requests per token. Single PM2 process, so an in-memory Map is sufficient.
+const rateBuckets = new Map(); // token -> { count, resetAt }
+
+function rateLimitByToken(maxRequests = 10, windowMs = 10_000) {
+  return (req, res, next) => {
+    const token = req.params.token;
+    if (!token) return next();
+    const now = Date.now();
+    let bucket = rateBuckets.get(token);
+    if (!bucket || now >= bucket.resetAt) {
+      bucket = { count: 0, resetAt: now + windowMs };
+      rateBuckets.set(token, bucket);
+    }
+    bucket.count++;
+    if (bucket.count > maxRequests) {
+      res.set('Retry-After', String(Math.ceil((bucket.resetAt - now) / 1000)));
+      return res.status(429).json({ error: 'Too many requests — slow down and try again shortly.' });
+    }
+    next();
+  };
+}
+
+// Periodically drop expired buckets so the Map can't grow unbounded.
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, bucket] of rateBuckets) {
+    if (now >= bucket.resetAt) rateBuckets.delete(token);
+  }
+}, 60_000).unref?.();
+
 // ── Auth endpoints ────────────────────────────────────────────────────────────
 
 // POST /api/auth/register
@@ -392,7 +426,8 @@ app.get('/api/auth/google/callback', async (req, res) => {
     const tokens = await tokenRes.json();
 
     if (!tokens.access_token) {
-      console.error('Google token exchange failed:', tokens);
+      // Don't log token material — surface only the provider error code.
+      console.error('Google token exchange failed:', tokens.error || 'unknown_error');
       return res.redirect(`${origin}/login?error=google_failed`);
     }
 
@@ -845,24 +880,25 @@ app.get('/api/triplinks/:token', async (req, res) => {
 // the embedded contact snapshot in `data.emergencyContacts` is REPLACED before
 // notifyTripStart runs. This is how the post-create Recipient Picker hands
 // over the final selection: contacts come in via the body, not the wizard.
-app.patch('/api/triplinks/:token/start', async (req, res) => {
+app.patch('/api/triplinks/:token/start', rateLimitByToken(), async (req, res) => {
   try {
     const { token } = req.params;
     const incomingContacts = Array.isArray(req.body?.emergencyContacts) ? req.body.emergencyContacts : null;
 
-    // Conditional update: replace emergencyContacts inside the JSONB only when provided.
-    // Wrapped in a CTE so we can join `users` for the creator's name (used to
-    // personalise the watcher notification) in a single round-trip.
+    // Idempotent: only transition (and notify) when the trip is still 'planned'.
+    // A second /start call therefore won't re-dispatch watcher notifications.
+    // Conditional update also replaces emergencyContacts in the JSONB when provided.
+    // Wrapped in a CTE so we can join `users` for the creator's name in one round-trip.
     const updateCte = incomingContacts
       ? `UPDATE triplinks
          SET status = 'active',
              started_at = NOW(),
              data = jsonb_set(data, '{emergencyContacts}', $2::jsonb)
-         WHERE share_token = $1
+         WHERE share_token = $1 AND status = 'planned'
          RETURNING id, data, expected_return_time, user_id`
       : `UPDATE triplinks
          SET status = 'active', started_at = NOW()
-         WHERE share_token = $1
+         WHERE share_token = $1 AND status = 'planned'
          RETURNING id, data, expected_return_time, user_id`;
     const updateSql = `WITH updated AS (${updateCte})
       SELECT updated.id, updated.data, updated.expected_return_time, u.name AS creator_name
@@ -873,7 +909,15 @@ app.patch('/api/triplinks/:token/start', async (req, res) => {
       : [token];
 
     const { rows } = await db.query(updateSql, params);
-    if (rows.length === 0) return res.status(404).json({ error: 'TripLink not found' });
+    if (rows.length === 0) {
+      // Either the trip doesn't exist, or it's already started. Distinguish so a
+      // double-tap returns 200 silently rather than a misleading 404.
+      const { rows: exists } = await db.query(
+        `SELECT 1 FROM triplinks WHERE share_token = $1`, [token]
+      );
+      if (exists.length === 0) return res.status(404).json({ error: 'TripLink not found' });
+      return res.json({ ok: true, alreadyStarted: true, notified: [], skipped: [] });
+    }
 
     broadcast(token, 'status', { status: 'active', startedAt: new Date().toISOString() });
 
@@ -900,7 +944,7 @@ app.patch('/api/triplinks/:token/start', async (req, res) => {
 });
 
 // POST /api/triplinks/:token/checkin — creator submits a check-in
-app.post('/api/triplinks/:token/checkin', async (req, res) => {
+app.post('/api/triplinks/:token/checkin', rateLimitByToken(), async (req, res) => {
   try {
     const { token } = req.params;
     const { message, locationW3w, lat, lng } = req.body || {};
@@ -939,15 +983,23 @@ app.post('/api/triplinks/:token/checkin', async (req, res) => {
 });
 
 // PATCH /api/triplinks/:token/complete — creator marks trip complete
-app.patch('/api/triplinks/:token/complete', async (req, res) => {
+app.patch('/api/triplinks/:token/complete', rateLimitByToken(), async (req, res) => {
   try {
     const { token } = req.params;
+    // Idempotent: only transition + broadcast on an actual change. A second
+    // /complete call returns 200 silently without re-broadcasting.
     const { rows } = await db.query(
       `UPDATE triplinks SET status = 'completed'
-       WHERE share_token = $1 RETURNING id`,
+       WHERE share_token = $1 AND status != 'completed' RETURNING id`,
       [token]
     );
-    if (rows.length === 0) return res.status(404).json({ error: 'TripLink not found' });
+    if (rows.length === 0) {
+      const { rows: exists } = await db.query(
+        `SELECT 1 FROM triplinks WHERE share_token = $1`, [token]
+      );
+      if (exists.length === 0) return res.status(404).json({ error: 'TripLink not found' });
+      return res.json({ ok: true, alreadyCompleted: true });
+    }
     broadcast(token, 'status', { status: 'completed', completedAt: new Date().toISOString() });
     res.json({ ok: true });
   } catch (err) {

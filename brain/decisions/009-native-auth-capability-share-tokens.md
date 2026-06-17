@@ -44,11 +44,12 @@ Share_tokens are already `crypto.randomUUID()` (122 bits). Good enough as URL ca
 - The plaintext DB password fallback at [backend-server.js:13](../../backend-server.js#L13) is gone; `DATABASE_URL` is now required. The password still needs rotating separately on the Linode host — the old value is in git history.
 - `api.createTripLink` now takes a `sessionToken` arg. Callers that can't produce one (anonymous flow) are rejected at the UI layer with a redirect to `/login`.
 - Frontend [CreateAdventure.tsx](../../src/pages/CreateAdventure.tsx) refuses to submit without a session — this is a UX behaviour change that will affect anyone who previously created TripLinks without signing up. They had no way to retrieve them anyway (no account to attach to), so the functional loss is marginal.
-- Capability-guarded endpoints (`/start`, `/checkin`, `/complete`) are vulnerable to **griefing** if a share_token leaks. Mitigations to add when needed:
-  - Per-token rate limit (1 req/sec)
-  - Idempotency: a second `complete` call is a no-op, a second `start` returns 200 silently
-  - `share_token` never logged
-  - Audit trail on state transitions (who hit the endpoint from which IP)
+- Capability-guarded endpoints (`/start`, `/checkin`, `/complete`) are vulnerable to **griefing** if a share_token leaks. Mitigations — **implemented 2026-06-18** (see [backend-server.js](../../backend-server.js)):
+  - ✅ Per-token rate limit — `rateLimitByToken()` middleware, fixed-window (10 req / 10 s) shared across the three endpoints per token, in-memory (single PM2 process), with periodic bucket cleanup. Returns `429 + Retry-After`.
+  - ✅ Idempotency — `/start` only transitions + notifies when `status = 'planned'` (2nd call → `{ alreadyStarted: true }`, no watcher re-notify); `/complete` only transitions + broadcasts when not already completed (2nd call → `{ alreadyCompleted: true }`). Both still 404 for unknown tokens.
+  - ✅ `share_token` never logged — verified by audit; also redacted an OAuth token dump in the Google callback as a bonus.
+  - ⬜ Still open: audit trail on state transitions (who hit the endpoint from which IP). Lower priority; revisit if real griefing appears.
+  - All four behaviours smoke-tested on prod (idempotent 1st/2nd calls, 429 after budget, 404 unknown).
 - Future social-sharing plan ([plans/social-triplink-sharing.md](../plans/social-triplink-sharing.md)) will need a distinction between *participants* (can check in) and *followers* (read-only). That's a Phase 2+ concern — the current capability model is strictly a stepping stone.
 
 ## Reconsider if

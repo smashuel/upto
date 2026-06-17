@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Alert, Spinner, Badge } from 'react-bootstrap';
 import { useFormContext } from 'react-hook-form';
-import { MapPin, Navigation, CheckCircle, Globe, Info, AlertTriangle, Route, TrendingUp } from 'lucide-react';
+import { Navigation, Globe, Info, Route, TrendingUp } from 'lucide-react';
 import type { SerializableTrack } from '../../services/TrackDrawer';
-import { Input, Card, Button } from '../ui';
+import { Card, Button } from '../ui';
 import { TripPlanningMap } from '../map/TripPlanningMap';
-import { What3wordsInput } from '../what3words/What3wordsInput';
-import { LocationDisplay } from '../what3words/LocationDisplay';
 import { What3WordsLocation } from '../../types/what3words';
 import { GlobalTrailService, TrailSuggestion } from '../../services/GlobalTrailService';
 
@@ -14,10 +12,8 @@ import { GlobalTrailService, TrailSuggestion } from '../../services/GlobalTrailS
 const trailService = new GlobalTrailService();
 
 export const TripLinkLocationStep: React.FC = () => {
-  const { register, setValue, watch } = useFormContext();
+  const { setValue, watch } = useFormContext();
   const [primaryLocation, setPrimaryLocation] = useState<What3WordsLocation | null>(null);
-  const [parkingLocation, setParkingLocation] = useState<What3WordsLocation | null>(null);
-  const [emergencyExitLocation, setEmergencyExitLocation] = useState<What3WordsLocation | null>(null);
 
   // Route suggestion state
   const [routeSuggestions, setRouteSuggestions] = useState<TrailSuggestion[]>([]);
@@ -73,7 +69,7 @@ export const TripLinkLocationStep: React.FC = () => {
         coordinates: { lat, lng },
         nearestPlace: suggestion.location.name
       };
-      handleLocationUpdate('primary', location);
+      handleLocationUpdate(location);
     }
     
     // Set route metadata if available
@@ -86,29 +82,17 @@ export const TripLinkLocationStep: React.FC = () => {
     }
   };
 
-  const handleLocationUpdate = (locationType: 'primary' | 'parking' | 'emergency', location: What3WordsLocation | null) => {
-    switch (locationType) {
-      case 'primary':
-        setPrimaryLocation(location);
-        if (location) {
-          setValue('location.what3wordsDetails', location);
-          setValue('location.what3words', location.words);
-          setValue('location.coordinates', [location.coordinates.lat, location.coordinates.lng]);
-          if (!watch('location.name')) {
-            const lat = location.coordinates?.lat;
-            const lng = location.coordinates?.lng;
-            setValue('location.name', location.nearestPlace || (lat != null && lng != null ? `${lat.toFixed(6)}, ${lng.toFixed(6)}` : ''));
-          }
-        }
-        break;
-      case 'parking':
-        setParkingLocation(location);
-        setValue('parkingLocation', location);
-        break;
-      case 'emergency':
-        setEmergencyExitLocation(location);
-        setValue('emergencyExitLocation', location);
-        break;
+  const handleLocationUpdate = (location: What3WordsLocation | null) => {
+    setPrimaryLocation(location);
+    if (location) {
+      setValue('location.what3wordsDetails', location);
+      setValue('location.what3words', location.words);
+      setValue('location.coordinates', [location.coordinates.lat, location.coordinates.lng]);
+      if (!watch('location.name')) {
+        const lat = location.coordinates?.lat;
+        const lng = location.coordinates?.lng;
+        setValue('location.name', location.nearestPlace || (lat != null && lng != null ? `${lat.toFixed(6)}, ${lng.toFixed(6)}` : ''));
+      }
     }
   };
 
@@ -154,38 +138,24 @@ export const TripLinkLocationStep: React.FC = () => {
                   // If no primary location yet, use the first waypoint of the drawn route
                   if (!primaryLocation && track.waypoints.length > 0) {
                     const [lat, lng] = track.waypoints[0].coordinates;
-                    handleLocationUpdate('primary', { coordinates: { lat, lng } });
+                    handleLocationUpdate({ coordinates: { lat, lng } });
                   }
                 }}
                 onWaypointAdded={(waypoint) => {
                   const location: What3WordsLocation = {
                     coordinates: { lat: waypoint.lat, lng: waypoint.lng },
                   };
-                  handleLocationUpdate('primary', location);
+                  handleLocationUpdate(location);
                 }}
-                initialWaypoints={[
-                  ...(primaryLocation ? [{
+                initialWaypoints={
+                  primaryLocation ? [{
                     id: 'primary',
                     lat: primaryLocation.coordinates.lat,
                     lng: primaryLocation.coordinates.lng,
                     name: 'Primary Location',
                     description: primaryLocation.words ? `///${primaryLocation.words}` : 'Primary trip location'
-                  }] : []),
-                  ...(parkingLocation ? [{
-                    id: 'parking',
-                    lat: parkingLocation.coordinates.lat,
-                    lng: parkingLocation.coordinates.lng,
-                    name: 'Parking',
-                    description: parkingLocation.words ? `///${parkingLocation.words}` : 'Parking location'
-                  }] : []),
-                  ...(emergencyExitLocation ? [{
-                    id: 'emergency',
-                    lat: emergencyExitLocation.coordinates.lat,
-                    lng: emergencyExitLocation.coordinates.lng,
-                    name: 'Emergency Exit',
-                    description: emergencyExitLocation.words ? `///${emergencyExitLocation.words}` : 'Emergency access point'
-                  }] : [])
-                ]}
+                  }] : []
+                }
               />
 
               {/* Route info is shown via the map's own .map-selected-trail chip */}
@@ -289,137 +259,6 @@ export const TripLinkLocationStep: React.FC = () => {
         </Row>
       )}
 
-      {/* What3words info banner */}
-      <Alert variant="info" className="mb-4">
-        <div className="d-flex align-items-start">
-          <Globe size={20} className="me-3 mt-1 text-info" />
-          <div>
-            <strong>What is what3words?</strong>
-            <p className="mb-2 small">
-              what3words divides the world into 3x3 meter squares and assigns each a unique 3-word address. 
-              This makes it easy to share exact locations with emergency services and contacts.
-            </p>
-            <div className="small text-muted">
-              Example: <code>///filled.count.soap</code> identifies a precise 3x3m location
-            </div>
-          </div>
-        </div>
-      </Alert>
-
-      {/* Primary Trip Location */}
-      <Row className="mb-4">
-        <Col>
-          <Card variant="step">
-            <h5 className="h6 mb-3">
-              <MapPin className="me-2 text-primary" size={20} />
-              Primary Trip Location
-            </h5>
-            
-            <Row>
-              <Col md={6}>
-                <Input
-                  label="Location Name"
-                  placeholder="e.g., Mount Washington Summit Trail"
-                  {...register('location.name', { 
-                    required: 'Location name is required',
-                    minLength: { value: 3, message: 'Location name must be at least 3 characters' }
-                  })}
-                  helperText="Give your trip location a descriptive name"
-                />
-              </Col>
-              <Col md={6}>
-                <What3wordsInput
-                  label="Precise Location"
-                  placeholder="Enter coordinates or what3words address"
-                  value={primaryLocation}
-                  onChange={(location) => handleLocationUpdate('primary', location)}
-                  required={true}
-                  helpText="Main location where your trip takes place"
-                  showCurrentLocation={true}
-                />
-              </Col>
-            </Row>
-
-            {primaryLocation && (
-              <div className="mt-3">
-                <LocationDisplay
-                  location={primaryLocation}
-                  showBothFormats={true}
-                  size="sm"
-                  showMapLink={true}
-                  showCopyButtons={true}
-                />
-              </div>
-            )}
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Key Safety Locations */}
-      <Row className="mb-4">
-        <Col md={6}>
-          <Card variant="step">
-            <h5 className="h6 mb-3">
-              <Navigation className="me-2 text-success" size={20} />
-              Parking / Access Point
-            </h5>
-            
-            <What3wordsInput
-              label="Where you'll park or access the trail"
-              placeholder="Parking coordinates or what3words"
-              value={parkingLocation}
-              onChange={(location) => handleLocationUpdate('parking', location)}
-              helpText="Where your vehicle will be located - important for emergency services"
-              showCurrentLocation={true}
-            />
-
-            {parkingLocation && (
-              <div className="mt-3">
-                <LocationDisplay
-                  location={parkingLocation}
-                  title="Parking Location"
-                  showBothFormats={false}
-                  size="sm"
-                  showMapLink={true}
-                  showCopyButtons={true}
-                />
-              </div>
-            )}
-          </Card>
-        </Col>
-
-        <Col md={6}>
-          <Card variant="step">
-            <h5 className="h6 mb-3">
-              <AlertTriangle className="me-2 text-warning" size={20} />
-              Emergency Exit Point
-            </h5>
-            
-            <What3wordsInput
-              label="Nearest emergency exit or evacuation point"
-              placeholder="Emergency access coordinates"
-              value={emergencyExitLocation}
-              onChange={(location) => handleLocationUpdate('emergency', location)}
-              helpText="Closest point where emergency services can reach you"
-              showCurrentLocation={false}
-            />
-
-            {emergencyExitLocation && (
-              <div className="mt-3">
-                <LocationDisplay
-                  location={emergencyExitLocation}
-                  title="Emergency Access"
-                  showBothFormats={false}
-                  size="sm"
-                  showMapLink={true}
-                  showCopyButtons={true}
-                />
-              </div>
-            )}
-          </Card>
-        </Col>
-      </Row>
-
       {/* Collapsible Route Details */}
       <Row className="mb-4">
         <Col>
@@ -466,27 +305,6 @@ export const TripLinkLocationStep: React.FC = () => {
               )}
             </details>
           </Card>
-        </Col>
-      </Row>
-
-      {/* Safety Tips */}
-      <Row>
-        <Col>
-          <Alert variant="success">
-            <div className="d-flex align-items-start">
-              <CheckCircle size={20} className="me-3 mt-1 text-success" />
-              <div>
-                <strong>Emergency Location Best Practices:</strong>
-                <ul className="mt-2 mb-0 small">
-                  <li><strong>Share what3words addresses</strong> with your emergency contacts - they're more precise than regular addresses</li>
-                  <li><strong>Save key locations</strong> like parking and emergency exits for quick access during emergencies</li>
-                  <li><strong>Test pronunciation</strong> of what3words addresses - practice saying them clearly</li>
-                  <li><strong>Screenshot locations</strong> in case you lose cellular data during your trip</li>
-                  <li><strong>Inform emergency services</strong> that you use what3words - most now support it</li>
-                </ul>
-              </div>
-            </div>
-          </Alert>
         </Col>
       </Row>
     </div>

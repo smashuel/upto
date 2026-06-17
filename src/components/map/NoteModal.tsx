@@ -24,7 +24,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ open, onSubmit, onCancel }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim()) return;
+    // Content is optional — a marker (e.g. a camp spot) often needs only a title + type.
     onSubmit({ content: content.trim(), title: title.trim() || 'Map Note', type });
     setTitle('');
     setContent('');
@@ -56,15 +56,14 @@ const NoteModal: React.FC<NoteModalProps> = ({ open, onSubmit, onCancel }) => {
             />
           </div>
           <div className="note-modal-field">
-            <label className="note-modal-label" htmlFor="note-content">Content</label>
+            <label className="note-modal-label" htmlFor="note-content">Note <span style={{ fontWeight: 400, color: 'var(--upto-text-muted)' }}>(optional)</span></label>
             <textarea
               id="note-content"
               className="note-modal-input note-modal-textarea"
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder="What do you want to note here?"
+              placeholder="e.g. flat, sheltered camp spot — or leave blank"
               rows={3}
-              required
             />
           </div>
           <div className="note-modal-field">
@@ -88,7 +87,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ open, onSubmit, onCancel }) => {
             <button type="button" className="note-modal-btn note-modal-btn-cancel" onClick={handleCancel}>
               Cancel
             </button>
-            <button type="submit" className="note-modal-btn note-modal-btn-submit" disabled={!content.trim()}>
+            <button type="submit" className="note-modal-btn note-modal-btn-submit">
               Add Note
             </button>
           </div>

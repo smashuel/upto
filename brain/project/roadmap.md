@@ -100,8 +100,11 @@ Snapshot of what's **shipped**, **in-progress**, and **planned** across the Upto
 
 ### Map performance & polish (see [plans/compass_artifact.md](../plans/compass_artifact.md))
 - [x] **Device-tier performance preset** — [MapPerformance.ts](../../src/services/MapPerformance.ts); desktop keeps crisp settings, mobile relaxes resolution/SSE/MSAA/atmosphere for FPS. Shipped 2026-06-17.
-- [ ] **`requestRenderMode`** — biggest CPU/battery win; turnkey, call-sites mapped in the plan. Next.
-- [ ] **Terrain-accurate picking** — `pickEllipsoid` → real terrain height, so elevation gain/profile reflect actual terrain (safety value). Audit finding.
+- [x] **Optional note content + de-cluttered location step** — notes no longer require a comment; removed the messy w3w banner + Primary/Parking/Exit cards. 2026-06-17. See [journal/2026-06-17-map-runthrough-issues.md](../journal/2026-06-17-map-runthrough-issues.md).
+- [ ] **Terrain-accurate picking** — `pickEllipsoid` → `scene.pickPosition` + `sampleTerrainMostDetailed`. **Highest safety value: fixes elevation reading 0 AND the 3D draw-offset.** From the run-through.
+- [ ] **`requestRenderMode`** — biggest CPU/battery win; turnkey, call-sites mapped in the plan.
+- [ ] **TripLink route overview on view pages** — render the planned route + last check-in on ActiveTrip & PublicAdventureView (needs route persistence). From the run-through.
+- [ ] **Note-mode shouldn't drop an in-progress route** — auto-finish on mode switch. From the run-through.
 - [ ] **npm Cesium bundle + official TS types** — kills the all-`any` map surface; isolated PR.
 - [ ] **Valhalla + Meili routing** — real OSM trail snapping, replaces DOC-only ad-hoc snap. Own project.
 - [ ] **PWA offline tile cache** — pre-download a region before a trip. Own project.

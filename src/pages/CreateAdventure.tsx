@@ -13,7 +13,7 @@ import { RecipientPicker, type PickedContact } from '../components/forms/Recipie
 import { GuidePaceEstimator } from '../components/guidepace/GuidePaceEstimator';
 import { api } from '../config/api';
 import { useAuth } from '../hooks/useAuth';
-import type { TripLink, ActivityType, LatLng } from '../types/adventure';
+import type { TripLink, ActivityType, LatLng, TripRoute } from '../types/adventure';
 import type { What3WordsLocation } from '../types/what3words';
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -31,6 +31,7 @@ export interface TripLinkFormData {
     what3wordsDetails?: What3WordsLocation;
   };
   waypoints: Array<{ name: string; coordinates: LatLng; elevation?: number }>;
+  routes?: TripRoute[];
   emergencyContacts: Array<{
     id: string;
     name: string;
@@ -210,6 +211,7 @@ export const CreateTripLink: React.FC = () => {
           what3wordsDetails: data.location.what3wordsDetails,
         },
         waypoints: data.waypoints,
+        routes: data.routes || [],
         emergencyContacts: data.emergencyContacts,
         shareToken: token,
         status: 'planned',

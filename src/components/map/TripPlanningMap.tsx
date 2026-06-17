@@ -43,6 +43,10 @@ interface TripPlanningMapProps {
   preselectedTrail?: { id: string; name: string; geometry: LatLng[] };
   /** If no preselect, fly to the user's geolocation and auto-enable the trail discovery layer */
   fallbackToCurrentLocation?: boolean;
+  /** View-only mode for TripLink overview pages: hides all editing chrome (mode selector,
+   *  route/note tools, edit, export) and disables drawing. Keeps layers, fullscreen,
+   *  locate/reset and flyover so a watcher can still explore the planned route. */
+  readOnly?: boolean;
 }
 
 interface MapMode {
@@ -302,6 +306,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   initialMode = '3d-satellite',
   preselectedTrail,
   fallbackToCurrentLocation = false,
+  readOnly = false,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -1114,6 +1119,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         )}
 
         {/* ── TOP-LEFT: Mode selector (vertical pill bar) ─────────────── */}
+        {!readOnly && (
         <div className="map-overlay map-overlay-tl">
           {([
             { mode: 'view' as const, icon: <Eye size={18} />, label: 'View' },
@@ -1132,6 +1138,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
             </button>
           ))}
         </div>
+        )}
 
         {/* ── TOP-RIGHT: Layers + Fullscreen ──────────────────────────── */}
         <div className="map-overlay map-overlay-tr">
@@ -1314,18 +1321,20 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
               {flyoverRunning ? <Square size={18} /> : <Play size={18} />}
             </button>
           )}
-          {!drawingStats?.editing && (
+          {!readOnly && !drawingStats?.editing && (
             <button type="button" className="map-btn" onClick={handleEditRoute} title="Edit route (drag points)">
               <Pencil size={18} />
             </button>
           )}
-          <button type="button" className="map-btn" onClick={exportData} title="Export data">
-            <Download size={18} />
-          </button>
+          {!readOnly && (
+            <button type="button" className="map-btn" onClick={exportData} title="Export data">
+              <Download size={18} />
+            </button>
+          )}
         </div>
 
         {/* ── BOTTOM-CENTER: Route drawing controls ───────────────────── */}
-        {mapMode.type === 'route' && mapMode.active && (
+        {!readOnly && mapMode.type === 'route' && mapMode.active && (
           <div className="map-overlay map-overlay-bc">
             <div className="map-route-controls">
               <button

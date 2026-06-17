@@ -17,6 +17,24 @@ export interface CheckIn {
   timestamp: string;       // ISO 8601
   message?: string;
   locationW3w?: string;    // what3words address at check-in time
+  lat?: number;            // check-in coordinates, when the device shared location
+  lng?: number;
+}
+
+// A drawn route persisted on the TripLink. Structurally matches TrackDrawer's
+// SerializableTrack (kept here so types don't depend on the services layer).
+export interface TripRoute {
+  id: string;
+  name: string;
+  waypoints: Array<{ coordinates: LatLng; elevation: number }>;
+  metadata: {
+    distance: number;
+    elevationGain: number;
+    elevationLoss: number;
+    difficulty?: string;
+    activityType: string;
+    created: string;
+  };
 }
 
 export interface TripLink {
@@ -34,6 +52,7 @@ export interface TripLink {
     what3wordsDetails?: What3WordsLocation;
   };
   waypoints: TripWaypoint[];
+  routes?: TripRoute[];    // drawn routes — rendered read-only on the view pages
   emergencyContacts: Contact[];
   shareToken: string;
   status: 'planned' | 'active' | 'completed' | 'overdue';

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Phone, Mail, Shield, MapPin, Clock, Calendar, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { api } from '../config/api';
+import { TripPlanningMap } from '../components/map/TripPlanningMap';
 import type { TripLink, Contact } from '../types/adventure';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -121,6 +122,14 @@ export const PublicAdventureView: React.FC = () => {
   const primaryContact = tripLink.emergencyContacts?.find((c: Contact) => c.isPrimary) ?? tripLink.emergencyContacts?.[0];
   const isOverdue = tripLink.status === 'overdue';
 
+  // Read-only route map: centre on the first route point, else the trip location.
+  const routeCenter: [number, number] | undefined =
+    tripLink.routes?.[0]?.waypoints?.[0]?.coordinates ??
+    (tripLink.location?.coordinates && tripLink.location.coordinates[0] !== 0
+      ? tripLink.location.coordinates
+      : undefined);
+  const hasRoute = (tripLink.routes?.length ?? 0) > 0;
+
   return (
     <div className="public-view-page">
       {/* Full-page backdrop — tints red when overdue */}
@@ -222,6 +231,22 @@ export const PublicAdventureView: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* ── Planned route map ── */}
+            {(hasRoute || routeCenter) && (
+              <div className="public-view-section">
+                <h2 className="public-view-section-title">Planned route</h2>
+                <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--upto-border, rgba(0,0,0,0.1))' }}>
+                  <TripPlanningMap
+                    readOnly
+                    height="300px"
+                    initialMode="2d-topo"
+                    center={routeCenter}
+                    initialRoutes={tripLink.routes ?? []}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* ── Description ── */}
             {tripLink.description && (

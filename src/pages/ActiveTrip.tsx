@@ -4,6 +4,7 @@ import { Check, MapPin, Clock, Share2, Copy, CheckCircle2, Shield, MessageSquare
 import toast from 'react-hot-toast';
 import { api } from '../config/api';
 import { what3wordsService } from '../services/what3words';
+import { TripPlanningMap } from '../components/map/TripPlanningMap';
 import type { TripLink } from '../types/adventure';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -290,6 +291,14 @@ export const ActiveTrip: React.FC = () => {
   }
 
   // ── Active / overdue state ─────────────────────────────────────────────────
+  // Read-only route map: centre on the first route point, else the trip location.
+  const routeCenter: [number, number] | undefined =
+    tripLink?.routes?.[0]?.waypoints?.[0]?.coordinates ??
+    (tripLink?.location?.coordinates && tripLink.location.coordinates[0] !== 0
+      ? tripLink.location.coordinates
+      : undefined);
+  const hasRoute = (tripLink?.routes?.length ?? 0) > 0;
+
   // Timing
   const startedAt = tripLink?.startedAt ? new Date(tripLink.startedAt) : null;
   const expectedReturn = tripLink?.expectedReturnTime ? new Date(tripLink.expectedReturnTime) : null;
@@ -313,6 +322,19 @@ export const ActiveTrip: React.FC = () => {
             </span>
           )}
         </div>
+
+        {/* ── Route overview map ── */}
+        {(hasRoute || routeCenter) && (
+          <div style={{ marginBottom: 24, borderRadius: 12, overflow: 'hidden', border: '1.5px solid var(--upto-border)' }}>
+            <TripPlanningMap
+              readOnly
+              height="320px"
+              initialMode="2d-topo"
+              center={routeCenter}
+              initialRoutes={tripLink?.routes ?? []}
+            />
+          </div>
+        )}
 
         {/* ── Overdue banner ── */}
         {isOverdue && (

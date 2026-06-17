@@ -70,7 +70,7 @@ export const PublicAdventureView: React.FC = () => {
             lastCheckIn: data.timestamp,
             status: prev.status === 'overdue' ? 'active' : prev.status,
             overdueSince: prev.status === 'overdue' ? undefined : prev.overdueSince,
-            checkIns: [{ timestamp: data.timestamp, message: data.message, locationW3w: data.locationW3w }, ...prev.checkIns],
+            checkIns: [{ timestamp: data.timestamp, message: data.message, locationW3w: data.locationW3w, lat: data.lat, lng: data.lng }, ...prev.checkIns],
           };
         });
       },
@@ -129,6 +129,10 @@ export const PublicAdventureView: React.FC = () => {
       ? tripLink.location.coordinates
       : undefined);
   const hasRoute = (tripLink.routes?.length ?? 0) > 0;
+  const lastCheckInCoords = (() => {
+    const ci = tripLink.checkIns?.find(c => c.lat != null && c.lng != null);
+    return ci ? { lat: ci.lat as number, lng: ci.lng as number } : null;
+  })();
 
   return (
     <div className="public-view-page">
@@ -241,8 +245,9 @@ export const PublicAdventureView: React.FC = () => {
                     readOnly
                     height="300px"
                     initialMode="2d-topo"
-                    center={routeCenter}
+                    center={lastCheckInCoords ? [lastCheckInCoords.lat, lastCheckInCoords.lng] : routeCenter}
                     initialRoutes={tripLink.routes ?? []}
+                    checkInMarker={lastCheckInCoords}
                   />
                 </div>
               </div>

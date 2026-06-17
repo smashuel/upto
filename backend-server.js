@@ -88,6 +88,11 @@ async function initDB() {
     await db.query(`
       ALTER TABLE contacts ADD COLUMN IF NOT EXISTS is_emergency BOOLEAN DEFAULT FALSE;
     `);
+    // Check-in coordinates — lets the view pages drop a "last check-in" pin on the map.
+    await db.query(`
+      ALTER TABLE check_ins ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION;
+      ALTER TABLE check_ins ADD COLUMN IF NOT EXISTS lng DOUBLE PRECISION;
+    `);
     console.log('Database schema ready');
   } catch (err) {
     console.error('DB init error:', err.message);
@@ -803,7 +808,9 @@ app.get('/api/triplinks/:token', async (req, res) => {
                   json_build_object(
                     'timestamp', c.checked_in_at,
                     'message',   c.message,
-                    'locationW3w', c.location_w3w
+                    'locationW3w', c.location_w3w,
+                    'lat', c.lat,
+                    'lng', c.lng
                   ) ORDER BY c.checked_in_at DESC
                 ) FILTER (WHERE c.id IS NOT NULL),
                 '[]'
@@ -896,7 +903,9 @@ app.patch('/api/triplinks/:token/start', async (req, res) => {
 app.post('/api/triplinks/:token/checkin', async (req, res) => {
   try {
     const { token } = req.params;
-    const { message, locationW3w } = req.body || {};
+    const { message, locationW3w, lat, lng } = req.body || {};
+    const numLat = Number.isFinite(lat) ? lat : null;
+    const numLng = Number.isFinite(lng) ? lng : null;
 
     const { rows } = await db.query(
       `SELECT id FROM triplinks WHERE share_token = $1`,
@@ -906,10 +915,10 @@ app.post('/api/triplinks/:token/checkin', async (req, res) => {
     const tripId = rows[0].id;
 
     const { rows: ciRows } = await db.query(
-      `INSERT INTO check_ins (trip_id, message, location_w3w)
-       VALUES ($1, $2, $3)
+      `INSERT INTO check_ins (trip_id, message, location_w3w, lat, lng)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING checked_in_at`,
-      [tripId, message || null, locationW3w || null]
+      [tripId, message || null, locationW3w || null, numLat, numLng]
     );
 
     const timestamp = ciRows[0].checked_in_at;
@@ -921,7 +930,7 @@ app.post('/api/triplinks/:token/checkin', async (req, res) => {
       [timestamp, tripId]
     );
 
-    broadcast(token, 'checkin', { timestamp, message: message || null, locationW3w: locationW3w || null });
+    broadcast(token, 'checkin', { timestamp, message: message || null, locationW3w: locationW3w || null, lat: numLat, lng: numLng });
     res.status(201).json({ ok: true, timestamp });
   } catch (err) {
     console.error('Check-in error:', err.message);

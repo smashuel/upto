@@ -201,7 +201,7 @@ export const api = {
     return response.json();
   },
 
-  async checkIn(shareToken: string, data: { message?: string; locationW3w?: string } = {}): Promise<{ timestamp: string }> {
+  async checkIn(shareToken: string, data: { message?: string; locationW3w?: string; lat?: number; lng?: number } = {}): Promise<{ timestamp: string }> {
     const response = await fetch(`${API_BASE_URL}/api/triplinks/${shareToken}/checkin`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

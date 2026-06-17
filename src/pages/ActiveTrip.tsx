@@ -36,6 +36,7 @@ const CheckInPanel: React.FC<CheckInPanelProps> = ({ shareToken, onCheckedIn }) 
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [locationW3w, setLocationW3w] = useState('');
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [fetchingLocation, setFetchingLocation] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -43,8 +44,10 @@ const CheckInPanel: React.FC<CheckInPanelProps> = ({ shareToken, onCheckedIn }) 
     setFetchingLocation(true);
     try {
       const result = await what3wordsService.getCurrentLocationWhat3Words();
-      if (result?.words) {
-        setLocationW3w(result.words);
+      if (result?.coordinates) {
+        // Capture coords for the map pin; w3w is a nice-to-have on top.
+        setCoords({ lat: result.coordinates.lat, lng: result.coordinates.lng });
+        if (result.words) setLocationW3w(result.words);
       } else {
         toast.error('Could not get location');
       }
@@ -61,11 +64,14 @@ const CheckInPanel: React.FC<CheckInPanelProps> = ({ shareToken, onCheckedIn }) 
       const result = await api.checkIn(shareToken, {
         message: message.trim() || undefined,
         locationW3w: locationW3w.trim() || undefined,
+        lat: coords?.lat,
+        lng: coords?.lng,
       });
       onCheckedIn(result.timestamp);
       setOpen(false);
       setMessage('');
       setLocationW3w('');
+      setCoords(null);
       toast.success("Checked in — your watchers can see you're safe");
     } catch {
       toast.error('Check-in failed — try again');
@@ -298,6 +304,11 @@ export const ActiveTrip: React.FC = () => {
       ? tripLink.location.coordinates
       : undefined);
   const hasRoute = (tripLink?.routes?.length ?? 0) > 0;
+  // Most recent check-in that shared coordinates → map pin.
+  const lastCheckInCoords = (() => {
+    const ci = tripLink?.checkIns?.find(c => c.lat != null && c.lng != null);
+    return ci ? { lat: ci.lat as number, lng: ci.lng as number } : null;
+  })();
 
   // Timing
   const startedAt = tripLink?.startedAt ? new Date(tripLink.startedAt) : null;
@@ -330,8 +341,9 @@ export const ActiveTrip: React.FC = () => {
               readOnly
               height="320px"
               initialMode="2d-topo"
-              center={routeCenter}
+              center={lastCheckInCoords ? [lastCheckInCoords.lat, lastCheckInCoords.lng] : routeCenter}
               initialRoutes={tripLink?.routes ?? []}
+              checkInMarker={lastCheckInCoords}
             />
           </div>
         )}

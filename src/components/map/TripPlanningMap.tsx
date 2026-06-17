@@ -47,6 +47,8 @@ interface TripPlanningMapProps {
    *  route/note tools, edit, export) and disables drawing. Keeps layers, fullscreen,
    *  locate/reset and flyover so a watcher can still explore the planned route. */
   readOnly?: boolean;
+  /** Drops a "last check-in" pin on the map (view pages). */
+  checkInMarker?: { lat: number; lng: number } | null;
 }
 
 interface MapMode {
@@ -307,6 +309,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   preselectedTrail,
   fallbackToCurrentLocation = false,
   readOnly = false,
+  checkInMarker = null,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -368,6 +371,8 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   const noteSubmitRef = useRef<((data: { content: string; title: string; type: MapNote['type'] }) => void) | null>(null);
   /** Pulsing dot entity shown on the map when hovering the elevation chart */
   const profileHighlightRef = useRef<any>(null);
+  /** "Last check-in" pin entity (view pages) */
+  const checkInMarkerRef = useRef<any>(null);
   const flyoverRef = useRef<any>(null);
   const [flyoverRunning, setFlyoverRunning] = useState(false);
   const [hasFinishedRoute, setHasFinishedRoute] = useState<boolean>(
@@ -938,6 +943,42 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
       },
     });
   }, []);
+
+  // ── Last check-in pin (view pages) ─────────────────────────────────────────
+  // Adds/updates/removes a distinct green pin at the most recent check-in location.
+  // Keyed on isLoading too so it runs once the viewer finishes initialising.
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || !cesiumReady) return;
+    const Cesium = window.Cesium;
+    if (checkInMarkerRef.current) {
+      viewer.entities.remove(checkInMarkerRef.current);
+      checkInMarkerRef.current = null;
+    }
+    if (!checkInMarker) return;
+    checkInMarkerRef.current = viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(checkInMarker.lng, checkInMarker.lat),
+      point: {
+        pixelSize: 13,
+        color: Cesium.Color.fromCssColorString('#16a34a'),
+        outlineColor: Cesium.Color.WHITE,
+        outlineWidth: 3,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text: 'Last check-in',
+        font: '600 11pt sans-serif',
+        pixelOffset: new Cesium.Cartesian2(0, -22),
+        fillColor: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.fromCssColorString('#14532d'),
+        outlineWidth: 3,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        scaleByDistance: new Cesium.NearFarScalar(1.5e2, 1.0, 1.5e7, 0.0),
+      },
+    });
+  }, [checkInMarker?.lat, checkInMarker?.lng, cesiumReady, isLoading]);
 
   // ── Keyboard shortcuts (Ctrl+Z / Ctrl+Shift+Z) ───────────────────────────
 

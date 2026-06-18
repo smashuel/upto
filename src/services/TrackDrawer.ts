@@ -456,6 +456,7 @@ export default class TrackDrawer extends CesiumManager {
     });
 
     if (this.slopeOverlayEnabled) this.addSlopeOverlay(track);
+    this.requestRender(); // paint loaded/finished routes under requestRenderMode
   }
 
   /** Dodgerblue core — full opacity normally, dimmed when slope overlay is active. */
@@ -505,6 +506,7 @@ export default class TrackDrawer extends CesiumManager {
       else this.removeSlopeOverlay(track);
       if (track.core) track.core.polyline.material = this.coreMaterial();
     }
+    this.requestRender();
     return this.slopeOverlayEnabled;
   }
 

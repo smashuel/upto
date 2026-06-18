@@ -31,7 +31,7 @@ tags: [map, cesium, performance, routing, offline, plan]
 | # | Item | Leverage | Risk / blocker | Status |
 |---|------|----------|----------------|--------|
 | 1 | Device-tier performance preset | High (mobile FPS) | Low — visual-only, desktop unchanged | ✅ **SHIPPED 2026-06-17** |
-| 2 | `requestRenderMode` (on-demand rendering) | **Highest** (CPU 25%→3%, battery) | Medium — subtle "controls don't update till camera moves"; needs device verification | Planned, turnkey (call-sites mapped below) |
+| 2 | `requestRenderMode` (on-demand rendering) | **Highest** (CPU 25%→3%, battery) | Medium — subtle "controls don't update till camera moves" | ✅ **SHIPPED 2026-06-18** |
 | 3 | npm-bundle Cesium + official TS types | Medium (kills the all-`any` surface) | Medium — build change can break asset loading; do as its own isolated PR | Planned |
 | 4 | Valhalla + Meili real trail routing/snapping | Medium-High (routing quality) | High — self-host infra; `TrailSnapService` is DOC-only ad-hoc today | Backlog (own project) |
 | 5 | PWA offline tile cache | High (safety: backcountry) | High — SW + IndexedDB infra; storage limits | Backlog (own project) |
@@ -45,17 +45,17 @@ New module [MapPerformance.ts](../../src/services/MapPerformance.ts): `detectDev
 - All numbers live in one file for empirical tuning. Logs the chosen tier to console.
 - **Verify on a real phone**: pan should feel smoother; if topo tiles look too soft on mobile, nudge `low.resolutionScale` toward 0.85 and `low.maximumScreenSpaceError` toward 1.6 in `PERF_PROFILES`.
 
-### #2 — requestRenderMode (next; turnkey)
+### ✅ #2 — requestRenderMode (SHIPPED 2026-06-18)
 
-The single biggest CPU/battery win. Switches Cesium from continuous 60 FPS to render-on-demand. The catch: scene mutations only appear when something calls `scene.requestRender()`. This codebase is **Entity-API-heavy** (`viewer.entities.add` everywhere), and the Entity/DataSource layer auto-requests renders on add/remove/modify — so it's much safer here than the generic warning suggests. The audit found exactly these spots that need an explicit `scene.requestRender()` after enabling `requestRenderMode: true` in the `Viewer` options:
+Instead of sprinkling `scene.requestRender()` across every CallbackProperty/animation path (fragile — miss one and that control silently stops updating), shipped the **safer toggle model**:
 
-1. **[TrackDrawer.ts](../../src/services/TrackDrawer.ts) edit-drag** — the `MOUSE_MOVE` handler mutates `editPoints`, and the live polyline/handles are `CallbackProperty(fn, false)` (non-constant). Under render-on-demand these won't repaint mid-drag. Add `this.viewer.scene.requestRender()` at the end of the `MOUSE_MOVE` and `LEFT_UP` handlers (and after `renderEditHandles()`).
-2. **[TripPlanningMap.tsx](../../src/components/map/TripPlanningMap.tsx) `applyBasemap`** — imagery add/remove usually auto-renders, but call `requestRender()` after the swap to be safe.
-3. **`handleProfileHover`** — adds/removes the highlight point entity (Entity API auto-renders, but add one `requestRender()` belt-and-braces).
-4. **`setOpacity` / slope-overlay toggles** — material changes; request a render after.
-5. **RouteFlyover** — drives the camera each tick (camera moves auto-render), so likely fine; verify the replay still animates.
+- `requestRenderMode: true` on the `Viewer` (idle = on-demand; the common case, incl. the read-only view-page maps, idles the GPU).
+- A **toggle effect** flips `scene.requestRenderMode = false` (continuous) whenever anything interactive/animated is happening — `mapMode.active` (draw/waypoint/note), `drawingStats.editing` (drag-to-reroute), or `flyoverRunning`. So all the hard cases (CallbackProperty geometry, the clock-driven chase-cam) run every-frame exactly as before; on flyover start `requestRenderMode` is also set `false` directly to avoid a one-frame race.
+- For the few **idle-mode** entity mutations, an explicit render: `CesiumManager.requestRender()` helper called by `TrailLayerManager` (async bbox diff, select, clear, opacity, width-tier) and `TrackDrawer` (`renderTrack` → covers route-load on view pages, slope toggle); and in `TripPlanningMap` after basemap swap (`handleLayerChange` + auto-switch), scene-mode morph, the check-in pin effect, and once at end of init.
 
-**Verification checklist (needs a human on a device):** draw a route, drag a control point — line must follow the cursor live; toggle Steepness — colors change immediately; swap basemap — tiles change without needing a pan; run flyover — camera animates. If any of those only update *after* you nudge the camera, a `requestRender()` is missing there.
+Profile-hover and waypoint/note placement need no explicit render — they only occur while a mode is active (already continuous).
+
+**Still worth a human device check** (the failure mode is invisible to type/lint): draw + drag a point (line follows live), toggle Steepness/DOC-tracks/opacity (updates without panning), swap basemap, run flyover (animates), open a TripLink view page (route + check-in pin paint on load). Anything that only updates *after* you nudge the camera = a missing `requestRender()`.
 
 ### #3 — npm Cesium bundle (isolated PR)
 

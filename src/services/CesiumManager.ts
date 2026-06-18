@@ -50,6 +50,13 @@ export abstract class CesiumManager {
   /** Subclasses register their input actions here. */
   protected abstract setup(handler: any): void;
 
+  /** Request a single frame. Required when `requestRenderMode` is on and we mutate
+   *  the scene outside a camera move (adding/removing/restyling entities) — otherwise
+   *  the change won't appear until the next camera movement. */
+  protected requestRender() {
+    try { this.viewer?.scene?.requestRender(); } catch { /* viewer torn down */ }
+  }
+
   protected setCursor(style: string) {
     try {
       if (this.viewer?.cesiumWidget?.canvas) {

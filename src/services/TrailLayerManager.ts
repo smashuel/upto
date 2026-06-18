@@ -122,6 +122,7 @@ export default class TrailLayerManager extends CesiumManager {
     if (prev) this.applyStyle(prev, false);
     this.selectedId = null;
     this.onSelectionChange?.(null);
+    this.requestRender();
   }
 
   /**
@@ -157,6 +158,7 @@ export default class TrailLayerManager extends CesiumManager {
     this.applyStyle(layer, true);
     this.selectedId = trail.id;
     this.onSelectionChange?.({ id: trail.id, name: trail.name });
+    this.requestRender();
 
     // Fly the camera to frame the trail tightly — see MapCamera.flyToRouteBounds
     // for the BoundingSphere + HeadingPitchRange rationale (avoids raw Rectangle
@@ -195,6 +197,7 @@ export default class TrailLayerManager extends CesiumManager {
     this.applyStyle(next, true);
     this.selectedId = id;
     this.onSelectionChange?.({ id, name: next.name });
+    this.requestRender();
   }
 
   // ── Camera listener / debounced refresh ────────────────────────────────────
@@ -383,6 +386,7 @@ export default class TrailLayerManager extends CesiumManager {
     }
 
     console.log(`[TrailLayer] diff: +${added} -${removed}, total entities: ${this.entities.size}`);
+    if (added || removed) this.requestRender();
   }
 
   private renderTrail(trail: BboxTrail): any {
@@ -475,6 +479,7 @@ export default class TrailLayerManager extends CesiumManager {
       if (id === this.selectedId) continue;
       if (layer.entity?.polyline) layer.entity.polyline.material = this.defaultMaterial();
     }
+    this.requestRender();
   }
 
   // ── Zoom-responsive width ──────────────────────────────────────────────────
@@ -509,6 +514,7 @@ export default class TrailLayerManager extends CesiumManager {
       }
       if (layer.casing?.polyline) layer.casing.polyline.width = widths.selectedCasing;
     }
+    this.requestRender();
   }
 
   // ── Cleanup helpers ────────────────────────────────────────────────────────
@@ -523,14 +529,18 @@ export default class TrailLayerManager extends CesiumManager {
       this.selectedId = null;
       this.onSelectionChange?.(null);
     }
+    this.requestRender();
   }
 
   private clearNonSelected() {
+    let removed = 0;
     for (const [id, layer] of this.entities) {
       if (id === this.selectedId) continue;
       this.viewer.entities.remove(layer.entity);
       if (layer.casing) this.viewer.entities.remove(layer.casing);
       this.entities.delete(id);
+      removed++;
     }
+    if (removed) this.requestRender();
   }
 }

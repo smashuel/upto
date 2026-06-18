@@ -434,6 +434,11 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         const viewer = new Cesium.Viewer(mapContainerRef.current, {
           baseLayer,
           shouldAnimate: true,
+          // On-demand rendering: the scene only repaints on camera moves, tile
+          // loads, or an explicit scene.requestRender(). A toggle effect flips
+          // this OFF (continuous) during drawing/editing/flyover so live updates
+          // work; managers call requestRender() after idle-mode entity changes.
+          requestRenderMode: true,
           homeButton: false,
           sceneModePicker: false,
           baseLayerPicker: false,
@@ -608,6 +613,8 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
           }
         }
 
+        // Paint the initial scene (loaded routes/waypoints) under requestRenderMode.
+        viewer.scene.requestRender();
         setIsLoading(false);
       } catch (error) {
         console.error('Error initializing Cesium map:', error);
@@ -721,6 +728,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
     localStorage.setItem(LAYER_STORAGE_KEY, target);
     setUserOverride(target);
     setMapLayer(target);
+    viewerRef.current.scene.requestRender();
   };
 
   // Debounced viewport → basemap auto-switch.
@@ -745,6 +753,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
       if (target === mapLayer) return;
       applyBasemap(viewer, Cesium, target);
       setMapLayer(target);
+      viewer.scene.requestRender();
     };
 
     const onMoveEnd = () => {
@@ -819,6 +828,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
     const removeListener = viewer.scene.morphComplete.addEventListener(() => {
       removeListener();
       restoreCamera();
+      viewer.scene.requestRender();
     });
 
     if (next === '2d') {
@@ -840,6 +850,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
     }
     localStorage.setItem(SCENE_MODE_STORAGE_KEY, next);
     setSceneMode(next);
+    viewer.scene.requestRender();
   };
 
   // ── Mode controls ──────────────────────────────────────────────────────────
@@ -915,6 +926,9 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
     const prevLayer = mapLayer;
     const prevScene = sceneMode;
     flyoverActiveRef.current = true; // suppress auto basemap switch during the flight
+    // Force continuous rendering now (don't wait for the effect) so the clock-driven
+    // chase-cam animates from the first frame.
+    if (viewerRef.current) viewerRef.current.scene.requestRenderMode = false;
 
     if (mapLayer !== 'satellite') {
       applyBasemap(viewerRef.current, window.Cesium, 'satellite');
@@ -981,7 +995,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
       viewer.entities.remove(checkInMarkerRef.current);
       checkInMarkerRef.current = null;
     }
-    if (!checkInMarker) return;
+    if (!checkInMarker) { viewer.scene.requestRender(); return; }
     checkInMarkerRef.current = viewer.entities.add({
       position: Cesium.Cartesian3.fromDegrees(checkInMarker.lng, checkInMarker.lat),
       point: {
@@ -1004,7 +1018,20 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         scaleByDistance: new Cesium.NearFarScalar(1.5e2, 1.0, 1.5e7, 0.0),
       },
     });
+    viewer.scene.requestRender();
   }, [checkInMarker?.lat, checkInMarker?.lng, cesiumReady, isLoading]);
+
+  // ── Render mode: continuous during interaction, on-demand when idle ─────────
+  // Drawing/editing use CallbackProperty geometry and the flyover uses the clock —
+  // all need every-frame rendering. A static map (the common case, incl. the
+  // read-only view-page maps) idles the GPU under requestRenderMode.
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || !cesiumReady) return;
+    const interactive = mapMode.active || !!drawingStats?.editing || flyoverRunning;
+    viewer.scene.requestRenderMode = !interactive;
+    viewer.scene.requestRender();
+  }, [mapMode.active, mapMode.type, drawingStats?.editing, flyoverRunning, cesiumReady, isLoading]);
 
   // ── Keyboard shortcuts (Ctrl+Z / Ctrl+Shift+Z) ───────────────────────────
 

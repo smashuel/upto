@@ -48,9 +48,11 @@ that owns every transition. Decisions taken in the grilling session:
    check-ins on a `completed` trip are rejected (`409`). Both were silently allowed by the
    old SQL. No new `cancelled` state — there is no cancel flow yet (deferred, not built).
 
-5. **SSE broadcasts now carry the resulting status.** Commit 1 (this change) puts the
-   status on the wire; commit 2 makes `PublicAdventureView` / `ActiveTrip` trust it and
-   delete the inferred `overdue → active`.
+5. **SSE broadcasts now carry the resulting status.** Commit 1 put the status on the
+   wire; commit 2 (`9b8b768`) made `PublicAdventureView` trust it and deleted the inferred
+   `overdue → active`. `ActiveTrip` needed no change — it has no SSE subscription at all
+   (it fetches once on mount), so the owner's overdue banner doesn't clear live after a
+   check-in. That's a missing feature, not a duplicated rule; deferred.
 
 6. **Tests run on Node's built-in runner** (`node --test`), not Vitest. This is a
    backend-only ESM module with no Vite/DOM needs, so Vitest earns nothing here — don't
@@ -78,8 +80,10 @@ that owns every transition. Decisions taken in the grilling session:
   after completion. No legitimate frontend flow hits either (the completed view has no
   check-in panel; completion is only reached from an active/overdue trip).
 - `npm test` exists for the first time (`node --test`).
-- **Commit 2 still pending**: the frontend keeps its redundant `overdue → active`
-  inference until it's switched to trust the SSE `status` field. Harmless until then.
+- **Commit 2 shipped (`9b8b768`)**: the watcher view's redundant `overdue → active`
+  inference is gone — it reads the SSE `status` field, with `?? prev.status` guarding only
+  the deploy gap. **Deploy order is load-bearing**: ship the backend (commit 1) before this
+  frontend, or an overdue trip's alarm stays stuck after a check-in until refresh.
 - A small benign race remains: a check-in can insert a row in the instant a trip
   completes. Lower priority; wrap insert + status-update in one transaction if it matters.
 

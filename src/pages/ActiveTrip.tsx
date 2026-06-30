@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { api } from '../config/api';
 import { what3wordsService } from '../services/what3words';
 import { TripPlanningMap } from '../components/map/TripPlanningMap';
+import { applyLifecycleEvent } from '../utils/lifecycleReducer';
 import type { TripLink } from '../types/adventure';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -195,7 +196,29 @@ export const ActiveTrip: React.FC = () => {
     return () => { cancelled = true; };
   }, [tripLinkId, shareToken]);
 
+  // Live lifecycle updates — same SSE stream the watcher view trusts. Every event runs
+  // through the shared reducer, so the owner's status (and the overdue banner driven off
+  // it) always agrees with what watchers see, and the banner clears the instant the
+  // traveller checks in. No status re-derivation here — that rule lives in the reducer.
+  useEffect(() => {
+    if (!shareToken || !tripLink) return;
+    const es = api.subscribeToEvents(shareToken, {
+      onStatus: (d) => {
+        setTripLink(prev => prev ? applyLifecycleEvent(prev, { kind: 'status', status: d.status, startedAt: d.startedAt }) : prev);
+      },
+      onCheckin: (d) => {
+        setTripLink(prev => prev ? applyLifecycleEvent(prev, { kind: 'checkin', status: d.status, timestamp: d.timestamp, message: d.message, locationW3w: d.locationW3w, lat: d.lat, lng: d.lng }) : prev);
+        setLastCheckIn(d.timestamp);
+      },
+      onOverdue: (d) => {
+        setTripLink(prev => prev ? applyLifecycleEvent(prev, { kind: 'overdue', overdueSince: d.overdueSince }) : prev);
+      },
+    });
+    return () => es.close();
+  }, [shareToken, !!tripLink]); // intentionally limited — avoid re-subscribing on unrelated state changes
+
   const handleCheckedIn = useCallback((timestamp: string) => {
+    // Optimistic — the SSE echo reconciles authoritative status; the reducer dedups it.
     setLastCheckIn(timestamp);
   }, []);
 
@@ -316,7 +339,10 @@ export const ActiveTrip: React.FC = () => {
   const elapsedMs = startedAt ? now.getTime() - startedAt.getTime() : null;
   const remainingMs = expectedReturn ? expectedReturn.getTime() - now.getTime() : null;
   const isNearReturn = remainingMs !== null && remainingMs > 0 && remainingMs < 30 * 60 * 1000;
-  const isOverdue = remainingMs !== null && remainingMs < 0;
+  // Overdue is the server's call (lifecycle status, 15-min grace) — never local time-math,
+  // so the owner agrees with the watcher and the banner clears live on check-in. The clock
+  // above is kept only for the duration labels.
+  const isOverdue = tripLink?.status === 'overdue';
 
   return (
     <div className="create-page">
@@ -352,7 +378,9 @@ export const ActiveTrip: React.FC = () => {
         {isOverdue && (
           <div className="active-trip-overdue-banner">
             <Clock size={18} />
-            Overdue by {formatDuration(Math.abs(remainingMs!))} — check in now
+            {remainingMs !== null && remainingMs < 0
+              ? `Overdue by ${formatDuration(Math.abs(remainingMs))} — check in now`
+              : 'Overdue — check in now'}
           </div>
         )}
 

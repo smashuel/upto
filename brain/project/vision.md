@@ -31,8 +31,24 @@ Upto is a **safety-critical app**. Design decisions favour accuracy, graceful de
 
 > A tramper in Tongariro shares a TripLink with their partner. Partner gets notified if the check-in at Ketetahi Hut is missed. Search & Rescue, if called, gets exact hut name, what3words parking address, and planned emergency exit within two taps.
 
+## Direction (see [ADR 010](../decisions/010-product-direction-safety-first-social-leash.md))
+
+Upto is **safety-first, social-curious**. The safety/check-in tool is the product and the
+homepage message. A *thin* social layer is legitimate only where it reduces real
+coordination friction for a trip:
+
+- **In scope:** invite / accept / join a TripLink (replaces the pre-mission group chat);
+  a private post-trip recap card.
+- **Next major bet:** live GPS — a watcher seeing the traveller's position during an
+  active trip. Framed as **safety**, delivered via a Capacitor mobile shell
+  ([ADR 011](../decisions/011-capacitor-mobile-shell.md)). Starts only after the safety
+  core is hardened.
+- **Parked:** a "squad feed" (needs its own design session before any build).
+
 ## What Upto is NOT
 
-- Not a social fitness tracker (no GPS live-tracking, no activity feed)
+- Not a social network — **no activity feed, no leaderboards, no KOMs/segments, no
+  streaks, no viral growth loop**. (The full "Anti-Strava" spec is explicitly rejected —
+  see [squad-social-vision.md](../features/squad-social-vision.md).)
 - Not an AllTrails clone (route discovery is a supporting feature, not the product)
 - Not a gear marketplace

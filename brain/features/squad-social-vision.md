@@ -1,13 +1,33 @@
 ---
 type: feature
-status: backlog
-related: [brain/plans/social-triplink-sharing.md, brain/features/emergency-contacts-account-level.md, brain/features/triplink-route-persistence.md, src/pages/ActiveTrip.tsx, src/pages/PublicAdventureView.tsx, backend-server.js]
-tags: [social, squads, vision, future, anti-strava]
+status: rejected
+related: [brain/decisions/010-product-direction-safety-first-social-leash.md, brain/plans/social-triplink-sharing.md, brain/features/emergency-contacts-account-level.md, brain/features/triplink-route-persistence.md]
+tags: [social, squads, vision, anti-strava, rejected, archive]
 ---
 
-# Squad Social Vision
+# Squad Social Vision — REJECTED (kept for reference)
 
-Captured 2026-04-22 from a user-supplied spec. **Backlog / future consideration only** — this is not the next phase. The persistence + auth hardening plan finishes first; nothing here gets built until that lands and we re-evaluate priorities.
+> **Superseded 2026-06-29 by [ADR 010](../decisions/010-product-direction-safety-first-social-leash.md).**
+> The "Anti-Strava / squad social network" repositioning in this file is **not** the
+> product direction. Upto is **safety-first, social-curious** — a safety/check-in tool
+> with a *thin* coordination layer, not a social network.
+>
+> **What survived from this spec** (and where it now lives):
+> - **Invite / accept / join a TripLink** → [social-triplink-sharing.md](../plans/social-triplink-sharing.md) (in scope, after the safety core is hardened).
+> - **Private post-trip recap card** → in scope; private URL only, no feed.
+> - **Live GPS** → committed as the next major bet, framed as *safety*, via a Capacitor shell — see [ADR 010](../decisions/010-product-direction-safety-first-social-leash.md) and [ADR 011](../decisions/011-capacitor-mobile-shell.md).
+>
+> **What is parked / rejected:**
+> - **Squad feed** — parked; needs its own dedicated design session before any build.
+> - **Quiet streaks** — out for now.
+> - **Public leaderboards / KOMs / segments / activity stream / viral growth loop** — rejected outright.
+>
+> Everything below is the **original 2026-04-22 spec, retained for reference only.**
+> Do not treat it as a roadmap driver.
+
+---
+
+Captured 2026-04-22 from a user-supplied spec.
 
 ## Vision
 

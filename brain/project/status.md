@@ -4,13 +4,31 @@ status: in-progress
 tags: [status, current]
 ---
 
-# Status — 2026-05-27
+# Status — 2026-06-29
 
 Always-true snapshot of the project. Bump this whenever a phase ships or priorities shift.
 
+## Direction (set 2026-06-29 — see [ADR 010](../decisions/010-product-direction-safety-first-social-leash.md))
+
+Upto is **safety-first, social-curious**. Committed sequence, one set of hands:
+1. **Harden the safety core** ← *current focus*
+2. **Live GPS** (next major bet, framed as safety, via a Capacitor shell — [ADR 011](../decisions/011-capacitor-mobile-shell.md))
+3. **Social invite/accept/join** ([social-triplink-sharing.md](../plans/social-triplink-sharing.md))
+
+Rejected/parked: the full Anti-Strava social network (feed, streaks, leaderboards). The
+"squad feed" idea is parked for its own design session. See ADR 010.
+
 ## Current focus
 
-**Next phase: harden capability endpoints.** With My Trips shipped, the top open item is rate-limiting `/start`/`/checkin`/`/complete` per share_token, making transitions idempotent, and never logging share_tokens. See the ADR [decisions/009-native-auth-capability-share-tokens.md](../decisions/009-native-auth-capability-share-tokens.md) for why these stay capability-guarded.
+**Harden the safety core** before any new bets. Capability-endpoint hardening already
+shipped (2026-06-18, see [decisions/009-native-auth-capability-share-tokens.md](../decisions/009-native-auth-capability-share-tokens.md)). What's left to make the existing safety promise solid:
+
+- **Terrain-accurate picking** — `pickEllipsoid` → `scene.pickPosition` / `sampleTerrainMostDetailed`. Elevation currently reads ~0 off the ellipsoid — a real safety bug. (Stream 1, in progress.)
+- **Verify overdue→email escalation end-to-end** in prod.
+- **Close danglers** — GuidePace wiring into `TripDetailsStep`, NoteModal, route persistence on view pages.
+
+Escalation stays **email-only for now** (Twilio SMS scaffolded but off) — so don't make
+hard safety guarantees in marketing yet (ADR 010).
 
 **Just shipped (2026-06-16): My Trips + Persistence Phase 4.** `/trips` page lists trips grouped by status (new `GET /api/triplinks` endpoint); Profile preview; completion CTA retargeted; localStorage demoted to a bounded offline-read cache; stale-session 401 signs out. Backend is now the single source of truth. See [plans/my-trips-and-persistence-tieup.md](../plans/my-trips-and-persistence-tieup.md).
 

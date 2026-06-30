@@ -8,6 +8,8 @@ tags: [roadmap, planning]
 
 Snapshot of what's **shipped**, **in-progress**, and **planned** across the Upto scaffold. Keep this honest — move items through the statuses as they land. See individual files in [features/](../features/) and [plans/](../plans/) for detail.
 
+> **Direction (set 2026-06-29 — [ADR 010](../decisions/010-product-direction-safety-first-social-leash.md)):** safety-first, social-curious. Order of work: **(1) harden the safety core → (2) live GPS via Capacitor → (3) social invite/accept/join.** The full Anti-Strava social network (feed, streaks, leaderboards) is **rejected**; a "squad feed" is parked for its own design session.
+
 ## Shipped (in `main`, working)
 
 ### Product surface
@@ -69,7 +71,10 @@ Snapshot of what's **shipped**, **in-progress**, and **planned** across the Upto
 
 ---
 
-## Planned (scoped, not started)
+## Planned
+
+> Ticked `[x]` items in this section have **shipped** and are retained for narrative
+> continuity within each plan. Unticked `[ ]` items are the genuinely-not-started work.
 
 ### Persistence + accounts (hardening — see [plans/persistence-and-auth.md](../plans/persistence-and-auth.md))
 - [x] **Remove plaintext DB password** — `DATABASE_URL` now required; throws on startup if missing. See [decisions/009-native-auth-capability-share-tokens.md](../decisions/009-native-auth-capability-share-tokens.md). **Follow-up**: rotate the Linode DB password since the old value is in git history.
@@ -77,9 +82,9 @@ Snapshot of what's **shipped**, **in-progress**, and **planned** across the Upto
 - [x] **Harden capability endpoints** — per-token rate limit (10/10s, `429`), idempotent `/start` + `/complete`, no token logging. Shipped 2026-06-18. See [decisions/009-native-auth-capability-share-tokens.md](../decisions/009-native-auth-capability-share-tokens.md). (Audit-trail-on-transition still open, low priority.)
 - [x] **Account-level emergency contacts** — `is_emergency` flag on `contacts`, Shield toggle on Profile, wizard auto-populates from emergency circle with per-trip opt-out + Edit-on-Profile link. TripLink keeps embedding the snapshot at save time (audit-trail-friendly). See [features/emergency-contacts-account-level.md](../features/emergency-contacts-account-level.md)
 - [ ] **Route persisted on TripLink** — serialise `SerializableTrack` + basemap into TripLink JSONB `data` at save time; rehydrate on view pages. See [features/triplink-route-persistence.md](../features/triplink-route-persistence.md)
-- [ ] **Demote dual-write to fallback** — `CreateAdventure.tsx` currently writes both API and localStorage on every save; demote localStorage to offline-queue-only
-- [ ] **Social TripLink sharing** — invite contacts/favourites to accept or join a trip, replacing the group-chat-before-every-mission friction. Multi-phase plan with competitor research + schema design. See [plans/social-triplink-sharing.md](../plans/social-triplink-sharing.md)
-- [ ] **Squad social vision (low priority — long-horizon)** — full "Anti-Strava" spec captured: network-effect positioning, squad feed, post-mission recap, quiet streaks, live GPS, PWA. Not the next phase; revisit after persistence Phase 3 (email transport). See [features/squad-social-vision.md](../features/squad-social-vision.md)
+- [x] **Demote dual-write to fallback** — done in My Trips / Persistence Phase 4 (2026-06-16): localStorage demoted to a bounded non-throwing offline-read cache (`cacheTripLinkOffline`); backend is single source of truth.
+- [ ] **Social TripLink sharing** — invite contacts/favourites to accept or join a trip, replacing the group-chat-before-every-mission friction. **In scope per [ADR 010](../decisions/010-product-direction-safety-first-social-leash.md), sequenced 3rd — after the safety core is hardened and live GPS.** Multi-phase plan with competitor research + schema design. See [plans/social-triplink-sharing.md](../plans/social-triplink-sharing.md)
+- [x] ~~**Squad social vision**~~ — **REJECTED 2026-06-29** ([ADR 010](../decisions/010-product-direction-safety-first-social-leash.md)). The full "Anti-Strava" network (feed, streaks, leaderboards, viral loop) is not the product. Survivors: invite/accept/join (above) + a private recap card. Squad feed parked for its own session. See [features/squad-social-vision.md](../features/squad-social-vision.md)
 
 ### Safety system (delivery layer)
 - [x] **Notification transport (email-first, SMS-ready)** — [notifications.js](../../notifications.js) with two adapters (Resend + Twilio), per-contact channel picker, `notifyTripStart` on `/start`, `notifyTripOverdue` on the 60s overdue transition. Both adapters stub when their creds are unset; flipping providers on later is pure ops. See [features/notification-transport.md](../features/notification-transport.md). **To go live**: verify `upto.world` in Resend (DNS set, pending verification); `RESEND_API_KEY` already deployed to Linode.
@@ -104,7 +109,7 @@ Snapshot of what's **shipped**, **in-progress**, and **planned** across the Upto
 - [ ] **Terrain-accurate picking** — `pickEllipsoid` → `scene.pickPosition` + `sampleTerrainMostDetailed`. **Highest safety value: fixes elevation reading 0 AND the 3D draw-offset.** From the run-through. **(Stream 1 — in progress.)**
 - [x] **TripLink route overview on view pages** — read-only map on ActiveTrip & PublicAdventureView showing the planned route highlighted + a **last check-in** pin. Route now persisted into TripLink JSONB (`TripRoute`); `TripPlanningMap` gained a `readOnly` prop + `checkInMarker`; check-ins now store `lat`/`lng` (DB migration + endpoint + w3w-locate capture). Shipped 2026-06-18. **(Stream 1 — "item A", done.)**
 - [x] **`requestRenderMode`** — on-demand rendering when idle, continuous during draw/edit/flyover (toggle effect) + `requestRender()` after idle-mode entity mutations. Shipped 2026-06-18. See [plans/compass_artifact.md](../plans/compass_artifact.md) #2. **Needs a device sanity-check** (failure mode is invisible to tsc/lint). **(Stream 1.)**
-- [ ] **🔭 Live location on the TripLink map (item B) — wants exploring** — stream the traveller's *current* GPS position to watchers in real time on the TripLink map: background geolocation → a position channel over SSE → a live marker that moves. Distinct from the shipped "last check-in location" (a static pin) and from "item A" (the planned route). **Big:** needs a PWA/mobile shell for reliable iOS background location, battery-aware sampling, and a privacy model (share with-trip / owner-only / off). User explicitly wants to explore this. Overlaps the live-GPS bet in [features/squad-social-vision.md](../features/squad-social-vision.md) — when picked up, scope it as its own plan.
+- [ ] **🔭 Live location on the TripLink map (item B) — COMMITTED as the next major bet** ([ADR 010](../decisions/010-product-direction-safety-first-social-leash.md) / [ADR 011](../decisions/011-capacitor-mobile-shell.md)) — stream the traveller's *current* GPS position to watchers in real time on the TripLink map: geolocation → a position channel over SSE → a live marker that moves. Distinct from the shipped "last check-in location" (a static pin) and from "item A" (the planned route). **Framed as safety, not social.** Path: **(stage 1)** foreground-only web pipeline first to prove the plumbing; **(stage 2)** **Capacitor** shell for reliable iOS background location + push. Hard preconditions: battery-aware sampling + a per-trip privacy model (with-trip / owner-only / off). **Starts only after the safety core is hardened** — needs its own plan when picked up.
 - [ ] **Note-mode shouldn't drop an in-progress route** — auto-finish on mode switch. From the run-through.
 - [ ] **npm Cesium bundle + official TS types** — kills the all-`any` map surface; isolated PR.
 - [ ] **Valhalla + Meili routing** — real OSM trail snapping, replaces DOC-only ad-hoc snap. Own project.

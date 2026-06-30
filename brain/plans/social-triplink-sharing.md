@@ -9,7 +9,9 @@ tags: [social, sharing, postgres, auth, invitations, friends, research]
 
 Turn a TripLink from a one-way safety broadcast into something with a social dimension: the owner can send it to their contacts/favourites, recipients can **accept** or **join**, and joined participants show up on the in-trip map. Removes the current friction of needing a side-channel group chat before any mission.
 
-> **Status:** draft. This is a scoping doc, not an execution plan. Needs competitor research + schema design before any Phase 2+ code.
+> **Status:** draft, but **greenlit in principle** — this is the "invite/accept/join" feature confirmed in-scope by [ADR 010](../decisions/010-product-direction-safety-first-social-leash.md). **Sequenced 3rd**: it starts only *after* the safety core is hardened and live GPS. This is a scoping doc, not an execution plan — still needs competitor research + schema design before any Phase 2+ code.
+>
+> **Dependency update (2026-06-29):** the "all unshipped" dependencies below are now mostly **shipped** — Postgres, native auth, email transport, and account-level emergency contacts are all live. The "Auth choice (TBD)" in Phase 1 is settled: **native scrypt auth** ([ADR 009](../decisions/009-native-auth-capability-share-tokens.md)). The remaining hard precondition is [triplink-route-persistence.md](../features/triplink-route-persistence.md) for the in-trip shared view (Phase 4).
 
 ## Why this exists
 

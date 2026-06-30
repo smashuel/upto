@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { Phone, Mail, Shield, MapPin, Clock, Calendar, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { api } from '../config/api';
 import { TripPlanningMap } from '../components/map/TripPlanningMap';
+import { applyLifecycleEvent } from '../utils/lifecycleReducer';
 import type { TripLink, Contact } from '../types/adventure';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -58,29 +59,18 @@ export const PublicAdventureView: React.FC = () => {
   // SSE live updates
   useEffect(() => {
     if (!token || !tripLink) return;
+    // All three handlers funnel through the shared lifecycle reducer — the rule "trust
+    // the server's resulting status; don't re-derive the state machine" lives there now
+    // (ADR 012), shared with the owner's ActiveTrip view.
     const es = api.subscribeToEvents(token, {
       onStatus: (data) => {
-        setTripLink(prev => prev ? { ...prev, status: data.status, startedAt: data.startedAt ?? prev.startedAt } : prev);
+        setTripLink(prev => prev ? applyLifecycleEvent(prev, { kind: 'status', status: data.status, startedAt: data.startedAt }) : prev);
       },
       onCheckin: (data) => {
-        setTripLink(prev => {
-          if (!prev) return prev;
-          // Trust the server's resulting status (it's on the wire since the lifecycle
-          // module, ADR 012). Don't re-derive overdue->active here — the watcher must
-          // not duplicate the transition rules. `?? prev.status` only guards the case
-          // where the broadcast predates that change (old backend during a deploy gap).
-          const status = data.status ?? prev.status;
-          return {
-            ...prev,
-            lastCheckIn: data.timestamp,
-            status,
-            overdueSince: status === 'overdue' ? prev.overdueSince : undefined,
-            checkIns: [{ timestamp: data.timestamp, message: data.message, locationW3w: data.locationW3w, lat: data.lat, lng: data.lng }, ...prev.checkIns],
-          };
-        });
+        setTripLink(prev => prev ? applyLifecycleEvent(prev, { kind: 'checkin', status: data.status, timestamp: data.timestamp, message: data.message, locationW3w: data.locationW3w, lat: data.lat, lng: data.lng }) : prev);
       },
       onOverdue: (data) => {
-        setTripLink(prev => prev ? { ...prev, status: 'overdue', overdueSince: data.overdueSince } : prev);
+        setTripLink(prev => prev ? applyLifecycleEvent(prev, { kind: 'overdue', overdueSince: data.overdueSince }) : prev);
       },
     });
     return () => es.close();

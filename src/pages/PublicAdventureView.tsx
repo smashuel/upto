@@ -65,11 +65,16 @@ export const PublicAdventureView: React.FC = () => {
       onCheckin: (data) => {
         setTripLink(prev => {
           if (!prev) return prev;
+          // Trust the server's resulting status (it's on the wire since the lifecycle
+          // module, ADR 012). Don't re-derive overdue->active here — the watcher must
+          // not duplicate the transition rules. `?? prev.status` only guards the case
+          // where the broadcast predates that change (old backend during a deploy gap).
+          const status = data.status ?? prev.status;
           return {
             ...prev,
             lastCheckIn: data.timestamp,
-            status: prev.status === 'overdue' ? 'active' : prev.status,
-            overdueSince: prev.status === 'overdue' ? undefined : prev.overdueSince,
+            status,
+            overdueSince: status === 'overdue' ? prev.overdueSince : undefined,
             checkIns: [{ timestamp: data.timestamp, message: data.message, locationW3w: data.locationW3w, lat: data.lat, lng: data.lng }, ...prev.checkIns],
           };
         });

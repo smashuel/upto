@@ -6,6 +6,13 @@ import { dirname, join } from 'path';
 import pg from 'pg';
 import crypto from 'crypto';
 import { notifyTripStart, notifyTripOverdue } from './notifications.js';
+import {
+  start as lifecycleStart,
+  recordCheckIn as lifecycleCheckIn,
+  complete as lifecycleComplete,
+  sweepOverdue,
+  createDbRepo,
+} from './triplink-lifecycle.js';
 
 const { Pool } = pg;
 
@@ -124,45 +131,20 @@ function broadcast(shareToken, eventName, data) {
   });
 }
 
-// ── Overdue checker (runs every 60 s) ─────────────────────────────────────────
-const OVERDUE_GRACE_MS = 15 * 60 * 1000; // 15 minutes
+// ── TripLink lifecycle wiring ─────────────────────────────────────────────────
+// The lifecycle module owns every status transition + its side-effect fan-out.
+// Here we wire its seams to production: Postgres (atomic writes), SSE (broadcast),
+// notifications.js (the Watcher / Emergency Contact dispatch), and the system clock.
+const lifecycleDeps = {
+  repo:        createDbRepo(db),
+  broadcaster: { broadcast },
+  notifier:    { notifyStart: notifyTripStart, notifyOverdue: notifyTripOverdue },
+  clock:       { now: () => Date.now() },
+};
 
-setInterval(async () => {
-  try {
-    const { rows } = await db.query(`
-      SELECT t.id, t.share_token, t.expected_return_time, t.data, t.last_check_in,
-             u.name AS creator_name
-      FROM   triplinks t
-      LEFT JOIN users u ON u.id = t.user_id
-      WHERE  t.status = 'active'
-        AND  t.expected_return_time IS NOT NULL
-    `);
-    const now = Date.now();
-    for (const row of rows) {
-      const returnTime = new Date(row.expected_return_time).getTime();
-      if (now > returnTime + OVERDUE_GRACE_MS) {
-        const overdueSince = new Date().toISOString();
-        await db.query(
-          `UPDATE triplinks SET status = 'overdue', overdue_since = NOW() WHERE id = $1`,
-          [row.id]
-        );
-        broadcast(row.share_token, 'overdue', { overdueSince });
-        console.log(`TripLink ${row.id} marked overdue`);
-        // Fire-and-forget SMS to the user's emergency circle. Failures log; they
-        // don't block the overdue transition or other trips in the same sweep.
-        notifyTripOverdue({
-          ...row.data,
-          id:                 row.id,
-          shareToken:         row.share_token,
-          expectedReturnTime: row.expected_return_time,
-          lastCheckIn:        row.last_check_in,
-          creatorName:        row.creator_name,
-        }).catch(err => console.error('notifyTripOverdue threw:', err.message));
-      }
-    }
-  } catch (err) {
-    console.error('Overdue checker error:', err.message);
-  }
+// Overdue sweep — runs every 60 s, transitions active trips past their grace window.
+setInterval(() => {
+  sweepOverdue(lifecycleDeps).catch(err => console.error('Overdue sweep error:', err.message));
 }, 60_000);
 
 const app = express();
@@ -885,58 +867,13 @@ app.patch('/api/triplinks/:token/start', rateLimitByToken(), async (req, res) =>
     const { token } = req.params;
     const incomingContacts = Array.isArray(req.body?.emergencyContacts) ? req.body.emergencyContacts : null;
 
-    // Idempotent: only transition (and notify) when the trip is still 'planned'.
-    // A second /start call therefore won't re-dispatch watcher notifications.
-    // Conditional update also replaces emergencyContacts in the JSONB when provided.
-    // Wrapped in a CTE so we can join `users` for the creator's name in one round-trip.
-    const updateCte = incomingContacts
-      ? `UPDATE triplinks
-         SET status = 'active',
-             started_at = NOW(),
-             data = jsonb_set(data, '{emergencyContacts}', $2::jsonb)
-         WHERE share_token = $1 AND status = 'planned'
-         RETURNING id, data, expected_return_time, user_id`
-      : `UPDATE triplinks
-         SET status = 'active', started_at = NOW()
-         WHERE share_token = $1 AND status = 'planned'
-         RETURNING id, data, expected_return_time, user_id`;
-    const updateSql = `WITH updated AS (${updateCte})
-      SELECT updated.id, updated.data, updated.expected_return_time, u.name AS creator_name
-      FROM updated
-      LEFT JOIN users u ON u.id = updated.user_id`;
-    const params = incomingContacts
-      ? [token, JSON.stringify(incomingContacts)]
-      : [token];
-
-    const { rows } = await db.query(updateSql, params);
-    if (rows.length === 0) {
-      // Either the trip doesn't exist, or it's already started. Distinguish so a
-      // double-tap returns 200 silently rather than a misleading 404.
-      const { rows: exists } = await db.query(
-        `SELECT 1 FROM triplinks WHERE share_token = $1`, [token]
-      );
-      if (exists.length === 0) return res.status(404).json({ error: 'TripLink not found' });
+    const result = await lifecycleStart(token, { contacts: incomingContacts }, lifecycleDeps);
+    if (result.reason === 'not_found') return res.status(404).json({ error: 'TripLink not found' });
+    if (result.reason === 'noop') {
+      // Already started — double-tap returns 200 silently rather than a misleading 404.
       return res.json({ ok: true, alreadyStarted: true, notified: [], skipped: [] });
     }
-
-    broadcast(token, 'status', { status: 'active', startedAt: new Date().toISOString() });
-
-    // Synchronously dispatch so we can return delivery summary to the caller.
-    // ~100–500ms with Resend; acceptable for "I'm heading out" tap latency.
-    const row = rows[0];
-    let summary = { notified: [], skipped: [] };
-    try {
-      summary = await notifyTripStart({
-        ...row.data,
-        id:                 row.id,
-        shareToken:         token,
-        expectedReturnTime: row.expected_return_time,
-        creatorName:        row.creator_name,
-      });
-    } catch (err) {
-      console.error('notifyTripStart threw:', err.message);
-    }
-    res.json({ ok: true, ...summary });
+    res.json({ ok: true, notified: result.notified, skipped: result.skipped });
   } catch (err) {
     console.error('Start trip error:', err.message);
     res.status(500).json({ error: 'Failed to start trip' });
@@ -948,34 +885,13 @@ app.post('/api/triplinks/:token/checkin', rateLimitByToken(), async (req, res) =
   try {
     const { token } = req.params;
     const { message, locationW3w, lat, lng } = req.body || {};
-    const numLat = Number.isFinite(lat) ? lat : null;
-    const numLng = Number.isFinite(lng) ? lng : null;
 
-    const { rows } = await db.query(
-      `SELECT id FROM triplinks WHERE share_token = $1`,
-      [token]
-    );
-    if (rows.length === 0) return res.status(404).json({ error: 'TripLink not found' });
-    const tripId = rows[0].id;
-
-    const { rows: ciRows } = await db.query(
-      `INSERT INTO check_ins (trip_id, message, location_w3w, lat, lng)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING checked_in_at`,
-      [tripId, message || null, locationW3w || null, numLat, numLng]
-    );
-
-    const timestamp = ciRows[0].checked_in_at;
-    await db.query(
-      `UPDATE triplinks
-       SET last_check_in = $1, status = CASE WHEN status = 'overdue' THEN 'active' ELSE status END,
-           overdue_since  = CASE WHEN status = 'overdue' THEN NULL ELSE overdue_since END
-       WHERE id = $2`,
-      [timestamp, tripId]
-    );
-
-    broadcast(token, 'checkin', { timestamp, message: message || null, locationW3w: locationW3w || null, lat: numLat, lng: numLng });
-    res.status(201).json({ ok: true, timestamp });
+    const result = await lifecycleCheckIn(token, { message, locationW3w, lat, lng }, lifecycleDeps);
+    if (result.reason === 'not_found') return res.status(404).json({ error: 'TripLink not found' });
+    if (result.reason === 'illegal') {
+      return res.status(409).json({ error: `Cannot check in on a ${result.status} trip` });
+    }
+    res.status(201).json({ ok: true, timestamp: result.timestamp });
   } catch (err) {
     console.error('Check-in error:', err.message);
     res.status(500).json({ error: 'Failed to record check-in' });
@@ -986,21 +902,12 @@ app.post('/api/triplinks/:token/checkin', rateLimitByToken(), async (req, res) =
 app.patch('/api/triplinks/:token/complete', rateLimitByToken(), async (req, res) => {
   try {
     const { token } = req.params;
-    // Idempotent: only transition + broadcast on an actual change. A second
-    // /complete call returns 200 silently without re-broadcasting.
-    const { rows } = await db.query(
-      `UPDATE triplinks SET status = 'completed'
-       WHERE share_token = $1 AND status != 'completed' RETURNING id`,
-      [token]
-    );
-    if (rows.length === 0) {
-      const { rows: exists } = await db.query(
-        `SELECT 1 FROM triplinks WHERE share_token = $1`, [token]
-      );
-      if (exists.length === 0) return res.status(404).json({ error: 'TripLink not found' });
-      return res.json({ ok: true, alreadyCompleted: true });
+    const result = await lifecycleComplete(token, lifecycleDeps);
+    if (result.reason === 'not_found') return res.status(404).json({ error: 'TripLink not found' });
+    if (result.reason === 'illegal') {
+      return res.status(409).json({ error: `Cannot complete a ${result.status} trip` });
     }
-    broadcast(token, 'status', { status: 'completed', completedAt: new Date().toISOString() });
+    if (result.reason === 'noop') return res.json({ ok: true, alreadyCompleted: true });
     res.json({ ok: true });
   } catch (err) {
     console.error('Complete trip error:', err.message);

@@ -202,8 +202,14 @@ export const CreateTripLink: React.FC = () => {
         title: data.title,
         description: data.description,
         activityType: (data.activityType || 'other') as ActivityType,
-        startDate: data.startDate,
-        expectedReturnTime: data.expectedReturnTime || undefined,
+        // `datetime-local` inputs yield a zoneless wall-clock string ("…T08:08"). Convert
+        // to an absolute instant in the browser's local zone before storing — otherwise the
+        // naive string is reinterpreted as UTC at the `expected_return_time TIMESTAMPTZ`
+        // boundary, shifting the time (and the overdue sweep) by the viewer's offset.
+        startDate: data.startDate ? new Date(data.startDate).toISOString() : data.startDate,
+        expectedReturnTime: data.expectedReturnTime
+          ? new Date(data.expectedReturnTime).toISOString()
+          : undefined,
         location: {
           name: data.location.name,
           coordinates: data.location.coordinates || [0, 0],

@@ -238,7 +238,9 @@ export const ActiveTrip: React.FC = () => {
     setCompleting(true);
     try {
       await api.completeTrip(shareToken);
-      setTripLink(prev => prev ? { ...prev, status: 'completed' } : prev);
+      // Optimistic — route through the reducer so the overdueSince-iff-overdue invariant
+      // holds (completing straight from overdue must clear a stale overdueSince).
+      setTripLink(prev => prev ? applyLifecycleEvent(prev, { kind: 'status', status: 'completed' }) : prev);
     } catch {
       toast.error('Could not mark complete — try again');
       setCompleting(false);

@@ -86,6 +86,15 @@ that owns every transition. Decisions taken in the grilling session:
   frontend, or an overdue trip's alarm stays stuck after a check-in until refresh.
 - A small benign race remains: a check-in can insert a row in the instant a trip
   completes. Lower priority; wrap insert + status-update in one transaction if it matters.
+- **Follow-up landed (2026-06-30, branch `triplink-watcher-trust-sse`)**: the §5 deferral
+  is resolved. The client-side reduction (apply an SSE event to a `TripLink`) is extracted
+  into a single pure module, `applyLifecycleEvent` (`src/utils/lifecycleReducer.ts`), and
+  **both** the watcher (`PublicAdventureView`) and the owner (`ActiveTrip`) views now funnel
+  their SSE handlers through it. `ActiveTrip` subscribes to SSE and drives its overdue
+  banner off `status === 'overdue'` instead of local time-math, so the owner's banner clears
+  live on check-in and can no longer disagree with the watcher. No deploy-order constraint
+  this time — the backend already broadcasts status (commit 1). See
+  [.scratch/active-trip-live-sse/PRD.md](../../.scratch/active-trip-live-sse/PRD.md).
 
 ## Reconsider if
 
@@ -94,5 +103,9 @@ that owns every transition. Decisions taken in the grilling session:
 - A cancel flow appears — add `cancelled` to the `TRANSITIONS` table and a `planned →
   cancelled` edge.
 - Frontend + backend want a single test runner — replace `node --test` with Vitest.
+  *(Revisited 2026-06-30: the first frontend unit — the `applyLifecycleEvent` reducer —
+  stayed on `node --test`, run via `--experimental-strip-types`. It's a pure module with no
+  DOM/Vite needs, so Vitest still earns nothing; reconsider once a frontend test needs the
+  DOM or a real render.)*
 - The check-in-on-completing race is observed in production — make the insert conditional
   on status in one statement/transaction.

@@ -101,16 +101,29 @@ export default class TrackDrawer extends CesiumManager {
   private draggingIndex = -1;            // Index into editPoints being dragged (-1 = none)
   private draggingIsMid = false;         // True if the dragged handle is a midpoint insert
 
+  // ── Settlement (finish/edit-commit wait for true heights) ─────────────────
+  /** Hard bound on the whole-route elevation pass at finish — a dead/slow
+   *  terrain service must never hang the wizard. */
+  private readonly settleTimeoutMs: number;
+  /** Bumped by clearAll()/destroy(); a settlement that awakes into a different
+   *  epoch abandons its commit instead of resurrecting cleared state. */
+  private settleEpoch = 0;
+  /** Settlements in flight — edit mode is blocked while > 0 so an edit can't
+   *  grab a track whose points/metadata are still being committed. */
+  private pendingSettles = 0;
+
   constructor(
     viewer: any,
     onCreated?: (track: SerializableTrack) => void,
     onDrawingUpdate?: (stats: DrawingStats | null) => void,
     apiBase = '',
+    settleTimeoutMs = 8000,
   ) {
     super(viewer);
     this.onCreated = onCreated;
     this.onDrawingUpdate = onDrawingUpdate;
     this.snapService = new TrailSnapService(apiBase);
+    this.settleTimeoutMs = settleTimeoutMs;
   }
 
   protected setup(handler: any) {
@@ -133,6 +146,7 @@ export default class TrackDrawer extends CesiumManager {
   }
 
   destroy() {
+    this.settleEpoch++; // strand in-flight settlements — no emits into an unmounted component
     if (this.zoomListener) {
       try {
         this.viewer.camera.moveEnd.removeEventListener(this.zoomListener);
@@ -340,18 +354,68 @@ export default class TrackDrawer extends CesiumManager {
       return;
     }
 
-    const track = this.buildTrack();
-    this.tracks.push(track);
-    if (this.previewEntity) this.viewer.entities.remove(this.previewEntity);
-    this.renderTrack(track);
-    this.onCreated?.(this.serializeTrack(track));
-
+    // Reset interaction state immediately — drawing must FEEL finished on the
+    // double-click. The preview polyline stays visible until the settled track
+    // replaces it, so there's no flicker gap while heights resolve.
+    const points = this.currentPoints;
+    const preview = this.previewEntity;
     this.drawing = false;
     this.currentPoints = [];
     this.previewEntity = null;
+    this.redoStack = [];
     this.lastSnap = null;
     this.setCursor('');
     this.onDrawingUpdate?.(null); // clear live stats
+
+    void this.settleAndCommit(points, preview);
+  }
+
+  /**
+   * The settlement point for a finished drawing: wait for every point's true
+   * terrain height (per-click enrichment may still be in flight — the last
+   * click virtually always is, since it immediately precedes the finishing
+   * double-click), THEN compute metadata, render, and emit the serialized
+   * route exactly once. The route the wizard persists is never built from
+   * provisional heights. If clearAll()/destroy() ran while we waited, the
+   * commit is abandoned — a cleared route must not resurrect.
+   */
+  private async settleAndCommit(points: TrackPoint[], preview: any) {
+    const epoch = this.settleEpoch;
+    this.pendingSettles++;
+    try {
+      await this.settleHeights(points);
+      if (epoch !== this.settleEpoch) {
+        try { if (preview) this.viewer.entities.remove(preview); } catch { /* viewer torn down */ }
+        return;
+      }
+      const track = this.buildTrack(points);
+      this.tracks.push(track);
+      if (preview) this.viewer.entities.remove(preview);
+      this.renderTrack(track);
+      this.onCreated?.(this.serializeTrack(track));
+    } finally {
+      this.pendingSettles--;
+    }
+  }
+
+  /**
+   * Whole-route elevation pass with a hard time bound: a dead/slow terrain
+   * service must never hang the wizard — after the timeout we proceed with
+   * whatever heights the points already carry (picked, or partially enriched).
+   * Straggling samples that land later mutate only the orphaned working
+   * points — committed tracks hold per-point snapshots (see buildTrack /
+   * settleEdit), so an emitted route can never silently diverge.
+   */
+  private async settleHeights(points: TrackPoint[]): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<void>(resolve => {
+      timer = setTimeout(resolve, this.settleTimeoutMs);
+    });
+    try {
+      await Promise.race([this.enrichElevation(points), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private cancelDrawing() {
@@ -367,17 +431,17 @@ export default class TrackDrawer extends CesiumManager {
     this.onDrawingUpdate?.(null);
   }
 
-  private buildTrack(): Track {
+  private buildTrack(points: TrackPoint[]): Track {
     let distance = 0;
     let elevationGain = 0;
     let elevationLoss = 0;
 
-    for (let i = 1; i < this.currentPoints.length; i++) {
+    for (let i = 1; i < points.length; i++) {
       distance += window.Cesium.Cartesian3.distance(
-        this.currentPoints[i - 1].position,
-        this.currentPoints[i].position,
+        points[i - 1].position,
+        points[i].position,
       );
-      const delta = this.currentPoints[i].elevation - this.currentPoints[i - 1].elevation;
+      const delta = points[i].elevation - points[i - 1].elevation;
       if (delta > 0) elevationGain += delta;
       else elevationLoss += Math.abs(delta);
     }
@@ -388,7 +452,9 @@ export default class TrackDrawer extends CesiumManager {
     return {
       id: this.generateId('track'),
       name: `Route ${this.tracks.length + 1}`,
-      points: [...this.currentPoints],
+      // Per-point snapshots: straggling elevation samples (timeout path, late
+      // per-click enrichment) mutate the working points, not the committed track.
+      points: points.map(p => ({ ...p })),
       metadata: {
         distance,
         elevationGain,
@@ -684,7 +750,8 @@ export default class TrackDrawer extends CesiumManager {
   }
 
   clearAll() {
-    this.exitEditMode();
+    this.abortEditMode(); // discard, don't commit — the tracks are going away
+    this.settleEpoch++; // strand any in-flight settlement: cleared routes must not resurrect
     for (const track of this.tracks) {
       this.removeTrackEntities(track);
     }
@@ -696,6 +763,7 @@ export default class TrackDrawer extends CesiumManager {
   /** Enter edit mode on the most recently finished track */
   enterEditMode(): boolean {
     if (this.editingTrack) return false; // already editing
+    if (this.pendingSettles > 0) return false; // a finish/edit is still committing
     const track = this.tracks[this.tracks.length - 1];
     if (!track) return false;
 
@@ -716,16 +784,51 @@ export default class TrackDrawer extends CesiumManager {
   exitEditMode() {
     if (!this.editingTrack) return;
 
-    // Clean up edit overlay
+    // Clean up edit overlay; interaction ends immediately
     this.clearEditOverlay();
     this.destroyEditDragHandler();
 
-    // Rebuild the track from edited points and re-render
-    this.editingTrack.points = [...this.editPoints];
-    this.recomputeTrackMetadata(this.editingTrack);
-    this.renderTrack(this.editingTrack);
-    this.onCreated?.(this.serializeTrack(this.editingTrack));
+    const track = this.editingTrack;
+    const points = [...this.editPoints];
+    this.editingTrack = null;
+    this.editPoints = [];
+    this.setCursor('');
+    this.onDrawingUpdate?.(null);
 
+    void this.settleEdit(track, points);
+  }
+
+  /**
+   * Same settlement contract as finishing a drawing: the re-emitted route
+   * (same id — the wizard replaces, not appends) carries settled heights and
+   * metadata recomputed from them. Abandons the commit if clearAll()/destroy()
+   * ran while heights were settling.
+   */
+  private async settleEdit(track: Track, points: TrackPoint[]) {
+    const epoch = this.settleEpoch;
+    this.pendingSettles++;
+    try {
+      await this.settleHeights(points);
+      if (epoch !== this.settleEpoch) return;
+
+      // Per-point snapshots — same reasoning as buildTrack
+      track.points = points.map(p => ({ ...p }));
+      this.recomputeTrackMetadata(track);
+      this.renderTrack(track);
+      this.onCreated?.(this.serializeTrack(track));
+    } finally {
+      this.pendingSettles--;
+    }
+  }
+
+  /**
+   * Tear down edit mode WITHOUT committing — for clearAll(), where emitting a
+   * settled route for a track the user just deleted would resurrect it.
+   */
+  private abortEditMode() {
+    if (!this.editingTrack) return;
+    this.clearEditOverlay();
+    this.destroyEditDragHandler();
     this.editingTrack = null;
     this.editPoints = [];
     this.setCursor('');
@@ -913,6 +1016,10 @@ export default class TrackDrawer extends CesiumManager {
       const lat = Cesium.Math.toDegrees(pt.cartographic.latitude);
       const lng = Cesium.Math.toDegrees(pt.cartographic.longitude);
       const snapResult = await this.snapService.snap([lat, lng]);
+
+      // Edit mode may have been committed/aborted while we awaited the snap —
+      // the settlement pass owns the points now, nothing left to update here.
+      if (!this.editingTrack) return;
 
       if (snapResult) {
         const [sLat, sLng] = snapResult.snappedLatLng;

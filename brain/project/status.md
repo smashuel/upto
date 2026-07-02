@@ -23,7 +23,7 @@ Rejected/parked: the full Anti-Strava social network (feed, streaks, leaderboard
 **Harden the safety core** before any new bets. Capability-endpoint hardening already
 shipped (2026-06-18, see [decisions/009-native-auth-capability-share-tokens.md](../decisions/009-native-auth-capability-share-tokens.md)). What's left to make the existing safety promise solid:
 
-- **Terrain-accurate picking** — `pickEllipsoid` → `scene.pickPosition` / `sampleTerrainMostDetailed`. Elevation currently reads ~0 off the ellipsoid — a real safety bug. (Stream 1, in progress.)
+- **Terrain-accurate picking** — `pickEllipsoid` → `scene.pickPosition` / `sampleTerrainMostDetailed`. Core picking + draw-time sampling shipped (commit `0834976`); **finish/edit-commit now settle heights before the route is emitted/persisted** (2026-07-02, see [journal](../journal/2026-07-02-finish-settlement-race.md)). Remaining slices: wizard route-upsert, waypoint heights, honest degradation — [.scratch/terrain-accurate-picking/](../../.scratch/terrain-accurate-picking/PRD.md). (Stream 1.)
 - **Verify overdue→email escalation end-to-end** in prod.
 - **Close danglers** — GuidePace wiring into `TripDetailsStep`, NoteModal, route persistence on view pages.
 

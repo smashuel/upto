@@ -47,3 +47,16 @@ export must reflect the settled heights after finish.
 ## Blocked by
 
 - .scratch/terrain-accurate-picking/issues/01-test-harness-vitest-fake-cesium.md
+
+## Comments
+
+**2026-07-02 (agent):** Implemented. Finish and edit-commit are settlement points:
+whole-route enrichment (8 s bound) → recompute metadata → render → emit once.
+Review surfaced concurrency hazards, all fixed + regression-tested: epoch guard
+strands settlements on clearAll()/destroy(); committed tracks hold per-point
+snapshots so straggling samples can't diverge an emitted route; enterEditMode
+blocked while settling; latent undefined-deref in the edit LEFT_UP handler guarded.
+12 Vitest tests green (race, edit-race, timeout, clearAll, destroy) + node:test
+suites, tsc, lint. **Outstanding:** the "manual verify on real NZ terrain" criterion
+— no Chrome in this WSL environment; needs a human run-through (`npm run dev`, draw
+in default 2D, check gain/loss non-zero and stable across 2D↔3D).

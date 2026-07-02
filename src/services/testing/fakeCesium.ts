@@ -146,6 +146,10 @@ export interface FakeCesiumWorld {
   clickAt(lng: number, lat: number): void;
   /** Fire the LEFT_DOUBLE_CLICK that finishes a drawing. */
   doubleClick(): void;
+  /** Queue a ground pick at lng/lat and fire a MOUSE_MOVE that returns it (drag). */
+  dragTo(lng: number, lat: number): void;
+  /** Queue the entity `scene.pick` returns on the next call (e.g. an edit handle). */
+  queueScenePick(picked: any): void;
   /** Terrain height used by sampleTerrainMostDetailed (degrees in). */
   setTerrainHeightFn(fn: (lng: number, lat: number) => number): void;
   setTerrainMode(mode: TerrainMode): void;
@@ -165,6 +169,7 @@ export function installFakeCesium(): FakeCesiumWorld {
   let heightFn: (lng: number, lat: number) => number = () => 0;
   const pendingSamples: Array<{ cartos: Cartographic[]; resolve: () => void }> = [];
   const pickQueue: Cartesian3[] = [];
+  const scenePickQueue: any[] = [];
 
   const applyHeights = (cartos: Cartographic[]) => {
     for (const c of cartos) {
@@ -225,7 +230,7 @@ export function installFakeCesium(): FakeCesiumWorld {
       mode: Cesium.SceneMode.SCENE2D,
       pickPositionSupported: false,
       pickPosition: () => undefined,
-      pick: () => undefined,
+      pick: () => scenePickQueue.shift(),
       requestRender: () => {},
       globe: { ellipsoid: {} },
       screenSpaceCameraController: { enableRotate: true, enableTranslate: true, enableZoom: true },
@@ -262,6 +267,13 @@ export function installFakeCesium(): FakeCesiumWorld {
     },
     doubleClick() {
       fire('LEFT_DOUBLE_CLICK');
+    },
+    dragTo(lng: number, lat: number) {
+      pickQueue.push(Cartesian3.fromDegrees(lng, lat, 0));
+      fire('MOUSE_MOVE', { endPosition: new Cartesian2(0, 0) });
+    },
+    queueScenePick(picked: any) {
+      scenePickQueue.push(picked);
     },
     setTerrainHeightFn(fn) {
       heightFn = fn;

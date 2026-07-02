@@ -43,7 +43,7 @@ None - can start immediately.
 
 ## Comments
 
-**2026-07-02 (agent):** Shipped in commit `93c398a`. All acceptance criteria met —
+**2026-07-02 (agent):** Shipped in commit `6cb0a1a`. All acceptance criteria met —
 `npm test` chains node:test + Vitest (7 tests), fake supports auto / manual-deferred /
 provider-unavailable / sample-reject terrain modes, tsc + lint green. Two-axis review
 findings addressed in the same commit: CLAUDE.md + status.md test-framework claims

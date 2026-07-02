@@ -59,6 +59,9 @@ export interface DrawingStats {
   canRedo: boolean;
   /** Whether a finished route is currently being edited (drag-to-reroute) */
   editing: boolean;
+  /** True when these are the settled stats of a committed route (kept on
+   *  screen for reference) rather than a drawing/edit in progress */
+  finished: boolean;
 }
 
 export default class TrackDrawer extends CesiumManager {
@@ -376,7 +379,9 @@ export default class TrackDrawer extends CesiumManager {
     this.redoStack = [];
     this.lastSnap = null;
     this.setCursor('');
-    this.onDrawingUpdate?.(null); // clear live stats
+    // Deliberately NO stats-clear here: the last live stats stay on screen
+    // while heights settle, then emitSettledStats replaces them — the panel
+    // persists after finish as a reference for the committed route.
 
     void this.settleAndCommit(points, preview);
   }
@@ -404,6 +409,7 @@ export default class TrackDrawer extends CesiumManager {
       if (preview) this.viewer.entities.remove(preview);
       this.renderTrack(track);
       this.onCreated?.(this.serializeTrack(track));
+      this.emitSettledStats(track);
     } finally {
       this.pendingSettles--;
     }
@@ -633,6 +639,33 @@ export default class TrackDrawer extends CesiumManager {
     };
   }
 
+  /** Distance/elevation/profile figures shared by all three stats emitters */
+  private computeStats(points: TrackPoint[]): {
+    distance: number;
+    elevationGain: number;
+    elevationLoss: number;
+    profile: Array<{ dist: number; ele: number }>;
+  } {
+    let distance = 0;
+    let elevationGain = 0;
+    let elevationLoss = 0;
+    const profile: Array<{ dist: number; ele: number }> = [];
+
+    profile.push({ dist: 0, ele: points[0].elevation });
+
+    for (let i = 1; i < points.length; i++) {
+      const d =
+        window.Cesium.Cartesian3.distance(points[i - 1].position, points[i].position) / 1000;
+      distance += d;
+      profile.push({ dist: distance, ele: points[i].elevation });
+      const delta = points[i].elevation - points[i - 1].elevation;
+      if (delta > 0) elevationGain += delta;
+      else elevationLoss += Math.abs(delta);
+    }
+
+    return { distance, elevationGain, elevationLoss, profile };
+  }
+
   /** Emit current drawing progress stats to the React component */
   private emitDrawingStats() {
     if (!this.onDrawingUpdate) return;
@@ -641,47 +674,53 @@ export default class TrackDrawer extends CesiumManager {
       return;
     }
 
-    let distance = 0;
-    let elevationGain = 0;
-    let elevationLoss = 0;
-    const profile: Array<{ dist: number; ele: number }> = [];
-
-    profile.push({ dist: 0, ele: this.currentPoints[0].elevation });
-
-    for (let i = 1; i < this.currentPoints.length; i++) {
-      const d =
-        window.Cesium.Cartesian3.distance(
-          this.currentPoints[i - 1].position,
-          this.currentPoints[i].position,
-        ) / 1000;
-      distance += d;
-      profile.push({ dist: distance, ele: this.currentPoints[i].elevation });
-      const delta = this.currentPoints[i].elevation - this.currentPoints[i - 1].elevation;
-      if (delta > 0) elevationGain += delta;
-      else elevationLoss += Math.abs(delta);
-    }
-
+    const stats = this.computeStats(this.currentPoints);
     this.onDrawingUpdate({
       pointCount: this.currentPoints.length,
-      distance,
-      elevationGain,
-      elevationLoss,
-      estimatedTime: distance / 4 + elevationGain / 600,
-      profile,
+      ...stats,
+      estimatedTime: stats.distance / 4 + stats.elevationGain / 600,
       canRedo: this.redoStack.length > 0,
       editing: false,
+      finished: false,
     });
   }
 
-  /** Return the Cartesian3 position of a specific point in the current drawing (for chart↔map sync) */
-  getDrawingPointPosition(index: number): any | null {
-    if (index < 0 || index >= this.currentPoints.length) return null;
-    return this.currentPoints[index].position;
+  /**
+   * Emit the settled stats of a committed route so the panel + elevation
+   * profile stay on screen for reference after finish/edit — cleared only by
+   * an explicit route clear or the start of a new drawing.
+   */
+  private emitSettledStats(track: Track) {
+    if (!this.onDrawingUpdate || track.points.length === 0) return;
+    const stats = this.computeStats(track.points);
+    this.onDrawingUpdate({
+      pointCount: track.points.length,
+      ...stats,
+      estimatedTime: stats.distance / 4 + stats.elevationGain / 600,
+      canRedo: false,
+      editing: false,
+      finished: true,
+    });
   }
 
-  /** Number of points currently drawn (for bounds checking in chart hover) */
+  /** Points backing whatever the stats panel currently shows: an active
+   *  drawing, an edit in progress, or the latest committed route. */
+  private statsPoints(): TrackPoint[] {
+    if (this.currentPoints.length) return this.currentPoints;
+    if (this.editPoints.length) return this.editPoints;
+    return this.tracks[this.tracks.length - 1]?.points ?? [];
+  }
+
+  /** Return the Cartesian3 position of a specific profile point (for chart↔map sync) */
+  getDrawingPointPosition(index: number): any | null {
+    const points = this.statsPoints();
+    if (index < 0 || index >= points.length) return null;
+    return points[index].position;
+  }
+
+  /** Number of points behind the current profile (for bounds checking in chart hover) */
   getDrawingPointCount(): number {
-    return this.currentPoints.length;
+    return this.statsPoints().length;
   }
 
   getTracks(): Track[] {
@@ -744,6 +783,11 @@ export default class TrackDrawer extends CesiumManager {
       this.tracks.push(track);
       this.renderTrack(track);
     }
+
+    // Restore the reference stats panel for the latest loaded route — the map
+    // is lazy-mounted, so this is what keeps the profile visible on remount.
+    const latest = this.tracks[this.tracks.length - 1];
+    if (latest) this.emitSettledStats(latest);
   }
 
   exportGPX(id: string): string {
@@ -805,7 +849,8 @@ export default class TrackDrawer extends CesiumManager {
     this.editingTrack = null;
     this.editPoints = [];
     this.setCursor('');
-    this.onDrawingUpdate?.(null);
+    // No stats-clear: the edit stats stay visible until the settled stats
+    // (editing: false, finished: true) replace them.
 
     void this.settleEdit(track, points);
   }
@@ -828,6 +873,7 @@ export default class TrackDrawer extends CesiumManager {
       this.recomputeTrackMetadata(track);
       this.renderTrack(track);
       this.onCreated?.(this.serializeTrack(track));
+      this.emitSettledStats(track);
     } finally {
       this.pendingSettles--;
     }
@@ -1073,34 +1119,14 @@ export default class TrackDrawer extends CesiumManager {
   private emitEditStats() {
     if (!this.onDrawingUpdate || this.editPoints.length === 0) return;
 
-    let distance = 0;
-    let elevationGain = 0;
-    let elevationLoss = 0;
-    const profile: Array<{ dist: number; ele: number }> = [];
-
-    profile.push({ dist: 0, ele: this.editPoints[0].elevation });
-
-    for (let i = 1; i < this.editPoints.length; i++) {
-      const d = window.Cesium.Cartesian3.distance(
-        this.editPoints[i - 1].position,
-        this.editPoints[i].position,
-      ) / 1000;
-      distance += d;
-      profile.push({ dist: distance, ele: this.editPoints[i].elevation });
-      const delta = this.editPoints[i].elevation - this.editPoints[i - 1].elevation;
-      if (delta > 0) elevationGain += delta;
-      else elevationLoss += Math.abs(delta);
-    }
-
+    const stats = this.computeStats(this.editPoints);
     this.onDrawingUpdate({
       pointCount: this.editPoints.length,
-      distance,
-      elevationGain,
-      elevationLoss,
-      estimatedTime: distance / 4 + elevationGain / 600,
-      profile,
+      ...stats,
+      estimatedTime: stats.distance / 4 + stats.elevationGain / 600,
       canRedo: false,
       editing: true,
+      finished: false,
     });
   }
 

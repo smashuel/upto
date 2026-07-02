@@ -869,8 +869,9 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         waypointManagerRef.current?.setMode(isActive);
         break;
       case 'route':
+        // No stats-clear on toggle-off: a mid-draw cancel emits null itself,
+        // and a finished route's reference panel should survive mode changes.
         trackDrawerRef.current?.setMode(isActive);
-        if (!isActive) setDrawingStats(null);
         break;
       case 'note':
         noteManagerRef.current?.setMode(isActive);
@@ -1436,7 +1437,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
                 className="map-btn"
                 onClick={handleUndo}
                 title="Undo (Ctrl+Z)"
-                disabled={!drawingStats || drawingStats.pointCount === 0}
+                disabled={!drawingStats || drawingStats.pointCount === 0 || drawingStats.finished}
               >
                 <Undo2 size={16} />
               </button>
@@ -1542,6 +1543,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
               <span className="map-stat-value">{formatTime(drawingStats.estimatedTime)}</span>
             </div>
             <div className="map-stat-meta">
+              {drawingStats.finished && 'Saved · '}
               {drawingStats.pointCount} pts · Naismith&apos;s rule
             </div>
           </div>

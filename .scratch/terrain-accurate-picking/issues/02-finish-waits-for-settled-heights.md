@@ -69,3 +69,10 @@ repopulated it and re-emitted zero stats. Fixed with a `drawingEpoch` guard
 (finish/cancel strand in-flight clicks); regression test added (13 Vitest total).
 The settled route itself was emitted correctly. Manual-verify criterion now
 partially confirmed — worth one more run-through to see the panel clear cleanly.
+
+**2026-07-02 (agent, UX follow-up):** Per user request, the stats panel + elevation
+profile no longer clear on finish — the settled stats (flagged `finished: true`,
+meta shows "Saved · N pts") persist as a reference, replace the live stats once
+heights settle, survive route-mode toggles, and are restored by `loadRoutes` on
+remount. Chart hover falls back to the committed route's points. Cleared by the X
+(clear route) or superseded by starting a new drawing. 14 Vitest tests green.

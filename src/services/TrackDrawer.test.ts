@@ -116,8 +116,17 @@ describe('TrackDrawer', () => {
     expect(gpx).toContain('<ele>500</ele>');
     expect(gpx).toContain('<ele>800</ele>');
 
-    // Finish clears the live stats
-    expect(latestStats()).toBeNull();
+    // Finish keeps the stats panel as a settled reference (not cleared)
+    const settled = latestStats()!;
+    expect(settled.finished).toBe(true);
+    expect(settled.editing).toBe(false);
+    expect(settled.pointCount).toBe(2);
+    expect(settled.elevationGain).toBeCloseTo(300, 6);
+    expect(settled.profile.map(p => p.ele)).toEqual([500, 800]);
+
+    // Chart hover still resolves positions against the committed route
+    expect(drawer.getDrawingPointCount()).toBe(2);
+    expect(drawer.getDrawingPointPosition(1)).toBeTruthy();
   });
 
   it('waits for in-flight terrain sampling before emitting the finished route', async () => {
@@ -218,7 +227,29 @@ describe('TrackDrawer', () => {
 
     expect(created).toHaveLength(1);
     expect(created[0].waypoints).toHaveLength(2); // just A and B
-    expect(latestStats()).toBeNull(); // stats stay cleared — no phantom re-emit
+    // The panel shows the settled route — not a phantom straggler re-emit
+    const settled = latestStats()!;
+    expect(settled.finished).toBe(true);
+    expect(settled.pointCount).toBe(2);
+    expect(settled.distance).toBeGreaterThan(0.7);
+  });
+
+  it('restores the reference stats panel when persisted routes are loaded (remount)', () => {
+    drawer.loadRoutes([
+      {
+        id: 'stored_route',
+        waypoints: [
+          { coordinates: [A.lat, A.lng], elevation: 500 },
+          { coordinates: [B.lat, B.lng], elevation: 800 },
+        ],
+      },
+    ]);
+
+    const restored = latestStats()!;
+    expect(restored.finished).toBe(true);
+    expect(restored.pointCount).toBe(2);
+    expect(restored.profile.map(p => p.ele)).toEqual([500, 800]);
+    expect(restored.elevationGain).toBeCloseTo(300, 6);
   });
 
   it('emits with the heights it has if terrain sampling hangs past the settle timeout', async () => {

@@ -252,6 +252,8 @@ upto/
 npm run dev        # Start Vite dev server (port 5173)
 npm run build      # TypeScript compile + Vite build
 npm run lint       # ESLint check
+npm test           # node:test lifecycle suites, then Vitest service tests
+npm run test:watch # Vitest watch mode
 npm run preview    # Preview production build
 bash deploy.sh     # Deploy backend to Linode (requires DATABASE_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, BACKEND_URL, DOC_API_KEY, LINZ_LDS_API_KEY in deployer's shell env — see [deploy.sh](deploy.sh) pre-flight)
 node doc-sync.js   # Manually sync DOC data (requires DOC_API_KEY)
@@ -349,7 +351,7 @@ See [brain/features/doc-integration.md](brain/features/doc-integration.md) for f
 - Toast notifications via `react-hot-toast`
 - State management: React Query (`@tanstack/react-query`) for server state, `useState` for local state
 - Routing: `react-router-dom` v7 with `BrowserRouter`
-- No test framework is set up
+- Tests: **Vitest** for map/service tests (`src/services/**/*.test.ts`, see `vitest.config.ts`); the older lifecycle tests (`triplink-lifecycle.test.js`, `src/utils/lifecycleReducer.test.ts`) run under `node --test`. `npm test` runs both; `npm run test:watch` for Vitest watch mode. Map services are tested at their public boundary against the fake `window.Cesium` in `src/services/testing/fakeCesium.ts` — see [ADR 013](brain/decisions/013-vitest-alongside-node-test.md)
 
 ## Specialist Agents and Skills
 

@@ -69,7 +69,7 @@ hard safety guarantees in marketing yet (ADR 010).
 - **Frontend**: `upto.world` + `upto-six.vercel.app`, deploys on push to `main`
 - **Backend**: Linode `172.105.178.48`, PM2-managed Express, Nginx proxy on port 80
 - **DOC cache**: auto-syncs Monday 3 AM; 7-day TTL; run `node doc-sync.js` to refresh manually
-- **Test suite**: none (no framework set up — rely on `tsc --noEmit` + `npm run lint` via `/build-check`)
+- **Test suite**: `npm test` — node:test lifecycle suites + Vitest service tests (TrackDrawer boundary tests against the fake `window.Cesium`, see [ADR 013](../decisions/013-vitest-alongside-node-test.md)); plus `tsc --noEmit` + `npm run lint` via `/build-check`
 
 ## Uncommitted state on `main` (as of this writing)
 

@@ -60,3 +60,12 @@ blocked while settling; latent undefined-deref in the edit LEFT_UP handler guard
 suites, tsc, lint. **Outstanding:** the "manual verify on real NZ terrain" criterion
 — no Chrome in this WSL environment; needs a human run-through (`npm run dev`, draw
 in default 2D, check gain/loss non-zero and stable across 2D↔3D).
+
+**2026-07-02 (agent, after user browser verify):** User run-through on real NZ topo
+confirmed live elevation works, but caught a phantom "2 pts · 0.00 km" stats panel
+after the finishing double-click. Root cause: the double-click's own two LEFT_CLICKs
+were still awaiting trail-snap when finish cleared the drawing — the stragglers
+repopulated it and re-emitted zero stats. Fixed with a `drawingEpoch` guard
+(finish/cancel strand in-flight clicks); regression test added (13 Vitest total).
+The settled route itself was emitted correctly. Manual-verify criterion now
+partially confirmed — worth one more run-through to see the panel clear cleanly.

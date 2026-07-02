@@ -37,3 +37,18 @@ so an edit can't grab half-committed state.
 async work that outlives finish/clear/destroy must either be stranded by the epoch
 or write only to orphaned objects.* If this pattern spreads beyond TrackDrawer
 (WaypointManager backfill is next, slice 04), consider promoting it to an ADR.
+
+## Follow-up (same day): phantom "2 pts · 0.00 km" panel after finish
+
+User's browser run-through caught it: after the finishing double-click, the stats
+panel cleared then repainted with `2 pts · 0.00 km · 0 m`. Root cause: a
+double-click fires two LEFT_CLICKs *before* LEFT_DOUBLE_CLICK, and every click's
+`addPoint` awaits the trail-snap call before pushing — so on **every** finish, two
+straggler clicks landed after the drawing was cleared, repopulated `currentPoints`,
+and re-emitted garbage stats. Fixed with a `drawingEpoch` (same stranding pattern):
+finish/cancel bump it; a click that awakes into a dead session is discarded.
+
+**Known behaviour, unchanged:** the double-click's own position has never become a
+route point (its clicks were always still snapping at finish). If we ever want
+"double-click adds the final point", that's a deliberate UX change — finish would
+have to await pending adds, not discard them.

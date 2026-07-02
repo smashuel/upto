@@ -195,6 +195,32 @@ describe('TrackDrawer', () => {
     expect(edited.metadata.elevationGain).toBeCloseTo(300, 6);
   });
 
+  it('discards clicks still in flight when the finishing double-click lands', async () => {
+    // A real double-click fires LEFT_CLICK twice before LEFT_DOUBLE_CLICK, and
+    // every click awaits the trail-snap call before its point lands. Those
+    // stragglers must not repopulate the cleared drawing and repaint a phantom
+    // "2 pts · 0.00 km" stats panel after finish.
+    world.setTerrainHeightFn(ridgeline);
+
+    world.clickAt(A.lng, A.lat);
+    await waitForStats(s => s.pointCount === 1);
+    world.clickAt(B.lng, B.lat);
+    await waitForStats(s => s.pointCount === 2);
+
+    // The double-click: two clicks whose addPoint is still awaiting the snap
+    // when finish runs
+    world.clickAt(B.lng, B.lat);
+    world.clickAt(B.lng, B.lat);
+    world.doubleClick();
+
+    await waitFor(() => created.length === 1);
+    await new Promise(r => setTimeout(r, 20)); // let any straggler land
+
+    expect(created).toHaveLength(1);
+    expect(created[0].waypoints).toHaveLength(2); // just A and B
+    expect(latestStats()).toBeNull(); // stats stay cleared — no phantom re-emit
+  });
+
   it('emits with the heights it has if terrain sampling hangs past the settle timeout', async () => {
     drawer.destroy(); // swap in a drawer with a 30 ms settle timeout
     const created2: SerializableTrack[] = [];

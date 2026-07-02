@@ -111,6 +111,11 @@ export default class TrackDrawer extends CesiumManager {
   /** Settlements in flight — edit mode is blocked while > 0 so an edit can't
    *  grab a track whose points/metadata are still being committed. */
   private pendingSettles = 0;
+  /** Bumped when a drawing ends (finish OR cancel). A click whose snap lookup
+   *  is still in flight when the drawing ends belongs to a dead session — it
+   *  must not repopulate the cleared drawing (a double-click fires two
+   *  LEFT_CLICKs before LEFT_DOUBLE_CLICK, so this happens on EVERY finish). */
+  private drawingEpoch = 0;
 
   constructor(
     viewer: any,
@@ -221,6 +226,7 @@ export default class TrackDrawer extends CesiumManager {
     const cartographic = Cesium.Cartographic.fromCartesian(position);
     const clickedLat = Cesium.Math.toDegrees(cartographic.latitude);
     const clickedLng = Cesium.Math.toDegrees(cartographic.longitude);
+    const epoch = this.drawingEpoch;
 
     // New point invalidates the redo stack
     this.redoStack = [];
@@ -230,6 +236,10 @@ export default class TrackDrawer extends CesiumManager {
 
     // Try to snap the click to a nearby DOC trail
     const snapResult = await this.snapService.snap([clickedLat, clickedLng]);
+
+    // The drawing may have finished or been cancelled while we awaited the
+    // snap — this click belongs to that dead session, so drop it.
+    if (epoch !== this.drawingEpoch || !this.drawing) return;
 
     if (snapResult) {
       // If consecutive snaps are on the same trail, walk the polyline between them
@@ -359,6 +369,7 @@ export default class TrackDrawer extends CesiumManager {
     // replaces it, so there's no flicker gap while heights resolve.
     const points = this.currentPoints;
     const preview = this.previewEntity;
+    this.drawingEpoch++; // strand in-flight clicks from this session
     this.drawing = false;
     this.currentPoints = [];
     this.previewEntity = null;
@@ -423,6 +434,7 @@ export default class TrackDrawer extends CesiumManager {
       this.viewer.entities.remove(this.previewEntity);
       this.previewEntity = null;
     }
+    this.drawingEpoch++; // strand in-flight clicks from this session
     this.drawing = false;
     this.currentPoints = [];
     this.redoStack = [];

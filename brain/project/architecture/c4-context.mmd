@@ -1,0 +1,31 @@
+C4Context
+    title Upto — System Context
+
+    Person(traveller, "Traveller", "Outdoor recreationalist / guide. Plans a TripLink, starts it, checks in.")
+    Person(watcher, "Watcher", "Emergency contact / Home Base. Gets notified, tracks progress via share link. Usually not signed in.")
+
+    System(upto, "Upto", "Outdoor trip planning & safety. Create TripLinks, share, notify, check-in, overdue escalation.")
+
+    System_Ext(cesium, "Cesium Ion", "3D terrain + satellite imagery (CDN + ion assets)")
+    System_Ext(w3w, "what3words", "3m precision 3-word addresses")
+    System_Ext(doc, "NZ DOC API", "Tracks / huts / campsites / live alerts")
+    System_Ext(osm, "OSM Overpass + Nominatim", "Global trails + geocoding")
+    System_Ext(govtiles, "LINZ + AU Gov Tiles", "NZ Topo50 / GA / NSW topo basemaps")
+    System_Ext(resend, "Resend", "Transactional email")
+    System_Ext(twilio, "Twilio", "SMS (scaffolded, creds-gated)")
+    System_Ext(google, "Google OAuth", "Federated sign-in")
+
+    Rel(traveller, upto, "Plans & runs trips", "HTTPS")
+    Rel(upto, watcher, "Notifies on start / overdue", "Email (SMS later)")
+    Rel(watcher, upto, "Views share link, sees route + check-ins", "HTTPS/SSE")
+
+    Rel(upto, cesium, "Loads terrain/imagery", "HTTPS")
+    Rel(upto, w3w, "Resolves coordinates", "HTTPS")
+    Rel(upto, doc, "Syncs trail data + alerts", "HTTPS")
+    Rel(upto, osm, "Trail search + geocoding", "HTTPS")
+    Rel(upto, govtiles, "Basemap tiles", "HTTPS")
+    Rel(upto, resend, "Sends safety emails", "HTTPS")
+    Rel(upto, twilio, "Sends safety SMS", "HTTPS")
+    Rel(upto, google, "Authenticates users", "OAuth 2.0")
+
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")

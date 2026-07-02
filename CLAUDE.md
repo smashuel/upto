@@ -369,3 +369,19 @@ See [brain/features/doc-integration.md](brain/features/doc-integration.md) for f
 <!-- | Agent | Type | Description | -->
 <!-- |-------|------|-------------| -->
 <!-- | trail-data-agent | Explore | Investigate trail data quality and coverage issues | -->
+
+## Agent skills
+
+Configuration the Matt Pocock engineering skills (`/grill-with-docs`, `/to-prd`, `/to-issues`, `/triage`, `/implement`, `/domain-modeling`, `/improve-codebase-architecture`, `/tdd`, `/diagnosing-bugs`) read to fit this repo's conventions.
+
+### Issue tracker
+
+Local markdown — issues and PRDs live under `.scratch/<feature-slug>/`, versioned with the repo. No GitHub Issues / `gh` CLI; external PRs are not a triage surface. When shipped, the durable record moves to `brain/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`), recorded as a `Status:` line in each issue file. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context. Domain glossary lives at `CONTEXT.md` (repo root, created lazily by `/domain-modeling`). **ADRs continue in `brain/decisions/`** (3-digit numbered, `008`/`009`…) — not `docs/adr/`. See `docs/agents/domain.md`.

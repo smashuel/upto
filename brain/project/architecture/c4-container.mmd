@@ -1,0 +1,43 @@
+C4Container
+    title Upto — Container Diagram
+
+    Person(traveller, "Traveller", "Creates & runs TripLinks")
+    Person(watcher, "Watcher", "Tracks via share link")
+
+    System_Boundary(upto, "Upto") {
+        Container(spa, "Web App (SPA)", "React 18, TypeScript, Vite — Vercel", "Wizard, /trips, ActiveTrip, PublicAdventureView. Cesium map via CDN. Calls /api/* (Vercel rewrite to api.upto.world).")
+        Container(api, "Backend API", "Express.js — Linode, PM2, Nginx :80/:443", "REST + SSE. Native scrypt auth + session tokens. TripLink lifecycle, overdue checker (60s), capability-token endpoints (rate-limited, idempotent).")
+        Container(notify, "Notification Dispatch", "notifications.js (in-process)", "Per-contact channel picker. Start triggers all; Overdue triggers emergency circle. Resend primary, Twilio when configured.")
+        ContainerDb(db, "PostgreSQL", "upto_db — Linode", "users, contacts (is_emergency/favourite), triplinks (JSONB data incl. routes), check_ins (lat/lng).")
+        Container(doccache, "DOC Cache", "JSON files on disk", "~3.2k tracks / 890 huts / 1.85k campsites. Weekly cron sync (NZTM2000 to WGS84).")
+    }
+
+    System_Ext(cesium, "Cesium Ion", "Terrain + imagery")
+    System_Ext(w3w, "what3words", "Geocoding")
+    System_Ext(govtiles, "LINZ / AU Gov Tiles", "Topo basemaps")
+    System_Ext(doc, "NZ DOC API", "Authoritative trail data")
+    System_Ext(osm, "OSM Overpass + Nominatim", "Trails + geocoding")
+    System_Ext(resend, "Resend", "Email")
+    System_Ext(twilio, "Twilio", "SMS")
+    System_Ext(google, "Google OAuth", "Sign-in")
+
+    Rel(traveller, spa, "Uses", "HTTPS")
+    Rel(watcher, spa, "Opens share link", "HTTPS")
+
+    Rel(spa, api, "REST calls + SSE subscribe", "HTTPS /api/* (proxied)")
+    Rel(spa, cesium, "Loads 3D globe (browser, CDN)", "HTTPS")
+    Rel(spa, w3w, "Current-location to words (browser)", "HTTPS")
+    Rel(spa, govtiles, "AU keyless tiles (browser); LINZ via proxy", "HTTPS")
+
+    Rel(api, db, "Reads/writes", "SQL (pg)")
+    Rel(api, notify, "Triggers on start / overdue", "in-process")
+    Rel(api, doccache, "Serves cached trail data", "fs")
+    Rel(api, doc, "Weekly sync + live alerts", "HTTPS")
+    Rel(api, osm, "Trail search + geocoding", "HTTPS")
+    Rel(api, govtiles, "Proxies LINZ Topo tiles (key server-side)", "HTTPS")
+    Rel(api, google, "OAuth redirect/callback", "OAuth 2.0")
+    Rel(notify, resend, "Sends email", "HTTPS REST")
+    Rel(notify, twilio, "Sends SMS (when configured)", "HTTPS REST")
+    Rel(notify, watcher, "Delivers safety alert", "Email/SMS")
+
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")

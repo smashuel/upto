@@ -38,7 +38,9 @@
       "Bash(dig upto.world +short)",
       "Bash(dig www.upto.world +short)",
       "Bash(dig upto.world NS +short)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(echo \"---TSC EXIT:$?---\")",
+      "Bash(echo \"---LINT EXIT:$?---\")"
     ],
     "deny": []
   },

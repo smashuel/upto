@@ -51,7 +51,19 @@ payload — it no longer infers `overdue → active` itself). Notification dispa
 *injected* side effect: the lifecycle decides *that* a start/overdue notice fires, the
 notifier decides *who* and *which channel* (the [[Watcher]] / Emergency Contact policy).
 
+- **Settle window** — the interval between a route's finish (or edit-commit) and its
+  *settled* emission, while true terrain heights resolve. A real state with its own rules:
+  every teardown must strand work in flight, the UI represents it as `settling`, and
+  nothing may persist a trip mid-window without waiting it out. See
+  [ADR 014](brain/decisions/014-settle-window-is-a-real-state.md).
+
 ## Direction terms (per ADR 010)
+
+- **Safety core** — the end-to-end promise that makes Upto a safety tool rather than a
+  planner: the plan a TripLink stores is *truthful* (real distances, real climb), the
+  watcher-facing view shows that same truth, and when a trip goes [[Overdue]] a human is
+  *actually reached*. "Hardening the safety core" = closing gaps in that chain, as opposed
+  to adding new capability.
 
 - **Safety-first, social-curious** — the product stance: the safety/check-in tool is the
   product; a *thin* social layer exists only to reduce trip-coordination friction.

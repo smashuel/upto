@@ -1,141 +1,150 @@
 ---
 type: project
 status: in-progress
-tags: [roadmap, planning]
+tags: [roadmap, planning, sequencing]
 ---
 
 # Roadmap
 
-Snapshot of what's **shipped**, **in-progress**, and **planned** across the Upto scaffold. Keep this honest — move items through the statuses as they land. See individual files in [features/](../features/) and [plans/](../plans/) for detail.
+**This file answers: what do we do next, and why in that order.** Sequenced 2026-07-03
+(grilling session). Detail on any item lives in [features/](../features/) and
+[plans/](../plans/); history lives in the compressed [Shipped](#shipped-highlights)
+section at the bottom. If this file and the repo disagree, this file is broken — fix it.
 
-> **Direction (set 2026-06-29 — [ADR 010](../decisions/010-product-direction-safety-first-social-leash.md)):** safety-first, social-curious. Order of work: **(1) harden the safety core → (2) live GPS via Capacitor → (3) social invite/accept/join.** The full Anti-Strava social network (feed, streaks, leaderboards) is **rejected**; a "squad feed" is parked for its own design session.
+> **Direction ([ADR 010](../decisions/010-product-direction-safety-first-social-leash.md),
+> reconfirmed 2026-07-03):** safety-first, social-curious. Macro order:
+> **(1) harden the safety core → (2) live GPS → (3) social invite/accept/join.**
+> The full Anti-Strava network is rejected; a "squad feed" is parked for its own session.
 
-## Shipped (in `main`, working)
-
-### Product surface
-- [x] **TripLink creation wizard** — 5-step form: overview → location → details → contacts → review. See [features/triplink-wizard.md](../features/triplink-wizard.md)
-- [x] **Landing + routing** — Home, CreateAdventure, ViewAdventure, PublicAdventureView, Profile, ActiveTrip, Login, 404
-- [x] **Linode Postgres persistence** — `users`, `contacts`, `triplinks` (JSONB), `check_ins` tables. Idempotent `initDB()`. TripLinks save via `api.createTripLink` (localStorage kept as offline fallback — pending demotion)
-- [x] **Native auth** — scrypt password hashing + session tokens, `requireAuth` middleware. `POST /api/auth/{register,login,logout}` + `GET /api/auth/me`. Session persisted in localStorage via [useAuth.ts](../../src/hooks/useAuth.ts)
-- [x] **Google OAuth** — redirect + callback find-or-create flow
-- [x] **Contacts CRUD** — all four endpoints protected, wired to [Profile.tsx](../../src/pages/Profile.tsx)
-- [x] **TripLink lifecycle + SSE** — `/start`, `/checkin`, `/complete` endpoints; real-time SSE stream with 25s heartbeat broadcasts `status`/`checkin`/`overdue`
-- [x] **Overdue checker** — 60s interval, 15-minute grace past `expected_return_time`, flips status and broadcasts
-
-### Map (Cesium)
-- [x] **3D globe with satellite + terrain** — Cesium Ion (Sentinel-2 + world terrain), WebGL v1.132
-- [x] **2D ↔ 3D toggle** — `morphTo2D/3D`, persisted to `upto_scene_mode`. Wizard defaults to 2D topo. See [features/3d-map.md](../features/3d-map.md)
-- [x] **LINZ Topo50 overlay** — NZ-only, backend-proxied tiles, CC BY 4.0 attribution. See [features/linz-topo.md](../features/linz-topo.md)
-- [x] **AU basemap toggle** — GA National (AU-wide) + NSW Topo (1:25k–1:100k); key-less ArcGIS tiles, no proxy; viewport auto-switch with durable user override. See [features/basemap-toggle.md](../features/basemap-toggle.md)
-- [x] **Sat/Topo toggle** — grouped thumbs popover (NZ / AU), persisted to `upto_map_layer`
-- [x] **Cesium manager base class** — each manager owns its own `ScreenSpaceEventHandler` to avoid click-handler collisions
-- [x] **Waypoint placement** — click-to-place typed markers (bed, flag, mountain, triangle). See [features/waypoints.md](../features/waypoints.md)
-- [x] **Route drawing** — click points, live preview, undo/redo, double-click to finish. Stats: distance, ascent/descent, time. See [features/trail-drawing.md](../features/trail-drawing.md)
-- [x] **Trail snapping** — route points snap to nearby DOC/OSM tracks when snap toggle enabled
-- [x] **Trail discovery layer** — nearby DOC tracks render in viewport, dashed brown polylines, click to highlight. See [features/trail-discovery-layer.md](../features/trail-discovery-layer.md)
-- [x] **Map notes** — click-to-place notes on map (still uses `window.prompt()` → planned NoteModal). See [features/map-notes.md](../features/map-notes.md)
-- [x] **Route flyover** — animated chase-cam along finished route, HermitePolynomial smoothing. See [features/route-flyover.md](../features/route-flyover.md)
-- [x] **Fullscreen map mode** — Maximize button on the map header, Fullscreen API with CSS overlay fallback. See [features/map-fullscreen.md](../features/map-fullscreen.md)
-
-### Map UX overhaul (plans/map-ux-overhaul.md)
-- [x] **Phase 1** — route line glow, smooth camera transitions, loading indicator, upgraded elevation chart
-- [x] **Phase 2** — controls moved from header to floating overlays, NoteModal (partial — still needs wiring), mobile breakpoints
-- [x] **Phase 3** — interactive elevation profile ↔ map sync, redo stack, waypoint icon billboards
-- [x] **Phase 4** — drag-to-reroute edit mode, steepness-gradient route line
-- [x] **Phase 5** — trail discovery dashed styling, layers popover with opacity slider, route flyover
-- [x] **Topo resolution fix** — `maximumLevel: 19`, `maximumScreenSpaceError: 1.333`, MSAA 4× (Phase 5 side-quest)
-
-### Data integrations
-- [x] **DOC API integration** — ~3,200 tracks, ~890 huts, ~1,850 campsites cached as JSON; live alerts never cached. See [features/doc-integration.md](../features/doc-integration.md)
-- [x] **Weekly DOC sync** — NZTM2000 → WGS84 conversion, cron Monday 3 AM
-- [x] **Bbox trail query** — `/api/trails/bbox` serves viewport-limited tracks for discovery layer
-- [x] **OSM Overpass trail search** — global fallback outside NZ. See [features/global-trails.md](../features/global-trails.md)
-- [x] **Nominatim geocoding** — auto-extracts location from trip title, rate-limited 1 req/sec
-- [x] **What3words integration** — 3m×3m precision for parking / primary / emergency-exit points. See [features/what3words.md](../features/what3words.md)
-
-### GuidePace time estimation
-- [x] **Calculator logic** — Munter Method, Chauvin System, Technical System implemented in `TimeCalculator.ts`
-- [x] **GuidePace UI components** — estimator, pace-factor controls, route breakdown, time-estimate summary. See [features/guidepace.md](../features/guidepace.md)
-- [ ] **Wizard wiring** — components exist but aren't yet called from `TripDetailsStep`
-
-### Deployment
-- [x] **Vercel frontend** — `upto.world` + `upto-six.vercel.app`, `/api/*` proxied via `vercel.json` rewrite to Linode
-- [x] **Linode backend** — Express + PM2 + Nginx on `172.105.178.48`. See [project/deployment.md](deployment.md)
-- [x] **Skills scaffolded** — `/build-check`, `/check-backend`, `/deploy`, `/review-map`, `/map-ux`
+**Safety core** is defined in [CONTEXT.md](../../CONTEXT.md): the stored plan is
+*truthful*, watchers see that same truth, and an overdue trip *actually reaches a human*.
 
 ---
 
-## In progress
+## Now — Phase 1: harden the safety core
 
-- **Persistence + auth hardening** — DB + auth shipped, now closing four gaps: (1) plaintext DB password in source, (2) unprotected TripLink mutating endpoints, (3) account-level emergency contact linkage, (4) email transport for overdue alerts. See [plans/persistence-and-auth.md](../plans/persistence-and-auth.md). Unblocks social sharing once Phase 2 lands.
+**Exit criterion (agreed 2026-07-03):** truthful trip data (terrain stream complete) **+**
+a real human provably receives an overdue email in production **+** the watcher view
+verified end-to-end **+** the leaked DB password rotated. Check-in reminders and GuidePace
+are deliberately *not* in this gate — they're growth, not hardening (see Fast-follows).
+
+Two parallel lanes, then a capstone:
+
+**Ops lane — start immediately (user-driven, independent of code):**
+- [ ] **Alerts go live** — verify `upto.world` in Resend (DNS set, pending), then run one
+      throwaway prod trip past `expected_return_time` and confirm the overdue email lands
+      in a real inbox. Transport is already shipped ([features/notification-transport.md](../features/notification-transport.md)).
+- [ ] **Rotate the Linode DB password** — the old value is in git history
+      (follow-up from [ADR 009](../decisions/009-native-auth-capability-share-tokens.md)). ~15 min.
+
+**Dev lane — terrain-accurate picking, remaining slices (in order):**
+- [ ] **Slice 04 — waypoint elevation backfill** ([issue](../../.scratch/terrain-accurate-picking/issues/04-waypoint-elevation-backfill.md)) —
+      hoist the sampling helper to the shared manager base; pins correct like route points do.
+- [ ] **Slice 05 — honest degradation** ([issue](../../.scratch/terrain-accurate-picking/issues/05-honest-degradation-terrain-unavailable.md)) —
+      elevation absent-not-zero when terrain is unavailable, plus the visible notice.
+      Sequenced after 04 because its serialization change covers waypoints too.
+- Done so far: depth picking + draw-time sampling (`0834976`), finish-settlement
+  ([journal 07-02](../journal/2026-07-02-finish-settlement-race.md)), settle-window
+  hardening + route upsert ([journal 07-03](../journal/2026-07-03-settle-window-hardening.md),
+  [ADR 014](../decisions/014-settle-window-is-a-real-state.md)).
+
+**Capstone = phase sign-off:**
+- [ ] **One full end-to-end walkthrough** — create → draw/edit route → share →
+      PublicAdventureView renders the truth → start (watchers notified) → check-in →
+      overdue → email received → complete. This closes the long-standing
+      "PublicAdventureView not E2E verified" item and doubles as the phase-1 exit test.
 
 ---
 
-## Planned
+## Bridge — before phase 2 map work starts
 
-> Ticked `[x]` items in this section have **shipped** and are retained for narrative
-> continuity within each plan. Unticked `[ ]` items are the genuinely-not-started work.
+- [ ] **npm Cesium + official TS types** — kills the all-`any` map surface. Isolated PR,
+      deliberately timed here: after the terrain stream stops churning the map services,
+      before live-GPS builds a position channel on top of them. Worst possible time to do
+      this is *after* phase 2 code exists.
 
-### Persistence + accounts (hardening — see [plans/persistence-and-auth.md](../plans/persistence-and-auth.md))
-- [x] **Remove plaintext DB password** — `DATABASE_URL` now required; throws on startup if missing. See [decisions/009-native-auth-capability-share-tokens.md](../decisions/009-native-auth-capability-share-tokens.md). **Follow-up**: rotate the Linode DB password since the old value is in git history.
-- [x] **Protect `POST /api/triplinks`** — `requireAuth` + ownership check; `user_id` derived from session. `/start`/`/checkin`/`/complete` deliberately stay capability-guarded by share_token (traveller may hand URL to a partner). See the ADR for rationale.
-- [x] **Harden capability endpoints** — per-token rate limit (10/10s, `429`), idempotent `/start` + `/complete`, no token logging. Shipped 2026-06-18. See [decisions/009-native-auth-capability-share-tokens.md](../decisions/009-native-auth-capability-share-tokens.md). (Audit-trail-on-transition still open, low priority.)
-- [x] **Account-level emergency contacts** — `is_emergency` flag on `contacts`, Shield toggle on Profile, wizard auto-populates from emergency circle with per-trip opt-out + Edit-on-Profile link. TripLink keeps embedding the snapshot at save time (audit-trail-friendly). See [features/emergency-contacts-account-level.md](../features/emergency-contacts-account-level.md)
-- [ ] **Route persisted on TripLink** — serialise `SerializableTrack` + basemap into TripLink JSONB `data` at save time; rehydrate on view pages. See [features/triplink-route-persistence.md](../features/triplink-route-persistence.md)
-- [x] **Demote dual-write to fallback** — done in My Trips / Persistence Phase 4 (2026-06-16): localStorage demoted to a bounded non-throwing offline-read cache (`cacheTripLinkOffline`); backend is single source of truth.
-- [ ] **Social TripLink sharing** — invite contacts/favourites to accept or join a trip, replacing the group-chat-before-every-mission friction. **In scope per [ADR 010](../decisions/010-product-direction-safety-first-social-leash.md), sequenced 3rd — after the safety core is hardened and live GPS.** Multi-phase plan with competitor research + schema design. See [plans/social-triplink-sharing.md](../plans/social-triplink-sharing.md)
-- [x] ~~**Squad social vision**~~ — **REJECTED 2026-06-29** ([ADR 010](../decisions/010-product-direction-safety-first-social-leash.md)). The full "Anti-Strava" network (feed, streaks, leaderboards, viral loop) is not the product. Survivors: invite/accept/join (above) + a private recap card. Squad feed parked for its own session. See [features/squad-social-vision.md](../features/squad-social-vision.md)
+---
 
-### Safety system (delivery layer)
-- [x] **Notification transport (email-first, SMS-ready)** — [notifications.js](../../notifications.js) with two adapters (Resend + Twilio), per-contact channel picker, `notifyTripStart` on `/start`, `notifyTripOverdue` on the 60s overdue transition. Both adapters stub when their creds are unset; flipping providers on later is pure ops. See [features/notification-transport.md](../features/notification-transport.md). **To go live**: verify `upto.world` in Resend (DNS set, pending verification); `RESEND_API_KEY` already deployed to Linode.
-- [x] **RecipientPicker + Start confirmation** — post-create success screen shows Emergency Circle (pre-checked), Favourites, Others, ad-hoc contacts. Start button reads "Notify N watchers". Toast confirms "Notified N watchers (S SMS, E email)" or shows skip/failure. Confirm-modal prevents silent zero-watcher starts. ActiveTrip Watchers panel shows who was told. See [journal/2026-06-05-recipient-picker-redesign.md](../journal/2026-06-05-recipient-picker-redesign.md).
-- [x] **Trip completion success screen** — full-page "Trip complete — glad you're back safely." with trip title, duration, watcher note, View account + Plan another trip CTAs. Strava sync teased.
-- [x] **My Trips page + Persistence Phase 4 tie-up** — `/trips` page lists the user's trips grouped by status (new `GET /api/triplinks` endpoint, lightweight projection). Profile shows a 3-trip preview; completion screen CTA retargets to `/trips`. localStorage dual-write demoted to a bounded non-throwing offline-read cache (`cacheTripLinkOffline`). Stale-session 401 → sign out. All 5 phases shipped 2026-06-16. See [plans/my-trips-and-persistence-tieup.md](../plans/my-trips-and-persistence-tieup.md).
-- [x] **Harden capability endpoints** — per-token rate limit + idempotent `/start`/`/complete` + no token logging. Shipped 2026-06-18 (Stream 1). See ADR 009.
-- [ ] **Strava sync** — OAuth + Strava API. Teased on completion screen. Long-horizon backlog; `/trips` is the surface it attaches to.
-- [ ] **Check-in reminder schedule** — cron to nudge the traveller before `expected_return_time` (separate from overdue)
-- [ ] **Public shared adventure view — E2E verify** — `GET /api/triplinks/:shareToken` works; [PublicAdventureView.tsx](../../src/pages/PublicAdventureView.tsx) not confirmed end-to-end
-- [ ] **SAR-friendly overdue summary** — eventually surface a printable/shareable escalation packet
+## Next — Phase 2: live GPS ([ADR 010](../decisions/010-product-direction-safety-first-social-leash.md) / [ADR 011](../decisions/011-capacitor-mobile-shell.md))
 
-### Wizard polish
-- [ ] **Wire GuidePace into TripDetailsStep** — components + calculator already shipped
-- [ ] **Re-integrate AdventureScheduleStep** — currently pulled out of wizard
-- [ ] **NoteModal wiring** — replace `window.prompt()` in `NoteManager.onRequestNote`
-- [ ] **Tidy under-map clutter in Location step** — collapse stacked `LocationDisplay` cards, drop the what3words explainer paragraph. See [features/location-step-tidy.md](../features/location-step-tidy.md)
+Stream the traveller's *current* position to watchers on the TripLink map. Framed as
+safety, not social. **Kickoff act: write `brain/plans/live-location.md` and grill it** —
+the roadmap only fixes the shape below (agreed 2026-07-03):
 
-### Map performance & polish (see [plans/compass_artifact.md](../plans/compass_artifact.md))
-- [x] **Device-tier performance preset** — [MapPerformance.ts](../../src/services/MapPerformance.ts); desktop keeps crisp settings, mobile relaxes resolution/SSE/MSAA/atmosphere for FPS. Shipped 2026-06-17.
-- [x] **Optional note content + de-cluttered location step** — notes no longer require a comment; removed the messy w3w banner + Primary/Parking/Exit cards. 2026-06-17. See [journal/2026-06-17-map-runthrough-issues.md](../journal/2026-06-17-map-runthrough-issues.md).
-- [ ] **Terrain-accurate picking** — `pickEllipsoid` → `scene.pickPosition` + `sampleTerrainMostDetailed`. **Highest safety value: fixes elevation reading 0 AND the 3D draw-offset.** From the run-through. **(Stream 1 — in progress.)**
-- [x] **TripLink route overview on view pages** — read-only map on ActiveTrip & PublicAdventureView showing the planned route highlighted + a **last check-in** pin. Route now persisted into TripLink JSONB (`TripRoute`); `TripPlanningMap` gained a `readOnly` prop + `checkInMarker`; check-ins now store `lat`/`lng` (DB migration + endpoint + w3w-locate capture). Shipped 2026-06-18. **(Stream 1 — "item A", done.)**
-- [x] **`requestRenderMode`** — on-demand rendering when idle, continuous during draw/edit/flyover (toggle effect) + `requestRender()` after idle-mode entity mutations. Shipped 2026-06-18. See [plans/compass_artifact.md](../plans/compass_artifact.md) #2. **Needs a device sanity-check** (failure mode is invisible to tsc/lint). **(Stream 1.)**
-- [ ] **🔭 Live location on the TripLink map (item B) — COMMITTED as the next major bet** ([ADR 010](../decisions/010-product-direction-safety-first-social-leash.md) / [ADR 011](../decisions/011-capacitor-mobile-shell.md)) — stream the traveller's *current* GPS position to watchers in real time on the TripLink map: geolocation → a position channel over SSE → a live marker that moves. Distinct from the shipped "last check-in location" (a static pin) and from "item A" (the planned route). **Framed as safety, not social.** Path: **(stage 1)** foreground-only web pipeline first to prove the plumbing; **(stage 2)** **Capacitor** shell for reliable iOS background location + push. Hard preconditions: battery-aware sampling + a per-trip privacy model (with-trip / owner-only / off). **Starts only after the safety core is hardened** — needs its own plan when picked up.
-- [ ] **Note-mode shouldn't drop an in-progress route** — auto-finish on mode switch. From the run-through.
-- [ ] **npm Cesium bundle + official TS types** — kills the all-`any` map surface; isolated PR.
-- [ ] **Valhalla + Meili routing** — real OSM trail snapping, replaces DOC-only ad-hoc snap. Own project.
-- [ ] **PWA offline tile cache** — pre-download a region before a trip. Own project.
+- [ ] **Stage 1 — web foreground pipeline, SHIPPABLE** — geolocation → SSE position
+      channel → live marker. Ships to users as honest *"live while the traveller has the
+      page open"* (real value on day walks; real users validate the plumbing before
+      Capacitor money is spent). **The per-trip privacy model (with-trip / owner-only /
+      off) is designed in stage 1** — watchers see positions from day one.
+      Natural rider: persist the chosen basemap (+ camera framing) on the TripLink so the
+      live marker renders on the planner's canvas — the unshipped half of
+      [features/triplink-route-persistence.md](../features/triplink-route-persistence.md).
+- [ ] **Stage 2 — Capacitor shell** — reliable iOS background location + push.
+      Battery-aware sampling lands here, where backgrounding makes it acute.
+      (The old "Capacitor vs React Native eval" is resolved: Capacitor, per ADR 011.)
 
-### Map UX — future phases (not in current plan)
-- [ ] **Waypoint insertion mid-route** — depends on drag-to-reroute (shipped)
-- [ ] **Slope analysis overlay** — CalTopo-style `GroundPrimitive`
-- [ ] **Surface type indicators** — Komoot-style; requires backend OSM surface tags
-- [ ] **GPX import**
-- [ ] **Offline map caching** — Gaia GPS-style
+**Fast-follow lane (interleave during phase 2 — wizard/backend work, no collision with
+GPS map work):**
+- [ ] **Wire GuidePace into TripDetailsStep** — calculator + UI components long shipped;
+      the terrain stream exists so these estimates are grounded in true ascent.
+- [ ] **Check-in reminder schedule** — nudge the traveller *before*
+      `expected_return_time`; completes the loop plan → estimate → nudge → escalate.
 
-### Data expansion
-- [ ] **Other AU state topos** — VIC, QLD, TAS, WA, SA. `AusMapService` structure is ready — each state is a BOUNDS / URL / ATTRIBUTION triplet plus a branch in `resolveBasemap` / `applyBasemap`
-- [ ] **TrailForks integration** — MTB/hiking trail data; needs API credentials
-- [ ] **Hiking Project integration** — US-only; needs API credentials
-- [ ] **MapTiler fallback** — env var placeholder exists
+---
 
-### Mobile
-- [ ] **PWA shell** — offline-first plan review, cached recent TripLinks
-- [ ] **Native app eval** — Capacitor vs React Native (post-persistence)
+## Later — Phase 3: social invite/accept/join
+
+Invite contacts to accept or join a trip, replacing the pre-mission group chat.
+Plan exists as a draft — [plans/social-triplink-sharing.md](../plans/social-triplink-sharing.md) —
+**kickoff act: grill that draft.** Nothing pulls forward; phase 1's contacts/auth work
+already laid its foundations. (Private recap card survives from the rejected squad
+vision; squad feed still parked for its own session.)
+
+---
+
+## Opportunistic (grab when blocked — small, no sequencing weight)
+
+- [ ] NoteModal wiring — replace `window.prompt()` in `NoteManager`
+- [ ] Note-mode shouldn't drop an in-progress route (auto-finish on mode switch)
+- [ ] Re-integrate `AdventureScheduleStep` into the wizard
+- [ ] Location-step tidy — collapse stacked cards ([features/location-step-tidy.md](../features/location-step-tidy.md))
+- [ ] `requestRenderMode` sanity check on a real device (failure mode invisible to tsc/lint)
+
+## Parked (deliberately not now — each needs its own project/plan when picked up)
+
+- **Valhalla + Meili routing** — real OSM snapping, replaces DOC-only ad-hoc snap
+- **PWA offline** — shell + pre-downloaded region tile cache (merged: old "PWA shell",
+  "offline tile cache", "offline map caching" items were one project in three lines)
+- **Strava sync** — teased on the completion screen; `/trips` is the attach surface
+- **SAR-friendly overdue summary** — printable/shareable escalation packet
+- **Audit trail on lifecycle transitions** — low priority, from ADR 009
+- **Map future phases** — waypoint insertion mid-route, CalTopo-style slope overlay
+  (`GroundPrimitive`), surface-type indicators, GPX *import* (export exists)
+- **Data expansion** — other AU state topos (VIC/QLD/TAS/WA/SA — `AusMapService` is
+  ready for BOUNDS/URL/ATTRIBUTION triplets), TrailForks, Hiking Project, MapTiler
+
+---
+
+## Shipped highlights
+
+One line per area — detail in the linked files.
+
+- **TripLink product surface** — 5-step wizard, My Trips, lifecycle (`/start`/`/checkin`/`/complete`) + SSE + 60s overdue sweep, completion screen, RecipientPicker with Emergency Circle. [features/triplink-wizard.md](../features/triplink-wizard.md), [plans/my-trips-and-persistence-tieup.md](../plans/my-trips-and-persistence-tieup.md)
+- **Persistence & auth** — Linode Postgres (single source of truth; localStorage demoted to offline-read cache), scrypt auth + sessions, Google OAuth, contacts CRUD, capability-token endpoints hardened. [plans/persistence-and-auth.md](../plans/persistence-and-auth.md), [ADR 009](../decisions/009-native-auth-capability-share-tokens.md)
+- **Notification transport** — email-first (Resend) with Twilio SMS scaffolded off; start + overdue notices; stub-mode when creds unset. [features/notification-transport.md](../features/notification-transport.md)
+- **Map core** — Cesium 3D globe, 2D↔3D toggle, LINZ Topo50 + AU basemaps with viewport auto-switch, waypoints, route drawing with live stats + elevation profile, trail snapping, trail discovery layer, notes, flyover, fullscreen, device-tier performance, `requestRenderMode`. [features/3d-map.md](../features/3d-map.md), [plans/map-ux-overhaul.md](../plans/map-ux-overhaul.md) (all 5 phases), [plans/compass_artifact.md](../plans/compass_artifact.md)
+- **Terrain truth (Stream 1, phase-1 core)** — depth-buffer picking, draw-time sampling, finish/edit settlement, settle-window hardening, wizard route upsert; route + check-in pin render read-only on view pages. [ADR 014](../decisions/014-settle-window-is-a-real-state.md), journals [06-17](../journal/2026-06-17-map-runthrough-issues.md) / [07-02](../journal/2026-07-02-finish-settlement-race.md) / [07-03](../journal/2026-07-03-settle-window-hardening.md)
+- **Data integrations** — DOC (tracks/huts/campsites cached, alerts never cached, weekly sync), bbox trail query, OSM Overpass, Nominatim, what3words. [features/doc-integration.md](../features/doc-integration.md)
+- **GuidePace** — Munter/Chauvin/Technical calculators + UI components built (wiring is in the Fast-follow lane). [features/guidepace.md](../features/guidepace.md)
+- **Test harness** — Vitest + fake `window.Cesium`, map services tested at the public boundary. [ADR 013](../decisions/013-vitest-alongside-node-test.md)
+- **Deployment** — Vercel frontend (`upto.world`) + Linode Express/PM2/Nginx backend; `/build-check`, `/deploy`, `/check-backend` skills. [project/deployment.md](deployment.md)
+- ~~**Squad social vision**~~ — **rejected** ([ADR 010](../decisions/010-product-direction-safety-first-social-leash.md)); survivors noted in phases 2–3.
 
 ---
 
 ## How to use this file
 
-- Before starting work, read this top-to-bottom so you know what's in motion.
-- When shipping, check the box and update [project/status.md](status.md).
-- When proposing new work, add a `status: draft` or `status: planned` file under [features/](../features/) or [plans/](../plans/) and link it from here.
+- Work top-down: the first unticked box in the highest active section is the default next task.
+- A phase's exit criterion is the *only* thing that closes it — don't slide new items into a phase; new safety-adjacent ideas go to Fast-follows, Opportunistic, or Parked.
+- When shipping: tick here, update [status.md](status.md), and move detail to features/plans.
+- When a Parked item is picked up, its first act is a plan file + grilling, not code.

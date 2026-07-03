@@ -327,7 +327,7 @@ See [brain/features/doc-integration.md](brain/features/doc-integration.md) for f
 - **GuidePace UI connection**: `GuidePaceEstimator`, `PaceFactorControls`, `RouteBreakdown`, and `TimeEstimateSummary` components exist and the calculator logic works, but they aren't wired into the main trip creation flow
 - **AdventureScheduleStep**: Component exists but was pulled out of the wizard steps — schedule is not currently part of the creation flow
 - **NoteManager UX**: Uses `window.prompt()` for note input instead of a proper modal/form
-- **Route persisted on TripLink**: `SerializableTrack` + `MapLayer` not yet written into the TripLink's JSONB `data` at save time. See [brain/features/triplink-route-persistence.md](brain/features/triplink-route-persistence.md).
+- **Basemap persisted on TripLink**: routes (`SerializableTrack`) ARE saved into the TripLink's JSONB `data` and rendered on view pages (shipped 2026-06-18); the remaining gap is the chosen `MapLayer` + camera framing, planned as a rider on live-GPS stage 1. See [brain/features/triplink-route-persistence.md](brain/features/triplink-route-persistence.md).
 
 ### Known Quirks
 - Cesium is loaded via CDN (not npm) and accessed through `window.Cesium` global — all map services use `any` types for Cesium objects

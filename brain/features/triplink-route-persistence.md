@@ -1,6 +1,6 @@
 ---
 type: feature
-status: planned
+status: partial  # route half shipped 2026-06-18; basemap+camera remainder rides live-GPS stage 1 (roadmap 2026-07-03)
 related: [src/types/adventure.ts, src/services/TrackDrawer.ts, src/pages/CreateAdventure.tsx, src/pages/ViewAdventure.tsx, src/pages/PublicAdventureView.tsx, src/components/map/TripPlanningMap.tsx]
 tags: [triplink, persistence, tracking, safety, map]
 ---

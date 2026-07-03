@@ -84,13 +84,6 @@ export default class TrackDrawer extends CesiumManager {
   /** Points removed by undo — available for redo until a new point is added */
   private redoStack: TrackPoint[] = [];
 
-  // Cached real terrain provider used to sample TRUE elevations, independent of
-  // whatever terrain is currently displayed (2D mode uses a flat ellipsoid, so
-  // picked heights there are 0). Lazily created; stays null if unavailable
-  // (e.g. no Ion token) and elevations then fall back to the picked height.
-  private samplingTerrain: any = null;
-  private samplingTerrainTried = false;
-
   // Steepness overlay: per-segment slope-coloured polylines, rendered on top
   // of the normal casing+core when the user toggles the "Steepness" layer.
   private slopeOverlayEnabled = false;
@@ -323,46 +316,6 @@ export default class TrackDrawer extends CesiumManager {
       // must not emit over (or wipe) whatever replaced this drawing's panel.
       if (epoch !== this.drawingEpoch) return;
       this.emitDrawingStats();
-    }
-  }
-
-  /** Lazily resolve a real terrain provider for height sampling (Cesium World Terrain). */
-  private async getSamplingTerrain(): Promise<any | null> {
-    if (this.samplingTerrainTried) return this.samplingTerrain;
-    this.samplingTerrainTried = true;
-    try {
-      this.samplingTerrain = await window.Cesium.CesiumTerrainProvider.fromIonAssetId(1);
-    } catch {
-      this.samplingTerrain = null; // no Ion token / offline — fall back to picked heights
-    }
-    return this.samplingTerrain;
-  }
-
-  /**
-   * Replace each point's elevation with the true terrain height at its lng/lat,
-   * sampled from real terrain regardless of the displayed scene mode. Mutates the
-   * points in place; silently no-ops if terrain is unavailable. The rendered line
-   * is clamped-to-ground so this only affects stored elevation + distance, not visuals.
-   */
-  private async enrichElevation(points: TrackPoint[]): Promise<void> {
-    if (!points.length) return;
-    const Cesium = window.Cesium;
-    const terrain = await this.getSamplingTerrain();
-    if (!terrain) return;
-    const cartos = points.map(p => Cesium.Cartographic.fromCartesian(p.position));
-    try {
-      await Cesium.sampleTerrainMostDetailed(terrain, cartos);
-    } catch {
-      return;
-    }
-    for (let i = 0; i < points.length; i++) {
-      const h = cartos[i].height;
-      if (!Number.isFinite(h)) continue;
-      const lng = Cesium.Math.toDegrees(cartos[i].longitude);
-      const lat = Cesium.Math.toDegrees(cartos[i].latitude);
-      points[i].position = Cesium.Cartesian3.fromDegrees(lng, lat, h);
-      points[i].cartographic = Cesium.Cartographic.fromCartesian(points[i].position);
-      points[i].elevation = h;
     }
   }
 

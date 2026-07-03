@@ -37,16 +37,15 @@ Two parallel lanes, then a capstone:
 - [ ] **Rotate the Linode DB password** — the old value is in git history
       (follow-up from [ADR 009](../decisions/009-native-auth-capability-share-tokens.md)). ~15 min.
 
-**Dev lane — terrain-accurate picking, remaining slices (in order):**
-- [ ] **Slice 04 — waypoint elevation backfill** ([issue](../../.scratch/terrain-accurate-picking/issues/04-waypoint-elevation-backfill.md)) —
-      hoist the sampling helper to the shared manager base; pins correct like route points do.
+**Dev lane — terrain-accurate picking, remaining slice:**
 - [ ] **Slice 05 — honest degradation** ([issue](../../.scratch/terrain-accurate-picking/issues/05-honest-degradation-terrain-unavailable.md)) —
       elevation absent-not-zero when terrain is unavailable, plus the visible notice.
-      Sequenced after 04 because its serialization change covers waypoints too.
+      Now the only slice left in Stream 1.
 - Done so far: depth picking + draw-time sampling (`0834976`), finish-settlement
   ([journal 07-02](../journal/2026-07-02-finish-settlement-race.md)), settle-window
   hardening + route upsert ([journal 07-03](../journal/2026-07-03-settle-window-hardening.md),
-  [ADR 014](../decisions/014-settle-window-is-a-real-state.md)).
+  [ADR 014](../decisions/014-settle-window-is-a-real-state.md)), waypoint elevation
+  backfill ([journal 07-03b](../journal/2026-07-03-waypoint-elevation-backfill.md)).
 
 **Capstone = phase sign-off:**
 - [ ] **One full end-to-end walkthrough** — create → draw/edit route → share →
@@ -133,7 +132,7 @@ One line per area — detail in the linked files.
 - **Persistence & auth** — Linode Postgres (single source of truth; localStorage demoted to offline-read cache), scrypt auth + sessions, Google OAuth, contacts CRUD, capability-token endpoints hardened. [plans/persistence-and-auth.md](../plans/persistence-and-auth.md), [ADR 009](../decisions/009-native-auth-capability-share-tokens.md)
 - **Notification transport** — email-first (Resend) with Twilio SMS scaffolded off; start + overdue notices; stub-mode when creds unset. [features/notification-transport.md](../features/notification-transport.md)
 - **Map core** — Cesium 3D globe, 2D↔3D toggle, LINZ Topo50 + AU basemaps with viewport auto-switch, waypoints, route drawing with live stats + elevation profile, trail snapping, trail discovery layer, notes, flyover, fullscreen, device-tier performance, `requestRenderMode`. [features/3d-map.md](../features/3d-map.md), [plans/map-ux-overhaul.md](../plans/map-ux-overhaul.md) (all 5 phases), [plans/compass_artifact.md](../plans/compass_artifact.md)
-- **Terrain truth (Stream 1, phase-1 core)** — depth-buffer picking, draw-time sampling, finish/edit settlement, settle-window hardening, wizard route upsert; route + check-in pin render read-only on view pages. [ADR 014](../decisions/014-settle-window-is-a-real-state.md), journals [06-17](../journal/2026-06-17-map-runthrough-issues.md) / [07-02](../journal/2026-07-02-finish-settlement-race.md) / [07-03](../journal/2026-07-03-settle-window-hardening.md)
+- **Terrain truth (Stream 1, phase-1 core)** — depth-buffer picking, draw-time sampling, finish/edit settlement, settle-window hardening, wizard route upsert, waypoint elevation backfill; route + check-in pin render read-only on view pages. [ADR 014](../decisions/014-settle-window-is-a-real-state.md), journals [06-17](../journal/2026-06-17-map-runthrough-issues.md) / [07-02](../journal/2026-07-02-finish-settlement-race.md) / [07-03](../journal/2026-07-03-settle-window-hardening.md) / [07-03b](../journal/2026-07-03-waypoint-elevation-backfill.md)
 - **Data integrations** — DOC (tracks/huts/campsites cached, alerts never cached, weekly sync), bbox trail query, OSM Overpass, Nominatim, what3words. [features/doc-integration.md](../features/doc-integration.md)
 - **GuidePace** — Munter/Chauvin/Technical calculators + UI components built (wiring is in the Fast-follow lane). [features/guidepace.md](../features/guidepace.md)
 - **Test harness** — Vitest + fake `window.Cesium`, map services tested at the public boundary. [ADR 013](../decisions/013-vitest-alongside-node-test.md)

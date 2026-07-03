@@ -87,6 +87,10 @@ class PolylineGlowMaterialProperty {
   constructor(public options: any) {}
 }
 
+class NearFarScalar {
+  constructor(public near = 0, public nearValue = 0, public far = 0, public farValue = 0) {}
+}
+
 /** One registered screen-space handler; fake fires events straight at the actions. */
 class FakeScreenSpaceEventHandler {
   actions = new Map<string, (event: any) => void>();
@@ -194,6 +198,9 @@ export function installFakeCesium(): FakeCesiumWorld {
     },
     SceneMode: { SCENE2D: 'SCENE2D', SCENE3D: 'SCENE3D', COLUMBUS_VIEW: 'COLUMBUS_VIEW' },
     HeightReference: { CLAMP_TO_GROUND: 'CLAMP_TO_GROUND' },
+    VerticalOrigin: { BOTTOM: 'BOTTOM', TOP: 'TOP', CENTER: 'CENTER' },
+    LabelStyle: { FILL: 'FILL', OUTLINE: 'OUTLINE', FILL_AND_OUTLINE: 'FILL_AND_OUTLINE' },
+    NearFarScalar,
     Math: {
       toDegrees: (rad: number) => (rad * 180) / Math.PI,
       toRadians: (deg: number) => (deg * Math.PI) / 180,

@@ -7,13 +7,30 @@
  * - Own ScreenSpaceEventHandler (one per manager, so they don't overwrite each other)
  * - Cursor style management
  * - Cleanup on destroy
+ * - True-terrain elevation sampling (see `enrichElevation`)
  */
+
+/** Minimal shape `enrichElevation` needs — route points and waypoints both satisfy this. */
+export interface ElevationPoint {
+  position: any; // Cesium.Cartesian3
+  cartographic: any; // Cesium.Cartographic
+  elevation: number;
+}
+
 export abstract class CesiumManager {
   protected viewer: any;
   protected handler: any = null;
 
   private setupRetries = 0;
   private readonly MAX_RETRIES = 50; // 5 seconds at 100ms intervals
+
+  // Cached real terrain provider used to sample TRUE elevations, independent of
+  // whatever terrain is currently displayed (2D mode uses a flat ellipsoid, so
+  // picked heights there are 0). Lazily created per manager instance; stays null
+  // if unavailable (e.g. no Ion token) and elevations then fall back to the
+  // picked height.
+  private samplingTerrain: any = null;
+  private samplingTerrainTried = false;
 
   constructor(viewer: any) {
     this.viewer = viewer;
@@ -64,6 +81,48 @@ export abstract class CesiumManager {
       }
     } catch {
       // Ignore — viewer may be in teardown
+    }
+  }
+
+  /** Lazily resolve a real terrain provider for height sampling (Cesium World Terrain). */
+  protected async getSamplingTerrain(): Promise<any | null> {
+    if (this.samplingTerrainTried) return this.samplingTerrain;
+    this.samplingTerrainTried = true;
+    try {
+      this.samplingTerrain = await window.Cesium.CesiumTerrainProvider.fromIonAssetId(1);
+    } catch {
+      this.samplingTerrain = null; // no Ion token / offline — fall back to picked heights
+    }
+    return this.samplingTerrain;
+  }
+
+  /**
+   * Replace each point's elevation with the true terrain height at its lng/lat,
+   * sampled from real terrain regardless of the displayed scene mode. Mutates the
+   * points in place; silently no-ops if terrain is unavailable. Shared by
+   * TrackDrawer (route points) and WaypointManager (placed waypoints) — the
+   * rendered geometry is clamped-to-ground, so this only affects stored
+   * elevation + distance, never visuals.
+   */
+  protected async enrichElevation(points: ElevationPoint[]): Promise<void> {
+    if (!points.length) return;
+    const Cesium = window.Cesium;
+    const terrain = await this.getSamplingTerrain();
+    if (!terrain) return;
+    const cartos = points.map(p => Cesium.Cartographic.fromCartesian(p.position));
+    try {
+      await Cesium.sampleTerrainMostDetailed(terrain, cartos);
+    } catch {
+      return;
+    }
+    for (let i = 0; i < points.length; i++) {
+      const h = cartos[i].height;
+      if (!Number.isFinite(h)) continue;
+      const lng = Cesium.Math.toDegrees(cartos[i].longitude);
+      const lat = Cesium.Math.toDegrees(cartos[i].latitude);
+      points[i].position = Cesium.Cartesian3.fromDegrees(lng, lat, h);
+      points[i].cartographic = Cesium.Cartographic.fromCartesian(points[i].position);
+      points[i].elevation = h;
     }
   }
 

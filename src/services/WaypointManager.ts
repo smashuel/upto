@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { CesiumManager } from './CesiumManager';
+import { CesiumManager, type ElevationPoint } from './CesiumManager';
 import type { LatLng } from '../types/adventure';
 
 export interface Waypoint {
@@ -44,10 +44,20 @@ export default class WaypointManager extends CesiumManager {
   private waypoints: Waypoint[] = [];
   private active = false;
   private onAdded?: (waypoint: Waypoint) => void;
+  /** Set on destroy() — an elevation backfill that resolves afterward must not
+   *  touch a torn-down viewer's entities (same class of hazard ADR 014 covers
+   *  for TrackDrawer's settlements, scaled down: waypoints have no session to
+   *  strand, just per-object async work to abandon on teardown). */
+  private destroyed = false;
 
   constructor(viewer: any, onAdded?: (waypoint: Waypoint) => void) {
     super(viewer);
     this.onAdded = onAdded;
+  }
+
+  destroy() {
+    this.destroyed = true;
+    super.destroy();
   }
 
   protected setup(handler: any) {
@@ -63,7 +73,14 @@ export default class WaypointManager extends CesiumManager {
     this.setCursor(enabled ? 'crosshair' : '');
   }
 
-  addWaypoint(position: any, meta: Partial<Waypoint['metadata']> = {}): Waypoint {
+  /**
+   * Place a waypoint. `backfill` (default true) kicks off the async true-terrain
+   * elevation correction — same UX contract as route points: the pin appears
+   * instantly at the picked height, then corrects a moment later. `loadWaypoints`
+   * passes `false`: rehydrated/persisted waypoints are trusted as already-settled,
+   * so re-sampling on every mount would be wasted network traffic, not a fix.
+   */
+  addWaypoint(position: any, meta: Partial<Waypoint['metadata']> = {}, backfill = true): Waypoint {
     const cartographic = window.Cesium.Cartographic.fromCartesian(position);
 
     const waypoint: Waypoint = {
@@ -83,7 +100,41 @@ export default class WaypointManager extends CesiumManager {
     this.waypoints.push(waypoint);
     waypoint.entity = this.renderWaypoint(waypoint);
     this.onAdded?.(waypoint);
+    if (backfill) void this.backfillElevation(waypoint);
     return waypoint;
+  }
+
+  /**
+   * Backfill a waypoint's true terrain height (Cesium World Terrain), then
+   * refresh its stored elevation, entity position and infobox description —
+   * mirrors TrackDrawer's per-click enrichment. If terrain is unavailable or
+   * sampling fails, the picked height is kept silently (honest absence-marking
+   * is slice 05's job). Guards against a waypoint deleted while the sample was
+   * in flight — no phantom repaint of a pin the user already removed.
+   */
+  private async backfillElevation(waypoint: Waypoint) {
+    const proxy: ElevationPoint = {
+      position: waypoint.position,
+      cartographic: waypoint.cartographic,
+      elevation: waypoint.metadata.elevation ?? waypoint.cartographic.height,
+    };
+    await this.enrichElevation([proxy]);
+    // Deleted/cleared, or the manager destroyed, while we awaited — nothing left to paint.
+    if (this.destroyed || !this.waypoints.includes(waypoint)) return;
+
+    waypoint.position = proxy.position;
+    waypoint.cartographic = proxy.cartographic;
+    waypoint.metadata.elevation = proxy.elevation;
+
+    try {
+      if (waypoint.entity) {
+        waypoint.entity.position = waypoint.position;
+        waypoint.entity.description = this.buildDescription(waypoint);
+      }
+      this.requestRender(); // paint the corrected height/description under requestRenderMode
+    } catch {
+      // Viewer torn down between the check above and here — nothing left to paint
+    }
   }
 
   private renderWaypoint(wp: Waypoint): any {
@@ -133,12 +184,13 @@ export default class WaypointManager extends CesiumManager {
     return [...this.waypoints];
   }
 
-  /** Load waypoints from stored data — coordinates are [lat, lng] */
+  /** Load waypoints from stored data — coordinates are [lat, lng]. Trusted as
+   *  already-settled: no elevation re-backfill (see `addWaypoint`'s `backfill` param). */
   loadWaypoints(waypoints: Array<{ name?: string; coordinates: LatLng; elevation?: number; type?: string }>) {
     for (const wp of waypoints) {
       const [lat, lng] = wp.coordinates;
       const position = window.Cesium.Cartesian3.fromDegrees(lng, lat, wp.elevation ?? 0);
-      this.addWaypoint(position, wp as any);
+      this.addWaypoint(position, wp as any, false);
     }
   }
 

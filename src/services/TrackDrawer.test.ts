@@ -10,6 +10,11 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TrackDrawer, { type DrawingStats, type SerializableTrack } from './TrackDrawer';
+import {
+  hasPendingRouteSettles,
+  resetRouteSettlement,
+  routesSettled,
+} from './RouteSettlement';
 import { installFakeCesium, waitFor, type FakeCesiumWorld } from './testing/fakeCesium';
 
 // Two spots ~840 m apart on the (fake) Southern Alps
@@ -40,6 +45,7 @@ describe('TrackDrawer', () => {
     // drawing — reject everything so no test ever snaps or hits the network.
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('no network in tests'))));
 
+    resetRouteSettlement();
     world = installFakeCesium();
     created = [];
     statsLog = [];
@@ -118,8 +124,7 @@ describe('TrackDrawer', () => {
 
     // Finish keeps the stats panel as a settled reference (not cleared)
     const settled = latestStats()!;
-    expect(settled.finished).toBe(true);
-    expect(settled.editing).toBe(false);
+    expect(settled.phase).toBe('finished');
     expect(settled.pointCount).toBe(2);
     expect(settled.elevationGain).toBeCloseTo(300, 6);
     expect(settled.profile.map(p => p.ele)).toEqual([500, 800]);
@@ -229,12 +234,13 @@ describe('TrackDrawer', () => {
     expect(created[0].waypoints).toHaveLength(2); // just A and B
     // The panel shows the settled route — not a phantom straggler re-emit
     const settled = latestStats()!;
-    expect(settled.finished).toBe(true);
+    expect(settled.phase).toBe('finished');
     expect(settled.pointCount).toBe(2);
     expect(settled.distance).toBeGreaterThan(0.7);
   });
 
   it('restores the reference stats panel when persisted routes are loaded (remount)', () => {
+    drawer.setMode(false); // a remount loads routes before any drawing starts
     drawer.loadRoutes([
       {
         id: 'stored_route',
@@ -246,7 +252,7 @@ describe('TrackDrawer', () => {
     ]);
 
     const restored = latestStats()!;
-    expect(restored.finished).toBe(true);
+    expect(restored.phase).toBe('finished');
     expect(restored.pointCount).toBe(2);
     expect(restored.profile.map(p => p.ele)).toEqual([500, 800]);
     expect(restored.elevationGain).toBeCloseTo(300, 6);
@@ -393,5 +399,268 @@ describe('TrackDrawer', () => {
     world.doubleClick();
     await waitFor(() => created.length === 1); // finish completes promptly despite the failure
     expect(created[0].waypoints[0].elevation).toBeCloseTo(0, 3);
+  });
+
+  // ── Settle-window hardening (issue 06) ────────────────────────────────────
+  // The window between double-click finish (or edit Done) and the settled emit
+  // is a real state: these tests pin that every teardown path strands every
+  // in-flight await, and that the emitted phase represents the window honestly.
+
+  /** Draw A→B in auto terrain and commit it; resolves once the route is settled. */
+  const commitRoute = async () => {
+    const before = created.length;
+    world.clickAt(A.lng, A.lat);
+    await waitForStats(s => s.pointCount === 1);
+    world.clickAt(B.lng, B.lat);
+    await waitForStats(s => s.pointCount === 2);
+    world.doubleClick();
+    await waitFor(() => created.length === before + 1);
+  };
+
+  it('emits settling stats immediately on finish, then finished once heights land', async () => {
+    world.setTerrainMode('manual');
+    world.setTerrainHeightFn(() => 700);
+
+    world.clickAt(A.lng, A.lat);
+    await waitForStats(s => s.pointCount === 1);
+    world.clickAt(B.lng, B.lat);
+    await waitForStats(s => s.pointCount === 2);
+
+    world.doubleClick();
+    // The window is represented, not hidden: the UI can disable Undo/Edit on this
+    const settling = latestStats()!;
+    expect(settling.phase).toBe('settling');
+    expect(settling.pointCount).toBe(2);
+
+    await new Promise(r => setTimeout(r, 20)); // let the settle pass queue its sample
+    await world.flushTerrain();
+    await waitFor(() => latestStats()?.phase === 'finished');
+  });
+
+  it('drops the editing phase immediately on Done, not only when heights land', async () => {
+    await commitRoute();
+    expect(drawer.enterEditMode()).toBe(true);
+    await waitForStats(s => s.phase === 'editing');
+
+    world.setTerrainMode('manual'); // the edit-commit settlement will hang until flushed
+    drawer.exitEditMode();
+
+    // Edit UI must be able to leave within one emission of Done — not stick
+    // at editing until settleEdit lands (or forever, if it never does)
+    expect(latestStats()!.phase).toBe('settling');
+
+    await new Promise(r => setTimeout(r, 20)); // let the settle pass queue its sample
+    await world.flushTerrain();
+    await waitFor(() => created.length === 2);
+    expect(latestStats()!.phase).toBe('finished');
+  });
+
+  it('cancelling a drawing restores the committed route\'s reference panel', async () => {
+    world.setTerrainHeightFn(ridgeline);
+    await commitRoute();
+
+    // Route-tool toggle on, a stray click, toggle off — the committed route's
+    // panel must come back, not be wiped by cancel's unconditional null
+    drawer.setMode(true);
+    world.clickAt(C.lng, C.lat);
+    await waitForStats(s => s.pointCount === 1 && s.phase === 'drawing');
+    drawer.setMode(false);
+
+    const restored = latestStats()!;
+    expect(restored).not.toBeNull();
+    expect(restored.phase).toBe('finished');
+    expect(restored.pointCount).toBe(2);
+    expect(restored.elevationGain).toBeCloseTo(300, 6);
+  });
+
+  it('a straggling per-click enrichment cannot wipe the settled reference panel', async () => {
+    world.setTerrainHeightFn(ridgeline);
+    await commitRoute();
+
+    drawer.setMode(true);
+    world.setTerrainMode('manual'); // the next click's elevation backfill hangs
+    world.clickAt(C.lng, C.lat);
+    await waitForStats(s => s.pointCount === 1 && s.phase === 'drawing');
+    drawer.setMode(false); // cancel restores the committed panel…
+
+    await world.flushTerrain(); // …then the orphaned enrichment resolves
+
+    const panel = latestStats()!;
+    expect(panel).not.toBeNull(); // the straggler must not emit null over it
+    expect(panel.phase).toBe('finished');
+    expect(panel.pointCount).toBe(2);
+  });
+
+  it('clearAll strands a click still awaiting its snap lookup', async () => {
+    let rejectSnap!: (e: Error) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise((_, reject) => { rejectSnap = reject; })),
+    );
+
+    world.clickAt(A.lng, A.lat); // addPoint is now parked on the snap await
+    drawer.clearAll();
+    const emitsAfterClear = statsLog.length;
+
+    rejectSnap(new Error('late snap'));
+    await new Promise(r => setTimeout(r, 20));
+
+    // The in-flight click belongs to the cleared state — no phantom panel repaint
+    expect(statsLog.length).toBe(emitsAfterClear);
+    expect(latestStats()).toBeNull();
+  });
+
+  it('destroy strands a click still awaiting its snap lookup', async () => {
+    let rejectSnap!: (e: Error) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise((_, reject) => { rejectSnap = reject; })),
+    );
+
+    world.clickAt(A.lng, A.lat);
+    const entitiesBefore = world.entities().length;
+    const emitsBefore = statsLog.length;
+    drawer.destroy();
+
+    rejectSnap(new Error('late snap'));
+    await new Promise(r => setTimeout(r, 20));
+
+    // No emit into an unmounted component, no touch of the destroyed viewer
+    expect(statsLog.length).toBe(emitsBefore);
+    expect(world.entities().length).toBe(entitiesBefore);
+  });
+
+  it('a late settlement commits its route but never clobbers a new drawing\'s live stats', async () => {
+    world.setTerrainMode('manual');
+    world.setTerrainHeightFn(() => 700);
+
+    world.clickAt(A.lng, A.lat);
+    await waitForStats(s => s.pointCount === 1);
+    world.clickAt(B.lng, B.lat);
+    await waitForStats(s => s.pointCount === 2);
+    world.doubleClick(); // route 1 now settling
+
+    drawer.setMode(true); // start route 2 during route 1's settle window
+    world.clickAt(C.lng, C.lat);
+    await waitForStats(s => s.pointCount === 1 && s.phase === 'drawing');
+    const mark = statsLog.length;
+
+    await world.flushTerrain();
+    await waitFor(() => created.length === 1); // route 1 still commits…
+
+    // …but no finished-stats emission overwrites route 2's live panel
+    expect(statsLog.slice(mark).some(s => s?.phase === 'finished')).toBe(false);
+    const live = latestStats()!;
+    expect(live.phase).toBe('drawing');
+    expect(live.pointCount).toBe(1);
+  });
+
+  it('chart hover resolves against the settling route during the window', async () => {
+    await commitRoute(); // a PREVIOUS committed route to fall back to (the bug)
+
+    drawer.setMode(true);
+    world.clickAt(A.lng, A.lat);
+    await waitForStats(s => s.pointCount === 1);
+    world.clickAt(B.lng, B.lat);
+    await waitForStats(s => s.pointCount === 2);
+    world.clickAt(C.lng, C.lat);
+    await waitForStats(s => s.pointCount === 3);
+
+    world.setTerrainMode('manual');
+    world.doubleClick(); // 3-point route settling; 2-point route committed
+
+    // The panel shows the settling route's stats — hover must resolve against
+    // the same points, not the previous committed track
+    expect(latestStats()!.pointCount).toBe(3);
+    expect(drawer.getDrawingPointCount()).toBe(3);
+    expect(drawer.getDrawingPointPosition(2)).toBeTruthy();
+
+    await new Promise(r => setTimeout(r, 20)); // let the settle pass queue its sample
+    await world.flushTerrain();
+    await waitFor(() => created.length === 2);
+    expect(drawer.getDrawingPointCount()).toBe(3);
+  });
+
+  it('destroy strands an edit-drag whose elevation backfill is still in flight', async () => {
+    await commitRoute();
+    expect(drawer.enterEditMode()).toBe(true);
+
+    const handle = world
+      .entities()
+      .find(e => e._editType === 'control' && e._editIndex === 1);
+    world.queueScenePick({ id: handle });
+    world.fire('LEFT_DOWN');
+    world.dragTo(C.lng, C.lat);
+
+    world.setTerrainMode('manual'); // the drop's elevation backfill will hang
+    world.fire('LEFT_UP');
+    await new Promise(r => setTimeout(r, 20)); // let the drop reach the backfill await
+
+    drawer.destroy(); // wizard unmounts mid-drag-settle
+    const emitsAfterDestroy = statsLog.length;
+    const entitiesAfterDestroy = world.entities().length;
+
+    await world.flushTerrain();
+    await new Promise(r => setTimeout(r, 20));
+
+    // No emit into an unmounted component, no handle re-render on a dead viewer
+    expect(statsLog.length).toBe(emitsAfterDestroy);
+    expect(world.entities().length).toBe(entitiesAfterDestroy);
+  });
+
+  it('cancel during a settle window keeps the settling panel, not the previous route\'s', async () => {
+    world.setTerrainHeightFn(ridgeline);
+    await commitRoute(); // route 1: 2 points, committed
+
+    // Route 2: 3 points, finished but still settling
+    drawer.setMode(true);
+    world.clickAt(A.lng, A.lat);
+    await waitForStats(s => s.pointCount === 1);
+    world.clickAt(B.lng, B.lat);
+    await waitForStats(s => s.pointCount === 2);
+    world.clickAt(C.lng, C.lat);
+    await waitForStats(s => s.pointCount === 3);
+    world.setTerrainMode('manual');
+    world.doubleClick(); // route 2 settling — NOT in the committed list yet
+
+    // Route-tool toggle on/off inside the window: the panel must keep showing
+    // the settling route (Edit stays honestly disabled), not flip to route 1
+    // as a finished reference
+    drawer.setMode(true);
+    drawer.setMode(false);
+    const panel = latestStats()!;
+    expect(panel.phase).toBe('settling');
+    expect(panel.pointCount).toBe(3);
+
+    await new Promise(r => setTimeout(r, 20));
+    await world.flushTerrain();
+    await waitFor(() => created.length === 2);
+    expect(latestStats()!.phase).toBe('finished');
+    expect(latestStats()!.pointCount).toBe(3);
+  });
+
+  it('routesSettled() resolves only after a pending finish commits (wizard submit gate)', async () => {
+    world.setTerrainMode('manual');
+    world.setTerrainHeightFn(() => 700);
+
+    world.clickAt(A.lng, A.lat);
+    await waitForStats(s => s.pointCount === 1);
+    world.clickAt(B.lng, B.lat);
+    await waitForStats(s => s.pointCount === 2);
+    expect(hasPendingRouteSettles()).toBe(false);
+
+    world.doubleClick();
+    expect(hasPendingRouteSettles()).toBe(true);
+
+    let resolved = false;
+    const gate = routesSettled().then(() => { resolved = true; });
+    await new Promise(r => setTimeout(r, 20));
+    expect(resolved).toBe(false); // submit would still be waiting
+    expect(created).toHaveLength(0);
+
+    await world.flushTerrain();
+    await gate;
+    expect(created).toHaveLength(1); // the route is in form state before submit reads it
+    expect(hasPendingRouteSettles()).toBe(false);
   });
 });

@@ -2,6 +2,7 @@
 import { CesiumManager } from './CesiumManager';
 import type { LatLng } from '../types/adventure';
 import { TrailSnapService, type SnapResult } from './TrailSnapService';
+import { beginRouteSettle, endRouteSettle } from './RouteSettlement';
 
 interface TrackPoint {
   position: any; // Cesium.Cartesian3
@@ -45,6 +46,16 @@ export interface SerializableTrack {
   };
 }
 
+/**
+ * Where the stats-emitting interaction currently is:
+ * - 'drawing'  — points being placed (Undo/Redo live here)
+ * - 'editing'  — drag-to-reroute in progress
+ * - 'settling' — finish/Done happened, true heights still resolving (bounded
+ *   by the settle timeout); interaction is over but the route isn't committed
+ * - 'finished' — the settled stats of a committed route, kept as a reference
+ */
+export type DrawingPhase = 'drawing' | 'editing' | 'settling' | 'finished';
+
 /** Live drawing stats emitted after every point add / undo */
 export interface DrawingStats {
   pointCount: number;
@@ -57,11 +68,7 @@ export interface DrawingStats {
   profile: Array<{ dist: number; ele: number }>;
   /** Whether redo is available (points were undone and no new point added since) */
   canRedo: boolean;
-  /** Whether a finished route is currently being edited (drag-to-reroute) */
-  editing: boolean;
-  /** True when these are the settled stats of a committed route (kept on
-   *  screen for reference) rather than a drawing/edit in progress */
-  finished: boolean;
+  phase: DrawingPhase;
 }
 
 export default class TrackDrawer extends CesiumManager {
@@ -114,11 +121,23 @@ export default class TrackDrawer extends CesiumManager {
   /** Settlements in flight — edit mode is blocked while > 0 so an edit can't
    *  grab a track whose points/metadata are still being committed. */
   private pendingSettles = 0;
-  /** Bumped when a drawing ends (finish OR cancel). A click whose snap lookup
-   *  is still in flight when the drawing ends belongs to a dead session — it
-   *  must not repopulate the cleared drawing (a double-click fires two
-   *  LEFT_CLICKs before LEFT_DOUBLE_CLICK, so this happens on EVERY finish). */
+  /** Bumped by EVERY path that invalidates the drawing session: finish,
+   *  cancel, clearAll AND destroy. A click whose snap lookup or elevation
+   *  backfill is still in flight when the session ends belongs to a dead
+   *  session — it must not repopulate cleared state, repaint a phantom stats
+   *  panel, or touch a destroyed viewer (a double-click fires two LEFT_CLICKs
+   *  before LEFT_DOUBLE_CLICK, so this happens on EVERY finish). Re-checked
+   *  after every await in the click path. */
   private drawingEpoch = 0;
+  /** Points backing the last stats emission — chart hover resolves against
+   *  these so the profile and the map can never diverge (e.g. during a settle
+   *  window, when the finishing track isn't in `tracks` yet). */
+  private statsBackingPoints: TrackPoint[] = [];
+  /** Points of the route currently settling (finish/edit-commit awaiting
+   *  heights). The settling track isn't in `tracks` yet, so paths that restore
+   *  a reference panel (cancel) must use these, not the previous committed
+   *  track. Cleared when its settlement completes or is abandoned. */
+  private settlingPoints: TrackPoint[] | null = null;
 
   constructor(
     viewer: any,
@@ -155,6 +174,14 @@ export default class TrackDrawer extends CesiumManager {
 
   destroy() {
     this.settleEpoch++; // strand in-flight settlements — no emits into an unmounted component
+    this.drawingEpoch++; // strand in-flight clicks/drags — no touching a destroyed viewer
+    if (this.editingTrack) {
+      try {
+        this.teardownEditMode(); // also destroys the edit drag handler (own ScreenSpaceEventHandler)
+      } catch {
+        // Viewer already torn down — the epoch bump above still strands stragglers
+      }
+    }
     if (this.zoomListener) {
       try {
         this.viewer.camera.moveEnd.removeEventListener(this.zoomListener);
@@ -240,9 +267,9 @@ export default class TrackDrawer extends CesiumManager {
     // Try to snap the click to a nearby DOC trail
     const snapResult = await this.snapService.snap([clickedLat, clickedLng]);
 
-    // The drawing may have finished or been cancelled while we awaited the
-    // snap — this click belongs to that dead session, so drop it.
-    if (epoch !== this.drawingEpoch || !this.drawing) return;
+    // The session may have ended (finish/cancel/clear/destroy) while we
+    // awaited the snap — this click belongs to that dead session, so drop it.
+    if (epoch !== this.drawingEpoch) return;
 
     if (snapResult) {
       // If consecutive snaps are on the same trail, walk the polyline between them
@@ -292,6 +319,9 @@ export default class TrackDrawer extends CesiumManager {
     const added = this.currentPoints.slice(startLen);
     if (added.length) {
       await this.enrichElevation(added);
+      // Session may have ended during the sample — a straggling enrichment
+      // must not emit over (or wipe) whatever replaced this drawing's panel.
+      if (epoch !== this.drawingEpoch) return;
       this.emitDrawingStats();
     }
   }
@@ -372,16 +402,10 @@ export default class TrackDrawer extends CesiumManager {
     // replaces it, so there's no flicker gap while heights resolve.
     const points = this.currentPoints;
     const preview = this.previewEntity;
-    this.drawingEpoch++; // strand in-flight clicks from this session
-    this.drawing = false;
-    this.currentPoints = [];
-    this.previewEntity = null;
-    this.redoStack = [];
-    this.lastSnap = null;
-    this.setCursor('');
-    // Deliberately NO stats-clear here: the last live stats stay on screen
-    // while heights settle, then emitSettledStats replaces them — the panel
-    // persists after finish as a reference for the committed route.
+    this.teardownDrawing();
+    // The settle window is a real state the UI must represent (disable Undo,
+    // block a re-edit honestly): emit it rather than leaving stale live stats.
+    this.emitStats(points, 'settling');
 
     void this.settleAndCommit(points, preview);
   }
@@ -396,22 +420,41 @@ export default class TrackDrawer extends CesiumManager {
    * commit is abandoned — a cleared route must not resurrect.
    */
   private async settleAndCommit(points: TrackPoint[], preview: any) {
-    const epoch = this.settleEpoch;
-    this.pendingSettles++;
-    try {
-      await this.settleHeights(points);
-      if (epoch !== this.settleEpoch) {
-        try { if (preview) this.viewer.entities.remove(preview); } catch { /* viewer torn down */ }
-        return;
-      }
+    const committed = await this.runSettlement(points, () => {
       const track = this.buildTrack(points);
       this.tracks.push(track);
       if (preview) this.viewer.entities.remove(preview);
       this.renderTrack(track);
       this.onCreated?.(this.serializeTrack(track));
       this.emitSettledStats(track);
+    });
+    if (!committed) {
+      try { if (preview) this.viewer.entities.remove(preview); } catch { /* viewer torn down */ }
+    }
+  }
+
+  /**
+   * Shared settlement protocol for finish and edit-commit: wait (bounded) for
+   * true heights, then apply the commit — unless clearAll()/destroy() ran
+   * while we waited, in which case the commit is abandoned. Pending state is
+   * tracked both per-drawer (blocks enterEditMode) and in the module-level
+   * RouteSettlement registry (lets the wizard submit wait a settle out).
+   * Returns whether the commit was applied.
+   */
+  private async runSettlement(points: TrackPoint[], apply: () => void): Promise<boolean> {
+    const epoch = this.settleEpoch;
+    this.pendingSettles++;
+    this.settlingPoints = points;
+    beginRouteSettle();
+    try {
+      await this.settleHeights(points);
+      if (epoch !== this.settleEpoch) return false;
+      apply();
+      return true;
     } finally {
+      if (this.settlingPoints === points) this.settlingPoints = null;
       this.pendingSettles--;
+      endRouteSettle();
     }
   }
 
@@ -435,36 +478,38 @@ export default class TrackDrawer extends CesiumManager {
     }
   }
 
-  private cancelDrawing() {
+  /** End the interactive drawing session without emitting — shared by finish,
+   *  cancel and clearAll. Bumping the epoch strands every in-flight click. */
+  private teardownDrawing() {
     if (this.previewEntity) {
       this.viewer.entities.remove(this.previewEntity);
       this.previewEntity = null;
     }
-    this.drawingEpoch++; // strand in-flight clicks from this session
+    this.drawingEpoch++;
     this.drawing = false;
     this.currentPoints = [];
     this.redoStack = [];
     this.lastSnap = null;
     this.setCursor('');
-    this.onDrawingUpdate?.(null);
+  }
+
+  private cancelDrawing() {
+    this.teardownDrawing();
+    // A cancel abandons the drawing in progress, not the committed route — if
+    // one exists, its reference panel comes back instead of being wiped. A
+    // route still settling isn't in `tracks` yet: restore ITS settling panel
+    // (Edit stays honestly disabled), never the previous route's as finished.
+    if (this.settlingPoints) {
+      this.emitStats(this.settlingPoints, 'settling');
+      return;
+    }
+    const latest = this.tracks[this.tracks.length - 1];
+    if (latest) this.emitSettledStats(latest);
+    else this.emitStats([], 'drawing'); // emits null
   }
 
   private buildTrack(points: TrackPoint[]): Track {
-    let distance = 0;
-    let elevationGain = 0;
-    let elevationLoss = 0;
-
-    for (let i = 1; i < points.length; i++) {
-      distance += window.Cesium.Cartesian3.distance(
-        points[i - 1].position,
-        points[i].position,
-      );
-      const delta = points[i].elevation - points[i - 1].elevation;
-      if (delta > 0) elevationGain += delta;
-      else elevationLoss += Math.abs(delta);
-    }
-
-    distance /= 1000; // convert to km
+    const { distance, elevationGain, elevationLoss } = this.computeStats(points);
     const difficulty = this.estimateDifficulty(distance, elevationGain);
 
     return {
@@ -666,61 +711,58 @@ export default class TrackDrawer extends CesiumManager {
     return { distance, elevationGain, elevationLoss, profile };
   }
 
-  /** Emit current drawing progress stats to the React component */
-  private emitDrawingStats() {
+  /**
+   * The single stats emitter: computes the figures, records the backing
+   * points (chart hover resolves against exactly what the panel shows), and
+   * emits — null when there are no points, so an empty emission clears the
+   * panel without a companion call on the React side.
+   */
+  private emitStats(points: TrackPoint[], phase: DrawingPhase, canRedo = false) {
+    this.statsBackingPoints = points;
     if (!this.onDrawingUpdate) return;
-    if (this.currentPoints.length === 0) {
+    if (points.length === 0) {
       this.onDrawingUpdate(null);
       return;
     }
 
-    const stats = this.computeStats(this.currentPoints);
+    const stats = this.computeStats(points);
     this.onDrawingUpdate({
-      pointCount: this.currentPoints.length,
+      pointCount: points.length,
       ...stats,
       estimatedTime: stats.distance / 4 + stats.elevationGain / 600,
-      canRedo: this.redoStack.length > 0,
-      editing: false,
-      finished: false,
+      canRedo,
+      phase,
     });
+  }
+
+  /** Emit current drawing progress stats to the React component */
+  private emitDrawingStats() {
+    this.emitStats(this.currentPoints, 'drawing', this.redoStack.length > 0);
   }
 
   /**
    * Emit the settled stats of a committed route so the panel + elevation
    * profile stay on screen for reference after finish/edit — cleared only by
-   * an explicit route clear or the start of a new drawing.
+   * an explicit route clear or the start of a new drawing. If the user has
+   * already started a new drawing or edit, that interaction owns the panel:
+   * the late settlement commits its route silently instead of clobbering it.
    */
   private emitSettledStats(track: Track) {
-    if (!this.onDrawingUpdate || track.points.length === 0) return;
-    const stats = this.computeStats(track.points);
-    this.onDrawingUpdate({
-      pointCount: track.points.length,
-      ...stats,
-      estimatedTime: stats.distance / 4 + stats.elevationGain / 600,
-      canRedo: false,
-      editing: false,
-      finished: true,
-    });
-  }
-
-  /** Points backing whatever the stats panel currently shows: an active
-   *  drawing, an edit in progress, or the latest committed route. */
-  private statsPoints(): TrackPoint[] {
-    if (this.currentPoints.length) return this.currentPoints;
-    if (this.editPoints.length) return this.editPoints;
-    return this.tracks[this.tracks.length - 1]?.points ?? [];
+    if (this.drawing || this.editingTrack) return;
+    if (track.points.length === 0) return;
+    this.emitStats(track.points, 'finished');
   }
 
   /** Return the Cartesian3 position of a specific profile point (for chart↔map sync) */
   getDrawingPointPosition(index: number): any | null {
-    const points = this.statsPoints();
+    const points = this.statsBackingPoints;
     if (index < 0 || index >= points.length) return null;
     return points[index].position;
   }
 
   /** Number of points behind the current profile (for bounds checking in chart hover) */
   getDrawingPointCount(): number {
-    return this.statsPoints().length;
+    return this.statsBackingPoints.length;
   }
 
   getTracks(): Track[] {
@@ -808,10 +850,22 @@ export default class TrackDrawer extends CesiumManager {
   clearAll() {
     this.abortEditMode(); // discard, don't commit — the tracks are going away
     this.settleEpoch++; // strand any in-flight settlement: cleared routes must not resurrect
+    this.drawingEpoch++; // strand any in-flight click: no phantom panel repaint after Clear
+    // Clear wipes any drawing in progress too (points + preview), but keeps
+    // the tool mode active so the user can start a fresh route immediately.
+    if (this.previewEntity) {
+      this.viewer.entities.remove(this.previewEntity);
+      this.previewEntity = null;
+    }
+    this.currentPoints = [];
+    this.redoStack = [];
+    this.lastSnap = null;
     for (const track of this.tracks) {
       this.removeTrackEntities(track);
     }
     this.tracks = [];
+    this.requestRender(); // entity removals must paint under requestRenderMode
+    this.emitStats([], 'drawing'); // clears the stats panel (emits null)
   }
 
   // ── Edit mode (drag-to-reroute) ───────────────────────────────────────────
@@ -840,17 +894,12 @@ export default class TrackDrawer extends CesiumManager {
   exitEditMode() {
     if (!this.editingTrack) return;
 
-    // Clean up edit overlay; interaction ends immediately
-    this.clearEditOverlay();
-    this.destroyEditDragHandler();
-
     const track = this.editingTrack;
     const points = [...this.editPoints];
-    this.editingTrack = null;
-    this.editPoints = [];
-    this.setCursor('');
-    // No stats-clear: the edit stats stay visible until the settled stats
-    // (editing: false, finished: true) replace them.
+    this.teardownEditMode(); // interaction ends immediately on Done
+    // Leave the editing phase NOW — the edit UI must not stick for the length
+    // of the settle window. The settled stats replace this emission.
+    this.emitStats(points, 'settling');
 
     void this.settleEdit(track, points);
   }
@@ -862,35 +911,33 @@ export default class TrackDrawer extends CesiumManager {
    * ran while heights were settling.
    */
   private async settleEdit(track: Track, points: TrackPoint[]) {
-    const epoch = this.settleEpoch;
-    this.pendingSettles++;
-    try {
-      await this.settleHeights(points);
-      if (epoch !== this.settleEpoch) return;
-
+    await this.runSettlement(points, () => {
       // Per-point snapshots — same reasoning as buildTrack
       track.points = points.map(p => ({ ...p }));
       this.recomputeTrackMetadata(track);
       this.renderTrack(track);
       this.onCreated?.(this.serializeTrack(track));
       this.emitSettledStats(track);
-    } finally {
-      this.pendingSettles--;
-    }
+    });
   }
 
-  /**
-   * Tear down edit mode WITHOUT committing — for clearAll(), where emitting a
-   * settled route for a track the user just deleted would resurrect it.
-   */
-  private abortEditMode() {
-    if (!this.editingTrack) return;
+  /** Shared edit-mode teardown — overlay, drag handler, state, cursor. */
+  private teardownEditMode() {
     this.clearEditOverlay();
     this.destroyEditDragHandler();
     this.editingTrack = null;
     this.editPoints = [];
     this.setCursor('');
-    this.onDrawingUpdate?.(null);
+  }
+
+  /**
+   * Tear down edit mode WITHOUT committing — for clearAll(), where emitting a
+   * settled route for a track the user just deleted would resurrect it.
+   * No emission of its own: clearAll emits the panel-clearing null.
+   */
+  private abortEditMode() {
+    if (!this.editingTrack) return;
+    this.teardownEditMode();
   }
 
   /** Is edit mode currently active? */
@@ -899,24 +946,11 @@ export default class TrackDrawer extends CesiumManager {
   }
 
   private recomputeTrackMetadata(track: Track) {
-    let distance = 0;
-    let elevationGain = 0;
-    let elevationLoss = 0;
-
-    for (let i = 1; i < track.points.length; i++) {
-      distance += window.Cesium.Cartesian3.distance(
-        track.points[i - 1].position,
-        track.points[i].position,
-      );
-      const delta = track.points[i].elevation - track.points[i - 1].elevation;
-      if (delta > 0) elevationGain += delta;
-      else elevationLoss += Math.abs(delta);
-    }
-
-    track.metadata.distance = distance / 1000;
+    const { distance, elevationGain, elevationLoss } = this.computeStats(track.points);
+    track.metadata.distance = distance;
     track.metadata.elevationGain = elevationGain;
     track.metadata.elevationLoss = elevationLoss;
-    track.metadata.difficulty = this.estimateDifficulty(track.metadata.distance, elevationGain);
+    track.metadata.difficulty = this.estimateDifficulty(distance, elevationGain);
   }
 
   /** Draw the live polyline + control handles + midpoint handles */
@@ -1062,6 +1096,7 @@ export default class TrackDrawer extends CesiumManager {
       if (this.draggingIndex < 0) return;
 
       const dragIdx = this.draggingIndex;
+      const epoch = this.drawingEpoch; // destroy() bumps this even if edit teardown throws
       this.draggingIndex = -1;
 
       cameraController.enableRotate = true;
@@ -1075,9 +1110,10 @@ export default class TrackDrawer extends CesiumManager {
       const lng = Cesium.Math.toDegrees(pt.cartographic.longitude);
       const snapResult = await this.snapService.snap([lat, lng]);
 
-      // Edit mode may have been committed/aborted while we awaited the snap —
-      // the settlement pass owns the points now, nothing left to update here.
-      if (!this.editingTrack) return;
+      // Edit mode may have been committed/aborted/destroyed while we awaited
+      // the snap — the settlement pass owns the points now (or the drawer is
+      // gone), nothing left to update here.
+      if (!this.editingTrack || epoch !== this.drawingEpoch) return;
 
       if (snapResult) {
         const [sLat, sLng] = snapResult.snappedLatLng;
@@ -1093,6 +1129,10 @@ export default class TrackDrawer extends CesiumManager {
 
       // Backfill the dragged point's true elevation before recomputing stats.
       await this.enrichElevation([this.editPoints[dragIdx]]);
+
+      // Same re-check after the second await: edit mode may have ended (Done,
+      // clearAll, destroy) while the sample was in flight.
+      if (!this.editingTrack || epoch !== this.drawingEpoch) return;
 
       // Re-render handles (positions may have shifted after snap)
       this.renderEditHandles();
@@ -1117,17 +1157,8 @@ export default class TrackDrawer extends CesiumManager {
 
   /** Emit stats from the edit-mode points */
   private emitEditStats() {
-    if (!this.onDrawingUpdate || this.editPoints.length === 0) return;
-
-    const stats = this.computeStats(this.editPoints);
-    this.onDrawingUpdate({
-      pointCount: this.editPoints.length,
-      ...stats,
-      estimatedTime: stats.distance / 4 + stats.elevationGain / 600,
-      canRedo: false,
-      editing: true,
-      finished: false,
-    });
+    if (this.editPoints.length === 0) return;
+    this.emitStats(this.editPoints, 'editing');
   }
 
   /** Kept for backward compat */

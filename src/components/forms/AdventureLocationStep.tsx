@@ -3,6 +3,7 @@ import { Row, Col, Alert, Spinner, Badge } from 'react-bootstrap';
 import { useFormContext } from 'react-hook-form';
 import { Navigation, Globe, Info, Route, TrendingUp } from 'lucide-react';
 import type { SerializableTrack } from '../../services/TrackDrawer';
+import { upsertRouteById } from '../../services/routeUpsert';
 import { Card, Button } from '../ui';
 import { TripPlanningMap } from '../map/TripPlanningMap';
 import { What3WordsLocation } from '../../types/what3words';
@@ -132,9 +133,11 @@ export const TripLinkLocationStep: React.FC = () => {
                 }
                 fallbackToCurrentLocation={!selectedSuggestion}
                 onRouteCreated={(track: SerializableTrack) => {
-                  // Append drawn route to form — stored in TripLink data JSONB
-                  const existing = watch('routes') || [];
-                  setValue('routes', [...existing, track]);
+                  // Upsert into form state (stored in TripLink data JSONB):
+                  // an edit-commit re-emits the same id and replaces its stored
+                  // copy; a newly drawn route appends.
+                  const existing: SerializableTrack[] = watch('routes') || [];
+                  setValue('routes', upsertRouteById(existing, track));
                   // If no primary location yet, use the first waypoint of the drawn route
                   if (!primaryLocation && track.waypoints.length > 0) {
                     const [lat, lng] = track.waypoints[0].coordinates;

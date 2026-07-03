@@ -12,6 +12,7 @@ import { TripLinkLocationStep } from '../components/forms/AdventureLocationStep'
 import { RecipientPicker, type PickedContact } from '../components/forms/RecipientPicker';
 import { GuidePaceEstimator } from '../components/guidepace/GuidePaceEstimator';
 import { api } from '../config/api';
+import { hasPendingRouteSettles, routesSettled } from '../services/RouteSettlement';
 import { useAuth } from '../hooks/useAuth';
 import type { TripLink, ActivityType, LatLng, TripRoute } from '../types/adventure';
 import type { What3WordsLocation } from '../types/what3words';
@@ -173,6 +174,7 @@ export const CreateTripLink: React.FC = () => {
     register,
     watch,
     setValue,
+    getValues,
     formState: { errors, isSubmitting },
   } = methods;
 
@@ -193,6 +195,19 @@ export const CreateTripLink: React.FC = () => {
       return;
     }
     try {
+      // A route finished with a double-click may still be settling terrain
+      // heights (bounded at the drawer's settle timeout). Wait it out before
+      // reading routes so the TripLink is never persisted without the route
+      // the user just drew — a routeless plan is a safety defect, not a race.
+      if (hasPendingRouteSettles()) {
+        const waiting = toast.loading('Finalising route elevations…');
+        await routesSettled();
+        toast.dismiss(waiting);
+      }
+      // Re-read routes: the settled route lands in form state during the await,
+      // after handleSubmit snapshotted `data`.
+      const routes = getValues('routes') ?? data.routes ?? [];
+
       const id = `triplink-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const token = crypto.randomUUID();
 
@@ -217,7 +232,7 @@ export const CreateTripLink: React.FC = () => {
           what3wordsDetails: data.location.what3wordsDetails,
         },
         waypoints: data.waypoints,
-        routes: data.routes || [],
+        routes,
         emergencyContacts: data.emergencyContacts,
         shareToken: token,
         status: 'planned',

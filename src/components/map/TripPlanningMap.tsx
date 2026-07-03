@@ -892,8 +892,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   };
 
   const handleClearRoute = () => {
-    trackDrawerRef.current?.clearAll();
-    setDrawingStats(null);
+    trackDrawerRef.current?.clearAll(); // emits the panel-clearing null itself
     setHasFinishedRoute(false);
     flyoverRef.current?.stop();
   };
@@ -1029,10 +1028,10 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer || !cesiumReady) return;
-    const interactive = mapMode.active || !!drawingStats?.editing || flyoverRunning;
+    const interactive = mapMode.active || drawingStats?.phase === 'editing' || flyoverRunning;
     viewer.scene.requestRenderMode = !interactive;
     viewer.scene.requestRender();
-  }, [mapMode.active, mapMode.type, drawingStats?.editing, flyoverRunning, cesiumReady, isLoading]);
+  }, [mapMode.active, mapMode.type, drawingStats?.phase, flyoverRunning, cesiumReady, isLoading]);
 
   // ── Keyboard shortcuts (Ctrl+Z / Ctrl+Shift+Z) ───────────────────────────
 
@@ -1383,13 +1382,13 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         </div>
 
         {/* ── TOP-CENTER: Mode instruction chip ───────────────────────── */}
-        {(mapMode.active || drawingStats?.editing) && (
+        {(mapMode.active || drawingStats?.phase === 'editing') && (
           <div className="map-overlay map-overlay-tc">
             <div className="map-instruction-chip">
-              {drawingStats?.editing && 'Drag control points to reroute · Drag midpoints to add'}
-              {!drawingStats?.editing && mapMode.type === 'waypoint' && 'Click to add waypoints'}
-              {!drawingStats?.editing && mapMode.type === 'route' && 'Click to add points · Double-click to finish'}
-              {!drawingStats?.editing && mapMode.type === 'note' && 'Click to add notes'}
+              {drawingStats?.phase === 'editing' && 'Drag control points to reroute · Drag midpoints to add'}
+              {drawingStats?.phase !== 'editing' && mapMode.type === 'waypoint' && 'Click to add waypoints'}
+              {drawingStats?.phase !== 'editing' && mapMode.type === 'route' && 'Click to add points · Double-click to finish'}
+              {drawingStats?.phase !== 'editing' && mapMode.type === 'note' && 'Click to add notes'}
             </div>
           </div>
         )}
@@ -1406,7 +1405,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
 
         {/* ── BOTTOM-RIGHT: Flyover + Export + Edit Route ─────────────── */}
         <div className="map-overlay map-overlay-br">
-          {hasFinishedRoute && !drawingStats?.editing && (
+          {hasFinishedRoute && drawingStats?.phase !== 'editing' && (
             <button
               type="button"
               className={`map-btn ${flyoverRunning ? 'map-btn-danger' : ''}`}
@@ -1416,8 +1415,20 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
               {flyoverRunning ? <Square size={18} /> : <Play size={18} />}
             </button>
           )}
-          {!readOnly && !drawingStats?.editing && (
-            <button type="button" className="map-btn" onClick={handleEditRoute} title="Edit route (drag points)">
+          {!readOnly && drawingStats?.phase !== 'editing' && (
+            <button
+              type="button"
+              className="map-btn"
+              onClick={handleEditRoute}
+              // Disabled (not silently swallowed) while a finish/edit is
+              // still settling heights — enterEditMode would refuse anyway.
+              disabled={drawingStats?.phase === 'settling'}
+              title={
+                drawingStats?.phase === 'settling'
+                  ? 'Finalising route elevations…'
+                  : 'Edit route (drag points)'
+              }
+            >
               <Pencil size={18} />
             </button>
           )}
@@ -1437,7 +1448,9 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
                 className="map-btn"
                 onClick={handleUndo}
                 title="Undo (Ctrl+Z)"
-                disabled={!drawingStats || drawingStats.pointCount === 0 || drawingStats.finished}
+                // Undo only acts on an active drawing — during the settle
+                // window (phase 'settling') it must read disabled, not no-op.
+                disabled={drawingStats?.phase !== 'drawing' || drawingStats.pointCount === 0}
               >
                 <Undo2 size={16} />
               </button>
@@ -1463,7 +1476,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         )}
 
         {/* ── BOTTOM-CENTER: Edit mode controls ──────────────────────── */}
-        {drawingStats?.editing && (
+        {drawingStats?.phase === 'editing' && (
           <div className="map-overlay map-overlay-bc">
             <div className="map-route-controls">
               <div className="map-edit-label">Drag points to reroute</div>
@@ -1543,7 +1556,10 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
               <span className="map-stat-value">{formatTime(drawingStats.estimatedTime)}</span>
             </div>
             <div className="map-stat-meta">
-              {drawingStats.finished && 'Saved · '}
+              {/* Read-only views (shared/active trip) show the same stats card
+                  without wizard framing — a watcher sees the planner's numbers. */}
+              {drawingStats.phase === 'settling' && 'Saving · '}
+              {drawingStats.phase === 'finished' && !readOnly && 'Saved · '}
               {drawingStats.pointCount} pts · Naismith&apos;s rule
             </div>
           </div>

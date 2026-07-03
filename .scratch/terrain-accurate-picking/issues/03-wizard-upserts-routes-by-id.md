@@ -1,6 +1,6 @@
 # 03 — Wizard upserts routes by id
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 
@@ -31,3 +31,13 @@ is set, exactly as today.
 ## Blocked by
 
 None - can start immediately.
+
+## Comments
+
+**2026-07-03 (agent):** Implemented alongside issue 06 (same wizard callback).
+Pure helper `upsertRouteById` in [src/services/routeUpsert.ts](../../../src/services/routeUpsert.ts)
+(same id replaces in place, new id appends, input not mutated), wired into
+`AdventureLocationStep`'s `onRouteCreated`; the primary-location seeding still
+fires only when unset. 4 unit tests green; tsc + lint green. **Outstanding:** the
+"Manual verify" checkbox — draw-then-edit a route in the browser and confirm the
+review step and saved TripLink hold one route.

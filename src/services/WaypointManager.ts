@@ -44,20 +44,15 @@ export default class WaypointManager extends CesiumManager {
   private waypoints: Waypoint[] = [];
   private active = false;
   private onAdded?: (waypoint: Waypoint) => void;
-  /** Set on destroy() — an elevation backfill that resolves afterward must not
-   *  touch a torn-down viewer's entities (same class of hazard ADR 014 covers
-   *  for TrackDrawer's settlements, scaled down: waypoints have no session to
-   *  strand, just per-object async work to abandon on teardown). */
-  private destroyed = false;
 
-  constructor(viewer: any, onAdded?: (waypoint: Waypoint) => void) {
+  constructor(
+    viewer: any,
+    onAdded?: (waypoint: Waypoint) => void,
+    onTerrainAvailability?: (available: boolean) => void,
+  ) {
     super(viewer);
     this.onAdded = onAdded;
-  }
-
-  destroy() {
-    this.destroyed = true;
-    super.destroy();
+    this.onTerrainAvailability = onTerrainAvailability;
   }
 
   protected setup(handler: any) {
@@ -82,6 +77,13 @@ export default class WaypointManager extends CesiumManager {
    */
   addWaypoint(position: any, meta: Partial<Waypoint['metadata']> = {}, backfill = true): Waypoint {
     const cartographic = window.Cesium.Cartographic.fromCartesian(position);
+    // "No elevation given" (fresh placement) uses the picked height as a
+    // provisional value; "elevation explicitly undefined" (rehydrated,
+    // honestly unknown) must NOT fall back to the picked height — a plain
+    // `??`/`||` default can't tell these two apart, only hasOwnProperty can.
+    const elevation = Object.prototype.hasOwnProperty.call(meta, 'elevation')
+      ? meta.elevation
+      : cartographic.height;
 
     const waypoint: Waypoint = {
       id: this.generateId('waypoint'),
@@ -91,9 +93,9 @@ export default class WaypointManager extends CesiumManager {
         name: meta.name || `Waypoint ${this.waypoints.length + 1}`,
         type: meta.type || 'generic',
         notes: meta.notes || '',
-        elevation: cartographic.height,
         timestamp: new Date(),
         ...meta,
+        elevation,
       },
     };
 
@@ -107,16 +109,18 @@ export default class WaypointManager extends CesiumManager {
   /**
    * Backfill a waypoint's true terrain height (Cesium World Terrain), then
    * refresh its stored elevation, entity position and infobox description —
-   * mirrors TrackDrawer's per-click enrichment. If terrain is unavailable or
-   * sampling fails, the picked height is kept silently (honest absence-marking
-   * is slice 05's job). Guards against a waypoint deleted while the sample was
-   * in flight — no phantom repaint of a pin the user already removed.
+   * mirrors TrackDrawer's per-click enrichment. Guards against a waypoint
+   * deleted while the sample was in flight — no phantom repaint of a pin the
+   * user already removed. If terrain never confirms a real height (unavailable
+   * or every sample rejects), the provisional picked value is replaced with an
+   * honest absence rather than left looking like a real measurement.
    */
   private async backfillElevation(waypoint: Waypoint) {
     const proxy: ElevationPoint = {
       position: waypoint.position,
       cartographic: waypoint.cartographic,
       elevation: waypoint.metadata.elevation ?? waypoint.cartographic.height,
+      elevationKnown: false,
     };
     await this.enrichElevation([proxy]);
     // Deleted/cleared, or the manager destroyed, while we awaited — nothing left to paint.
@@ -124,7 +128,7 @@ export default class WaypointManager extends CesiumManager {
 
     waypoint.position = proxy.position;
     waypoint.cartographic = proxy.cartographic;
-    waypoint.metadata.elevation = proxy.elevation;
+    waypoint.metadata.elevation = proxy.elevationKnown ? proxy.elevation : undefined;
 
     try {
       if (waypoint.entity) {
@@ -169,7 +173,8 @@ export default class WaypointManager extends CesiumManager {
   private buildDescription(wp: Waypoint): string {
     const lat = window.Cesium.Math.toDegrees(wp.cartographic.latitude).toFixed(6);
     const lng = window.Cesium.Math.toDegrees(wp.cartographic.longitude).toFixed(6);
-    return `<div><h4>${wp.metadata.name}</h4><p>${wp.metadata.type}</p><p>${lat}, ${lng}</p><p>${wp.cartographic.height.toFixed(0)}m</p></div>`;
+    const ele = wp.metadata.elevation !== undefined ? `${wp.metadata.elevation.toFixed(0)}m` : 'elevation unknown';
+    return `<div><h4>${wp.metadata.name}</h4><p>${wp.metadata.type}</p><p>${lat}, ${lng}</p><p>${ele}</p></div>`;
   }
 
   deleteWaypoint(id: string) {
@@ -189,8 +194,12 @@ export default class WaypointManager extends CesiumManager {
   loadWaypoints(waypoints: Array<{ name?: string; coordinates: LatLng; elevation?: number; type?: string }>) {
     for (const wp of waypoints) {
       const [lat, lng] = wp.coordinates;
+      // Height only matters for the (clamp-to-ground) geometry here — 0 is a
+      // harmless render fallback. The `elevation` key below is written
+      // explicitly (even when undefined) so addWaypoint's hasOwnProperty check
+      // preserves "unknown" instead of re-defaulting it to the picked height.
       const position = window.Cesium.Cartesian3.fromDegrees(lng, lat, wp.elevation ?? 0);
-      this.addWaypoint(position, wp as any, false);
+      this.addWaypoint(position, { name: wp.name, type: wp.type as any, elevation: wp.elevation }, false);
     }
   }
 

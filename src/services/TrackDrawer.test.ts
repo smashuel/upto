@@ -29,6 +29,7 @@ describe('TrackDrawer', () => {
   let world: FakeCesiumWorld;
   let created: SerializableTrack[];
   let statsLog: Array<DrawingStats | null>;
+  let terrainAvailability: boolean[];
   let drawer: TrackDrawer;
 
   const latestStats = () => statsLog[statsLog.length - 1];
@@ -49,10 +50,14 @@ describe('TrackDrawer', () => {
     world = installFakeCesium();
     created = [];
     statsLog = [];
+    terrainAvailability = [];
     drawer = new TrackDrawer(
       world.viewer,
       track => created.push(track),
       stats => statsLog.push(stats),
+      '',
+      8000,
+      available => terrainAvailability.push(available),
     );
     // Managers set up on a retry loop — wait for the click handler to register.
     await waitFor(() => world.hasAction('LEFT_CLICK'));
@@ -258,6 +263,32 @@ describe('TrackDrawer', () => {
     expect(restored.elevationGain).toBeCloseTo(300, 6);
   });
 
+  it('loading a route stored without elevations renders normally and stays honestly unknown', () => {
+    drawer.setMode(false);
+    drawer.loadRoutes([
+      {
+        id: 'stored_no_elevation',
+        // No `elevation` field at all — a route saved during a terrain outage.
+        // Re-opening (even with terrain now available) must NOT re-sample —
+        // just preserve the "unknown" distinction from "sea level".
+        waypoints: [{ coordinates: [A.lat, A.lng] }, { coordinates: [B.lat, B.lng] }],
+      },
+    ]);
+
+    // Geometry renders fine regardless — a route line doesn't need elevation.
+    expect(world.entities().length).toBeGreaterThan(0);
+
+    const restored = latestStats()!;
+    expect(restored.phase).toBe('finished');
+    expect(restored.pointCount).toBe(2);
+    expect(restored.elevationKnown).toBe(false);
+    expect(restored.elevationGain).toBeUndefined();
+    expect(restored.elevationLoss).toBeUndefined();
+
+    const gpx = drawer.exportGPX('stored_no_elevation');
+    expect(gpx).not.toContain('<ele>');
+  });
+
   it('emits with the heights it has if terrain sampling hangs past the settle timeout', async () => {
     drawer.destroy(); // swap in a drawer with a 30 ms settle timeout
     const created2: SerializableTrack[] = [];
@@ -283,7 +314,9 @@ describe('TrackDrawer', () => {
       world.doubleClick();
       // Emits via the timeout, not the (hung) sampling
       await waitFor(() => created2.length === 1);
-      expect(created2[0].waypoints[0].elevation).toBeCloseTo(0, 3);
+      // Serialized honestly: the sample hadn't landed when we committed, so
+      // this point's elevation was never confirmed — absent, not the ~0 pick.
+      expect(created2[0].waypoints[0].elevation).toBeUndefined();
 
       // Straggling samples land later — they must not rewrite the committed track
       await world.flushTerrain();
@@ -363,7 +396,7 @@ describe('TrackDrawer', () => {
     expect(latestStats()!.elevationGain).toBe(0); // single point — no gain yet
   });
 
-  it('keeps working with picked heights when terrain sampling itself rejects', async () => {
+  it('keeps working with picked heights when terrain sampling itself rejects, but never confirms them', async () => {
     world.setTerrainMode('sample-reject'); // provider loads, every sample call fails
     world.setTerrainHeightFn(() => 700); // must never be applied
 
@@ -375,12 +408,24 @@ describe('TrackDrawer', () => {
     const stats = latestStats()!;
     expect(stats.profile[0].ele).toBeCloseTo(0, 3);
     expect(stats.profile[1].ele).toBeCloseTo(0, 3);
+    // The provider itself loaded fine — a per-call sampling hiccup is not the
+    // same as "no terrain source at all", so no on-map notice fires for it.
+    expect(terrainAvailability).toEqual([true]);
 
     world.doubleClick();
     await waitFor(() => created.length === 1); // finish completes promptly despite the failure
+
+    // No sample ever landed for these points — the committed route must be
+    // honest that it never confirmed a height, not silently keep the ~0 pick.
+    const route = created[0];
+    expect(route.waypoints[0].elevation).toBeUndefined();
+    expect(route.waypoints[1].elevation).toBeUndefined();
+    expect(route.metadata.elevationGain).toBeUndefined();
+    expect(route.metadata.elevationLoss).toBeUndefined();
+    expect(route.metadata.difficulty).toBeUndefined();
   });
 
-  it('keeps working with picked heights when terrain is unavailable', async () => {
+  it('finish with terrain unavailable stores the route with elevations absent, not zero', async () => {
     world.setTerrainMode('unavailable');
     world.setTerrainHeightFn(() => 700); // must never be applied
 
@@ -389,16 +434,66 @@ describe('TrackDrawer', () => {
     world.clickAt(B.lng, B.lat);
     await waitForStats(s => s.pointCount === 2);
 
-    // CURRENT behaviour (slice 05 will make this honest): heights silently
-    // stay at the picked ≈0 rather than being marked unknown.
+    // Honest degradation: the live panel already knows it never confirmed a
+    // height — gain/loss/estimate are absent, not a flat-0 measurement.
     const stats = latestStats()!;
-    expect(stats.profile[0].ele).toBeCloseTo(0, 3);
-    expect(stats.profile[1].ele).toBeCloseTo(0, 3);
-    expect(stats.elevationGain).toBeCloseTo(0, 3);
+    expect(stats.elevationKnown).toBe(false);
+    expect(stats.elevationGain).toBeUndefined();
+    expect(stats.elevationLoss).toBeUndefined();
+    expect(stats.estimatedTime).toBeUndefined();
+    expect(terrainAvailability).toEqual([false]);
 
     world.doubleClick();
     await waitFor(() => created.length === 1); // finish completes promptly despite the failure
-    expect(created[0].waypoints[0].elevation).toBeCloseTo(0, 3);
+
+    const route = created[0];
+    expect(route.waypoints[0].elevation).toBeUndefined();
+    expect(route.waypoints[1].elevation).toBeUndefined();
+    expect(route.metadata.elevationGain).toBeUndefined();
+    expect(route.metadata.elevationLoss).toBeUndefined();
+    expect(route.metadata.difficulty).toBeUndefined();
+    // Distance is unaffected — only elevation-derived figures degrade.
+    expect(route.metadata.distance).toBeGreaterThan(0.7);
+
+    const settled = latestStats()!;
+    expect(settled.phase).toBe('finished');
+    expect(settled.elevationKnown).toBe(false);
+    expect(settled.elevationGain).toBeUndefined();
+
+    // GPX omits elevation tags entirely rather than writing fake zeros
+    const gpx = drawer.exportGPX(route.id);
+    expect(gpx).not.toContain('<ele>');
+    expect(gpx).toContain('<trkpt');
+    expect(gpx).toContain('<time>');
+  });
+
+  it('does not fire the terrain-availability notice if destroyed before the provider resolves', async () => {
+    world.setProviderManual(true); // the terrain-provider construction itself will hang
+
+    world.clickAt(A.lng, A.lat); // kicks off addPoint -> enrichElevation -> getSamplingTerrain
+    await new Promise(r => setTimeout(r, 20)); // let it reach the (now-parked) provider construction
+
+    drawer.destroy(); // wizard unmounts while the provider is still loading
+    world.setTerrainMode('unavailable');
+    await world.flushProvider(); // the provider resolves (as unavailable) AFTER destroy
+    await new Promise(r => setTimeout(r, 20));
+
+    expect(terrainAvailability).toEqual([]); // no notice fired into a torn-down manager
+  });
+
+  it('fires the terrain-availability notice exactly once, and never when sampling works', async () => {
+    world.setTerrainHeightFn(ridgeline);
+    world.clickAt(A.lng, A.lat);
+    await waitForStats(s => s.pointCount === 1);
+    world.clickAt(B.lng, B.lat);
+    await waitForStats(s => s.pointCount === 2);
+
+    expect(terrainAvailability).toEqual([true]);
+
+    world.doubleClick();
+    await waitFor(() => created.length === 1);
+    // Still just the one, one-shot call — success never repeats/flips it.
+    expect(terrainAvailability).toEqual([true]);
   });
 
   // ── Settle-window hardening (issue 06) ────────────────────────────────────

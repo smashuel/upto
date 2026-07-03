@@ -381,6 +381,11 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   const [hasFinishedRoute, setHasFinishedRoute] = useState<boolean>(
     () => (initialRoutes?.length ?? 0) > 0,
   );
+  // Terrain-unavailable notice: set true (never back to false) the first time
+  // either manager confirms it has no real terrain source this session —
+  // dismissible, and must never interrupt drawing.
+  const [terrainUnavailable, setTerrainUnavailable] = useState(false);
+  const [terrainNoticeDismissed, setTerrainNoticeDismissed] = useState(false);
 
   // Check if Cesium is loaded
   useEffect(() => {
@@ -541,6 +546,12 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         const NoteManager = (await import('../../services/NoteManager')).default;
         const TrailLayerManager = (await import('../../services/TrailLayerManager')).default;
 
+        // Both map managers independently attempt real-terrain sampling; either
+        // confirming "no source this session" is enough to raise the notice.
+        const onTerrainAvailability = (available: boolean) => {
+          if (!available) setTerrainUnavailable(true);
+        };
+
         // Normalise WaypointManager's Waypoint object → { lat, lng, name } before
         // forwarding to the parent. WaypointManager uses Cesium cartographic;
         // callers (AdventureLocationStep) expect plain lat/lng numbers.
@@ -550,7 +561,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
           const lat = Cesium.Math.toDegrees(wp.cartographic.latitude);
           const lng = Cesium.Math.toDegrees(wp.cartographic.longitude);
           onWaypointAdded({ lat, lng, name: wp.metadata?.name });
-        });
+        }, onTerrainAvailability);
         trackDrawerRef.current = new TrackDrawer(
           viewer,
           (track) => {
@@ -559,6 +570,8 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
           },
           (stats) => setDrawingStats(stats),
           API_CONFIG.BASE_URL,
+          undefined,
+          onTerrainAvailability,
         );
         noteManagerRef.current = new NoteManager(viewer, onNoteAdded, (_position, onSubmit) => {
           noteSubmitRef.current = onSubmit;
@@ -1381,17 +1394,30 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
           )}
         </div>
 
-        {/* ── TOP-CENTER: Mode instruction chip ───────────────────────── */}
-        {(mapMode.active || drawingStats?.phase === 'editing') && (
-          <div className="map-overlay map-overlay-tc">
+        {/* ── TOP-CENTER: Terrain notice + mode instruction chip ──────── */}
+        <div className="map-overlay map-overlay-tc">
+          {terrainUnavailable && !terrainNoticeDismissed && (
+            <div className="map-terrain-notice">
+              <span>Elevation data unavailable — route stats shown without climb.</span>
+              <button
+                type="button"
+                onClick={() => setTerrainNoticeDismissed(true)}
+                aria-label="Dismiss"
+                className="map-btn-inline"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
+          {(mapMode.active || drawingStats?.phase === 'editing') && (
             <div className="map-instruction-chip">
               {drawingStats?.phase === 'editing' && 'Drag control points to reroute · Drag midpoints to add'}
               {drawingStats?.phase !== 'editing' && mapMode.type === 'waypoint' && 'Click to add waypoints'}
               {drawingStats?.phase !== 'editing' && mapMode.type === 'route' && 'Click to add points · Double-click to finish'}
               {drawingStats?.phase !== 'editing' && mapMode.type === 'note' && 'Click to add notes'}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* ── BOTTOM-LEFT: Locate + Reset ─────────────────────────────── */}
         <div className="map-overlay map-overlay-bl">
@@ -1543,18 +1569,27 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
               <span className="map-stat-label">Distance</span>
               <span className="map-stat-value">{drawingStats.distance.toFixed(2)} km</span>
             </div>
-            <div className="map-stat">
-              <span className="map-stat-label">↗</span>
-              <span className="map-stat-value">{drawingStats.elevationGain.toFixed(0)} m</span>
-            </div>
-            <div className="map-stat">
-              <span className="map-stat-label">↘</span>
-              <span className="map-stat-value">{drawingStats.elevationLoss.toFixed(0)} m</span>
-            </div>
-            <div className="map-stat">
-              <span className="map-stat-label">Est. time</span>
-              <span className="map-stat-value">{formatTime(drawingStats.estimatedTime)}</span>
-            </div>
+            {drawingStats.elevationKnown ? (
+              <>
+                <div className="map-stat">
+                  <span className="map-stat-label">↗</span>
+                  <span className="map-stat-value">{drawingStats.elevationGain!.toFixed(0)} m</span>
+                </div>
+                <div className="map-stat">
+                  <span className="map-stat-label">↘</span>
+                  <span className="map-stat-value">{drawingStats.elevationLoss!.toFixed(0)} m</span>
+                </div>
+                <div className="map-stat">
+                  <span className="map-stat-label">Est. time</span>
+                  <span className="map-stat-value">{formatTime(drawingStats.estimatedTime!)}</span>
+                </div>
+              </>
+            ) : (
+              <div className="map-stat map-stat-unknown">
+                <span className="map-stat-label">Climb</span>
+                <span className="map-stat-value">unavailable</span>
+              </div>
+            )}
             <div className="map-stat-meta">
               {/* Read-only views (shared/active trip) show the same stats card
                   without wizard framing — a watcher sees the planner's numbers. */}
@@ -1564,7 +1599,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
             </div>
           </div>
 
-          {drawingStats.profile.length >= 2 && (
+          {drawingStats.elevationKnown && drawingStats.profile.length >= 2 && (
             <ElevationChart points={drawingStats.profile} onHover={handleProfileHover} />
           )}
         </div>

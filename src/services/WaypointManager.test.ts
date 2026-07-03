@@ -15,12 +15,18 @@ const terrainHeight = (lng: number) => (lng < 172.005 ? 500 : 1900);
 describe('WaypointManager', () => {
   let world: FakeCesiumWorld;
   let added: Waypoint[];
+  let terrainAvailability: boolean[];
   let manager: WaypointManager;
 
   beforeEach(async () => {
     world = installFakeCesium();
     added = [];
-    manager = new WaypointManager(world.viewer, wp => added.push(wp));
+    terrainAvailability = [];
+    manager = new WaypointManager(
+      world.viewer,
+      wp => added.push(wp),
+      available => terrainAvailability.push(available),
+    );
     await waitFor(() => world.hasAction('LEFT_CLICK'));
     manager.setMode(true);
   });
@@ -71,15 +77,22 @@ describe('WaypointManager', () => {
     expect(settledFlat).toBe(settledDepth);
   });
 
-  it('keeps the picked height if terrain sampling is unavailable (no throw)', async () => {
+  it('shows the picked height provisionally, then marks it honestly unknown once terrain is confirmed unavailable', async () => {
     world.setTerrainMode('unavailable');
     world.setTerrainHeightFn(() => 999); // must never apply
 
     world.clickAt(PEAK.lng, PEAK.lat);
     await waitFor(() => added.length === 1);
+    // Instant provisional value (slice 04's contract) — not yet known to be wrong.
+    expect(added[0].metadata.elevation).toBeCloseTo(0, 3);
 
     await new Promise(r => setTimeout(r, 20));
-    expect(manager.getWaypoints()[0].metadata.elevation).toBeCloseTo(0, 3);
+    const wp = manager.getWaypoints()[0];
+    // Once we KNOW sampling failed, the picked ~0 must not linger disguised
+    // as a real measurement — it becomes an honest absence.
+    expect(wp.metadata.elevation).toBeUndefined();
+    expect(wp.entity.description).toContain('elevation unknown');
+    expect(terrainAvailability).toEqual([false]);
   });
 
   it('does not re-enrich waypoints restored via loadWaypoints (trusted as already-settled)', async () => {
@@ -89,6 +102,28 @@ describe('WaypointManager', () => {
 
     await new Promise(r => setTimeout(r, 20));
     expect(manager.getWaypoints()[0].metadata.elevation).toBe(500);
+  });
+
+  it('preserves "unknown" (not sea level) for a waypoint loaded without an elevation, without re-sampling', async () => {
+    world.setTerrainHeightFn(() => 650); // must never apply — no re-sampling on load, ever
+
+    manager.loadWaypoints([{ coordinates: [PEAK.lat, PEAK.lng], name: 'Unrecorded peak' }]);
+
+    await new Promise(r => setTimeout(r, 20));
+    const wp = manager.getWaypoints()[0];
+    expect(wp.metadata.elevation).toBeUndefined();
+    expect(wp.entity.description).toContain('elevation unknown');
+    expect(terrainAvailability).toEqual([]); // load path never touches terrain sampling at all
+  });
+
+  it('fires the terrain-availability notice once, and never with false when sampling works', async () => {
+    world.setTerrainHeightFn(terrainHeight);
+
+    world.clickAt(PEAK.lng, PEAK.lat);
+    await waitFor(() => added.length === 1);
+    await waitFor(() => manager.getWaypoints()[0].metadata.elevation === 500);
+
+    expect(terrainAvailability).toEqual([true]);
   });
 
   it('does not repaint a waypoint once the manager is destroyed mid-backfill', async () => {

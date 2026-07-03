@@ -762,6 +762,22 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   backdrop-filter: blur(4px);
 }
 
+/* Terrain-unavailable notice — dismissible, non-blocking, amber (degraded,
+   not an error): elevation figures shown are unconfirmed, not wrong. */
+.map-terrain-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(254,243,199,0.95);
+  color: #92400e;
+  padding: 6px 10px 6px 14px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
 /* ── Layers panel ──────────────────────────────────────────────────────── */
 
 .map-layers-panel {
@@ -1051,6 +1067,13 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   margin-left: auto;
   font-size: 0.7rem;
   color: #94a3b8;
+}
+/* Elevation-derived figures unavailable — visually distinct from a real value
+   so "unavailable" never reads like a measurement. */
+.map-stat-unknown .map-stat-value {
+  font-weight: 500;
+  font-style: italic;
+  color: #b45309;
 }
 
 /* ── Note Modal ────────────────────────────────────────────────────────── */

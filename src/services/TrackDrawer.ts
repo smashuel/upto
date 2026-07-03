@@ -7,7 +7,12 @@ import { beginRouteSettle, endRouteSettle } from './RouteSettlement';
 interface TrackPoint {
   position: any; // Cesium.Cartesian3
   cartographic: any;
+  /** Best-known height: a real terrain sample if `elevationKnown`, otherwise
+   *  the raw picked value (kept as a number so distance math never special-cases
+   *  this — only elevation-DERIVED figures need to know whether it's confirmed). */
   elevation: number;
+  /** True once a real terrain sample confirmed this point's height. */
+  elevationKnown: boolean;
   timestamp: Date;
 }
 
@@ -22,9 +27,10 @@ export interface Track {
   /** Optional slope-gradient overlay (one entity per segment) — added when the Steepness layer is toggled on */
   slopeOverlay?: any[];
   metadata: {
-    distance: number; // km
-    elevationGain: number; // m
-    elevationLoss: number; // m
+    distance: number; // km — unaffected by unknown elevation, still real horizontal-ish distance
+    /** Absent (not 0) when terrain sampling never confirmed every point's height. */
+    elevationGain?: number; // m
+    elevationLoss?: number; // m
     difficulty?: string;
     activityType: string;
     created: Date;
@@ -35,11 +41,13 @@ export interface Track {
 export interface SerializableTrack {
   id: string;
   name: string;
-  waypoints: Array<{ coordinates: LatLng; elevation: number }>;
+  /** `elevation` absent (not 0) for a point whose height was never confirmed
+   *  by a real terrain sample — distinguishes "unknown" from "sea level". */
+  waypoints: Array<{ coordinates: LatLng; elevation?: number }>;
   metadata: {
     distance: number;
-    elevationGain: number;
-    elevationLoss: number;
+    elevationGain?: number;
+    elevationLoss?: number;
     difficulty?: string;
     activityType: string;
     created: string; // ISO string
@@ -60,15 +68,23 @@ export type DrawingPhase = 'drawing' | 'editing' | 'settling' | 'finished';
 export interface DrawingStats {
   pointCount: number;
   distance: number; // km
-  elevationGain: number; // m
-  elevationLoss: number; // m
-  /** Naismith estimate in hours: distance/4 + gain/600 */
-  estimatedTime: number;
-  /** Cumulative distance + elevation for the elevation profile chart */
+  /** Absent (not 0) when terrain sampling never confirmed every point's height —
+   *  an unknown number is never presented as a real measurement. */
+  elevationGain?: number; // m
+  elevationLoss?: number; // m
+  /** Naismith estimate in hours: distance/4 + gain/600. Absent when gain is unknown. */
+  estimatedTime?: number;
+  /** Cumulative distance + elevation for the elevation profile chart. `ele` is
+   *  the raw picked-or-sampled number regardless of `elevationKnown` — the UI
+   *  hides the chart entirely rather than plotting an unconfirmed profile. */
   profile: Array<{ dist: number; ele: number }>;
   /** Whether redo is available (points were undone and no new point added since) */
   canRedo: boolean;
   phase: DrawingPhase;
+  /** True only if EVERY point behind this emission has a confirmed real
+   *  terrain sample. False means gain/loss/estimatedTime are absent and the
+   *  UI should show an "elevation unavailable" state instead of a flat 0. */
+  elevationKnown: boolean;
 }
 
 export default class TrackDrawer extends CesiumManager {
@@ -138,12 +154,14 @@ export default class TrackDrawer extends CesiumManager {
     onDrawingUpdate?: (stats: DrawingStats | null) => void,
     apiBase = '',
     settleTimeoutMs = 8000,
+    onTerrainAvailability?: (available: boolean) => void,
   ) {
     super(viewer);
     this.onCreated = onCreated;
     this.onDrawingUpdate = onDrawingUpdate;
     this.snapService = new TrailSnapService(apiBase);
     this.settleTimeoutMs = settleTimeoutMs;
+    this.onTerrainAvailability = onTerrainAvailability;
   }
 
   protected setup(handler: any) {
@@ -276,6 +294,7 @@ export default class TrackDrawer extends CesiumManager {
             position: iPos,
             cartographic: iCarto,
             elevation: iCarto.height,
+            elevationKnown: false,
             timestamp: new Date(),
           });
         }
@@ -289,6 +308,7 @@ export default class TrackDrawer extends CesiumManager {
         position: snappedPos,
         cartographic: snappedCarto,
         elevation: snappedCarto.height,
+        elevationKnown: false,
         timestamp: new Date(),
       });
       this.lastSnap = snapResult;
@@ -298,6 +318,7 @@ export default class TrackDrawer extends CesiumManager {
         position,
         cartographic,
         elevation: cartographic.height,
+        elevationKnown: false,
         timestamp: new Date(),
       });
       this.lastSnap = null; // broke the snap chain
@@ -462,8 +483,10 @@ export default class TrackDrawer extends CesiumManager {
   }
 
   private buildTrack(points: TrackPoint[]): Track {
-    const { distance, elevationGain, elevationLoss } = this.computeStats(points);
-    const difficulty = this.estimateDifficulty(distance, elevationGain);
+    const { distance, elevationGain, elevationLoss, elevationKnown } = this.computeStats(points);
+    // Difficulty needs true ascent — never derive "easy" from a route whose
+    // 1,200 m climb was simply never confirmed.
+    const difficulty = elevationKnown ? this.estimateDifficulty(distance, elevationGain!) : undefined;
 
     return {
       id: this.generateId('track'),
@@ -512,7 +535,11 @@ export default class TrackDrawer extends CesiumManager {
     if (pts.length < 2) return;
 
     const positions = pts.map(p => p.position);
-    const desc = `<div><h4>${track.name}</h4><p>${track.metadata.distance.toFixed(2)} km · +${track.metadata.elevationGain.toFixed(0)}m / -${track.metadata.elevationLoss.toFixed(0)}m · ${track.metadata.difficulty}</p></div>`;
+    const elev =
+      track.metadata.elevationGain !== undefined && track.metadata.elevationLoss !== undefined
+        ? `+${track.metadata.elevationGain.toFixed(0)}m / -${track.metadata.elevationLoss.toFixed(0)}m`
+        : 'climb unknown';
+    const desc = `<div><h4>${track.name}</h4><p>${track.metadata.distance.toFixed(2)} km · ${elev} · ${track.metadata.difficulty ?? 'difficulty unknown'}</p></div>`;
     const { casing: cw, core: xw } = this.widthsForTier();
 
     // CASING: add first so it renders below the core.
@@ -628,7 +655,7 @@ export default class TrackDrawer extends CesiumManager {
           window.Cesium.Math.toDegrees(p.cartographic.latitude),
           window.Cesium.Math.toDegrees(p.cartographic.longitude),
         ] as LatLng,
-        elevation: p.elevation,
+        elevation: p.elevationKnown ? p.elevation : undefined,
       })),
       metadata: {
         ...track.metadata,
@@ -637,13 +664,23 @@ export default class TrackDrawer extends CesiumManager {
     };
   }
 
-  /** Distance/elevation/profile figures shared by all three stats emitters */
+  /**
+   * Distance/elevation/profile figures shared by all three stats emitters.
+   * `elevationKnown` is true only if EVERY point has a confirmed real sample —
+   * a route with even one unconfirmed point can't produce a trustworthy
+   * gain/loss (that segment's delta would be partly fake), so gain/loss come
+   * back absent rather than a number quietly computed from a mix. Distance is
+   * unaffected: unlike climb, it isn't presented as if it were more precise
+   * than the picked geometry actually is.
+   */
   private computeStats(points: TrackPoint[]): {
     distance: number;
-    elevationGain: number;
-    elevationLoss: number;
+    elevationGain?: number;
+    elevationLoss?: number;
     profile: Array<{ dist: number; ele: number }>;
+    elevationKnown: boolean;
   } {
+    const elevationKnown = points.every(p => p.elevationKnown);
     let distance = 0;
     let elevationGain = 0;
     let elevationLoss = 0;
@@ -661,7 +698,13 @@ export default class TrackDrawer extends CesiumManager {
       else elevationLoss += Math.abs(delta);
     }
 
-    return { distance, elevationGain, elevationLoss, profile };
+    return {
+      distance,
+      elevationGain: elevationKnown ? elevationGain : undefined,
+      elevationLoss: elevationKnown ? elevationLoss : undefined,
+      profile,
+      elevationKnown,
+    };
   }
 
   /**
@@ -682,7 +725,9 @@ export default class TrackDrawer extends CesiumManager {
     this.onDrawingUpdate({
       pointCount: points.length,
       ...stats,
-      estimatedTime: stats.distance / 4 + stats.elevationGain / 600,
+      estimatedTime: stats.elevationKnown
+        ? stats.distance / 4 + (stats.elevationGain ?? 0) / 600
+        : undefined,
       canRedo,
       phase,
     });
@@ -752,11 +797,18 @@ export default class TrackDrawer extends CesiumManager {
 
       const points: TrackPoint[] = route.waypoints.map(wp => {
         const [lat, lng] = wp.coordinates;
+        // Height only matters for the (clamp-to-ground) geometry math here —
+        // 0 is a harmless fallback for rendering. What must NOT default to 0
+        // is whether we KNOW this point's elevation: that's read straight off
+        // whether the stored waypoint carried a value at all, never re-sampled
+        // (see the parent PRD: reopening must distinguish "unknown" from
+        // "sea level" without requiring terrain to be available again).
         const position = window.Cesium.Cartesian3.fromDegrees(lng, lat, wp.elevation ?? 0);
         return {
           position,
           cartographic: window.Cesium.Cartographic.fromCartesian(position),
           elevation: wp.elevation ?? 0,
+          elevationKnown: wp.elevation !== undefined,
           timestamp: new Date(),
         };
       });
@@ -767,8 +819,10 @@ export default class TrackDrawer extends CesiumManager {
         points,
         metadata: {
           distance: route.distance ?? 0,
-          elevationGain: route.elevationGain ?? 0,
-          elevationLoss: route.elevationLoss ?? 0,
+          // No `?? 0` default — an absent stored value must stay absent, not
+          // silently become "zero climb" on reopen.
+          elevationGain: route.elevationGain,
+          elevationLoss: route.elevationLoss,
           difficulty: route.difficulty,
           activityType: route.activityType ?? 'hiking',
           created: new Date(),
@@ -793,7 +847,10 @@ export default class TrackDrawer extends CesiumManager {
       .map(p => {
         const lat = window.Cesium.Math.toDegrees(p.cartographic.latitude);
         const lng = window.Cesium.Math.toDegrees(p.cartographic.longitude);
-        return `    <trkpt lat="${lat}" lon="${lng}"><ele>${p.elevation}</ele><time>${p.timestamp.toISOString()}</time></trkpt>`;
+        // Omit <ele> entirely for an unconfirmed height — a GPS device reading
+        // "0m" would be indistinguishable from a real sea-level measurement.
+        const ele = p.elevationKnown ? `<ele>${p.elevation}</ele>` : '';
+        return `    <trkpt lat="${lat}" lon="${lng}">${ele}<time>${p.timestamp.toISOString()}</time></trkpt>`;
       })
       .join('\n');
 
@@ -899,11 +956,11 @@ export default class TrackDrawer extends CesiumManager {
   }
 
   private recomputeTrackMetadata(track: Track) {
-    const { distance, elevationGain, elevationLoss } = this.computeStats(track.points);
+    const { distance, elevationGain, elevationLoss, elevationKnown } = this.computeStats(track.points);
     track.metadata.distance = distance;
     track.metadata.elevationGain = elevationGain;
     track.metadata.elevationLoss = elevationLoss;
-    track.metadata.difficulty = this.estimateDifficulty(distance, elevationGain);
+    track.metadata.difficulty = elevationKnown ? this.estimateDifficulty(distance, elevationGain!) : undefined;
   }
 
   /** Draw the live polyline + control handles + midpoint handles */
@@ -1014,6 +1071,7 @@ export default class TrackDrawer extends CesiumManager {
           position: midPos,
           cartographic: midCarto,
           elevation: midCarto.height,
+          elevationKnown: false,
           timestamp: new Date(),
         };
         // Insert after draggingIndex
@@ -1040,6 +1098,7 @@ export default class TrackDrawer extends CesiumManager {
         position: pos,
         cartographic: carto,
         elevation: carto.height,
+        elevationKnown: false, // mid-drag uses picked heights; the drop settles the truth
         timestamp: new Date(),
       };
       this.emitEditStats();
@@ -1076,6 +1135,7 @@ export default class TrackDrawer extends CesiumManager {
           position: snappedPos,
           cartographic: snappedCarto,
           elevation: snappedCarto.height,
+          elevationKnown: false,
           timestamp: new Date(),
         };
       }

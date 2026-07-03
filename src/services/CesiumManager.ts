@@ -15,6 +15,11 @@ export interface ElevationPoint {
   position: any; // Cesium.Cartesian3
   cartographic: any; // Cesium.Cartographic
   elevation: number;
+  /** True once a real terrain sample has landed for this point. Only ever set
+   *  true by `enrichElevation` — a failed/unavailable attempt leaves it as the
+   *  caller set it (false for a fresh point), never retroactively clears a
+   *  confirmation a previous successful sample already gave it. */
+  elevationKnown: boolean;
 }
 
 export abstract class CesiumManager {
@@ -31,6 +36,19 @@ export abstract class CesiumManager {
   // picked height.
   private samplingTerrain: any = null;
   private samplingTerrainTried = false;
+  /** Fired at most once per instance, the first time terrain-provider
+   *  resolution completes, with whether real elevation sampling is possible
+   *  this session — drives the map's "elevation unavailable" notice. Set by
+   *  subclasses in their own constructors (this base class takes only a
+   *  viewer). A per-call sampling failure (tile fetch hiccup) does NOT
+   *  re-fire this — it only reflects whether the terrain SOURCE loaded. */
+  protected onTerrainAvailability?: (available: boolean) => void;
+  /** Set by destroy() — strands any async continuation still in flight (e.g.
+   *  a terrain-provider construction that outlives the manager), matching the
+   *  epoch/teardown discipline ADR 014 establishes for this class hierarchy.
+   *  Protected so subclasses (e.g. WaypointManager's per-object async guards)
+   *  can share the same flag instead of keeping their own duplicate. */
+  protected destroyed = false;
 
   constructor(viewer: any) {
     this.viewer = viewer;
@@ -93,6 +111,7 @@ export abstract class CesiumManager {
     } catch {
       this.samplingTerrain = null; // no Ion token / offline — fall back to picked heights
     }
+    if (!this.destroyed) this.onTerrainAvailability?.(this.samplingTerrain !== null);
     return this.samplingTerrain;
   }
 
@@ -123,6 +142,7 @@ export abstract class CesiumManager {
       points[i].position = Cesium.Cartesian3.fromDegrees(lng, lat, h);
       points[i].cartographic = Cesium.Cartographic.fromCartesian(points[i].position);
       points[i].elevation = h;
+      points[i].elevationKnown = true;
     }
   }
 
@@ -157,6 +177,7 @@ export abstract class CesiumManager {
   }
 
   destroy() {
+    this.destroyed = true;
     if (this.handler) {
       this.handler.destroy();
       this.handler = null;

@@ -159,6 +159,12 @@ export interface FakeCesiumWorld {
   setTerrainMode(mode: TerrainMode): void;
   /** Resolve all queued 'manual' terrain samples (applies the height fn). */
   flushTerrain(): Promise<void>;
+  /** When true, `CesiumTerrainProvider.fromIonAssetId` parks instead of
+   *  resolving — lets a test drive "destroyed while the provider itself is
+   *  still loading" races. Default false (resolves on the next microtask). */
+  setProviderManual(manual: boolean): void;
+  /** Resolve all queued 'manual' provider constructions. */
+  flushProvider(): Promise<void>;
   /** Entities currently on the fake viewer. */
   entities(): any[];
   /** Remove the fake from the window global. */
@@ -174,6 +180,8 @@ export function installFakeCesium(): FakeCesiumWorld {
   const pendingSamples: Array<{ cartos: Cartographic[]; resolve: () => void }> = [];
   const pickQueue: Cartesian3[] = [];
   const scenePickQueue: any[] = [];
+  let providerManual = false;
+  const pendingProviders: Array<() => void> = [];
 
   const applyHeights = (cartos: Cartographic[]) => {
     for (const c of cartos) {
@@ -207,9 +215,17 @@ export function installFakeCesium(): FakeCesiumWorld {
     },
     defined: (v: any) => v !== undefined && v !== null,
     CesiumTerrainProvider: {
-      fromIonAssetId: async () => {
-        if (terrainMode === 'unavailable') throw new Error('fake: terrain unavailable');
-        return { fake: 'terrain' };
+      fromIonAssetId: () => {
+        if (providerManual) {
+          return new Promise((resolve, reject) => {
+            pendingProviders.push(() => {
+              if (terrainMode === 'unavailable') reject(new Error('fake: terrain unavailable'));
+              else resolve({ fake: 'terrain' });
+            });
+          });
+        }
+        if (terrainMode === 'unavailable') return Promise.reject(new Error('fake: terrain unavailable'));
+        return Promise.resolve({ fake: 'terrain' });
       },
     },
     sampleTerrainMostDetailed: (_provider: unknown, cartos: Cartographic[]) => {
@@ -295,6 +311,14 @@ export function installFakeCesium(): FakeCesiumWorld {
         resolve();
       }
       // Let the awaiting code (enrichment → stats re-emit) run to completion.
+      await new Promise(r => setTimeout(r, 0));
+    },
+    setProviderManual(manual: boolean) {
+      providerManual = manual;
+    },
+    async flushProvider() {
+      const pending = pendingProviders.splice(0);
+      for (const settle of pending) settle();
       await new Promise(r => setTimeout(r, 0));
     },
     entities: () => entities.values,

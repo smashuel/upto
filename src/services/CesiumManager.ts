@@ -14,8 +14,8 @@ import * as Cesium from 'cesium';
 
 /** Minimal shape `enrichElevation` needs — route points and waypoints both satisfy this. */
 export interface ElevationPoint {
-  position: any; // Cesium.Cartesian3
-  cartographic: any; // Cesium.Cartographic
+  position: Cesium.Cartesian3;
+  cartographic: Cesium.Cartographic;
   elevation: number;
   /** True once a real terrain sample has landed for this point. Only ever set
    *  true by `enrichElevation` — a failed/unavailable attempt leaves it as the
@@ -25,8 +25,10 @@ export interface ElevationPoint {
 }
 
 export abstract class CesiumManager {
+  // viewer stays `any` for now: typing it as Cesium.Viewer cascades into every
+  // subclass's entity/scene calls (a full de-any pass, tracked separately).
   protected viewer: any;
-  protected handler: any = null;
+  protected handler: Cesium.ScreenSpaceEventHandler | null = null;
 
   private setupRetries = 0;
   private readonly MAX_RETRIES = 50; // 5 seconds at 100ms intervals
@@ -36,7 +38,7 @@ export abstract class CesiumManager {
   // picked heights there are 0). Lazily created per manager instance; stays null
   // if unavailable (e.g. no Ion token) and elevations then fall back to the
   // picked height.
-  private samplingTerrain: any = null;
+  private samplingTerrain: Cesium.TerrainProvider | null = null;
   private samplingTerrainTried = false;
   /** Fired at most once per instance, the first time terrain-provider
    *  resolution completes, with whether real elevation sampling is possible
@@ -105,7 +107,7 @@ export abstract class CesiumManager {
   }
 
   /** Lazily resolve a real terrain provider for height sampling (Cesium World Terrain). */
-  protected async getSamplingTerrain(): Promise<any | null> {
+  protected async getSamplingTerrain(): Promise<Cesium.TerrainProvider | null> {
     if (this.samplingTerrainTried) return this.samplingTerrain;
     this.samplingTerrainTried = true;
     try {

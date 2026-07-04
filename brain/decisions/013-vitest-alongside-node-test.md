@@ -23,11 +23,17 @@ Adopt **Vitest** for service-level tests, scoped by `vitest.config.ts` to
 `node --test`** unmigrated; `npm test` chains both (`node --test … && vitest run`).
 
 Map services are tested at their public boundary (input events in → callbacks out)
-against a purpose-built fake of the `window.Cesium` global
-(`src/services/testing/fakeCesium.ts`) with controllable terrain sampling
-(auto / deferred / provider-unavailable / sample-reject). The fake is deliberately
-minimal — extend it only when a test needs another member; it is not a general
-Cesium mock.
+against a purpose-built fake of Cesium (`src/services/testing/fakeCesium.ts`) with
+controllable terrain sampling (auto / deferred / provider-unavailable /
+sample-reject). The fake is deliberately minimal — extend it only when a test needs
+another member; it is not a general Cesium mock.
+
+> **Updated 2026-07-04 ([ADR 015](015-cesium-npm-bundled-not-cdn.md)):** the map
+> stack now `import * as Cesium from 'cesium'` instead of reading a `window.Cesium`
+> global, so the fake is registered as the module mock —
+> `vi.mock('cesium', async () => (await import('./testing/fakeCesium')).fakeCesium)`
+> — rather than injected onto `window`. The boundary-testing principle and the fake
+> itself are unchanged; only the injection seam moved.
 
 ## Alternatives
 

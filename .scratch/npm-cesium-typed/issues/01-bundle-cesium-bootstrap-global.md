@@ -1,6 +1,6 @@
 # 01 — Bundle Cesium & bootstrap it onto the global (CDN gone, assets self-hosted)
 
-Status: ready-for-agent
+Status: shipped (0ad6aab, 2026-07-04)
 
 ## Parent
 

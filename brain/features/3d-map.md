@@ -11,8 +11,8 @@ Cesium-based 2D/3D map that anchors the Location step of the wizard. Also used s
 
 ## Cesium setup
 
-- Loaded **via CDN** (not npm) from `cesium.com/downloads/cesiumjs/releases/1.132/` in `index.html`
-- Accessed globally as `window.Cesium` — all managers use `any` types
+- Bundled from the npm `cesium` package (1.133.x) via `vite-plugin-cesium`, which sets `CESIUM_BASE_URL`, self-hosts Cesium's static assets, and injects `widgets.css` — no CDN, no `window.Cesium` global
+- Imported as `import * as Cesium from 'cesium'` in every map module
 - Asset IDs: `2` (Sentinel-2 satellite imagery), `1` (world terrain)
 - Falls back to OpenStreetMap tiles if `VITE_CESIUM_ION_TOKEN` is missing
 - `scene3DOnly` is **NOT** set — required for `morphTo2D` to work
@@ -63,6 +63,6 @@ NZ overview: `lng=172.0, lat=-41.5, height=2,500,000 m`
 
 ## Known quirks
 
-- Cesium types are `any` everywhere — no first-party TS types since we load via CDN
+- Real Cesium types come from the package's own bundled `.d.ts` (`moduleResolution: bundler`, no `@types/cesium`). Direct Cesium API calls are type-checked; some map internals (viewer/entity refs, Cesium option bags) are still `any` behind a file-level `eslint-disable` pending a full de-any pass. `CesiumManager`'s elevation/terrain surface (`ElevationPoint`, `samplingTerrain`, `handler`) is typed
 - Terrain samples for elevation profiles are async — stats recompute after `sampleTerrainMostDetailed` resolves
 - Lazy-mounting via `ExpandSection.hasOpened` means you'll see "map not ready" logs if a manager method is called pre-mount

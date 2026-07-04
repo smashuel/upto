@@ -1,6 +1,6 @@
 # 03 — Migrate `TripPlanningMap`, remove the global + `@types/cesium` + blanket `any`
 
-Status: ready-for-agent
+Status: shipped (2733e3b, 2026-07-04) — type-tightening carved out to issue 04
 
 ## Parent
 

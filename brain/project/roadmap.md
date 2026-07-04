@@ -57,10 +57,14 @@ this lane — the dev lane is now idle until the capstone walkthrough below.
 
 ## Bridge — before phase 2 map work starts
 
-- [ ] **npm Cesium + official TS types** — kills the all-`any` map surface. Isolated PR,
-      deliberately timed here: after the terrain stream stops churning the map services,
-      before live-GPS builds a position channel on top of them. Worst possible time to do
-      this is *after* phase 2 code exists.
+- [x] **npm Cesium + official TS types** — bundled from npm via `vite-plugin-cesium`,
+      CDN gone, `window.Cesium` global removed, `@types/cesium` dropped for the package's
+      own bundled types ([ADR 015](../decisions/015-cesium-npm-bundled-not-cdn.md),
+      shipped 2026-07-04). Real types now flow and immediately caught three latent bugs.
+      **Remaining:** the map stack still carries file-level `eslint-disable no-explicit-any`
+      because typing `CesiumManager.viewer` cascades into subclasses — a tracked de-any
+      follow-up ([issue 04](../../.scratch/npm-cesium-typed/issues/04-de-any-map-stack.md)),
+      not a phase-2 blocker.
 
 ---
 

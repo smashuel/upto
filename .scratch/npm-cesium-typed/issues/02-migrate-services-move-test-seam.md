@@ -1,6 +1,6 @@
 # 02 — Migrate map services to `import from 'cesium'` + move the test seam to `vi.mock`
 
-Status: ready-for-agent
+Status: shipped (a10ef2a, 2026-07-04)
 
 ## Parent
 

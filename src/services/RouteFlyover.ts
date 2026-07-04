@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+import * as Cesium from 'cesium';
 /**
  * RouteFlyover — animates a chase-cam flight along a finished route.
  *
@@ -36,7 +38,6 @@ export default class RouteFlyover {
     if (this.running) return false;
     if (positions.length < 2) return false;
 
-    const Cesium = window.Cesium;
     const duration = Math.max(6, Math.min(60, opts.duration ?? Math.max(10, positions.length * 1.2)));
     const altitude = opts.altitude ?? 250;
 

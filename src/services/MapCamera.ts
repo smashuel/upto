@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+import * as Cesium from 'cesium';
 /**
  * Shared Cesium camera framing helpers.
  *
@@ -33,7 +35,6 @@ export function flyToRouteBounds(
 ): void {
   if (!viewer || geometryLatLng.length === 0) return;
 
-  const Cesium = window.Cesium;
   const { duration = 1.2, minRadius = 500, paddingFactor = 1.2 } = opts;
 
   const cartesians = geometryLatLng.map(([lat, lng]) =>

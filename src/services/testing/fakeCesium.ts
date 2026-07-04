@@ -1,7 +1,19 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * Minimal fake of the `window.Cesium` global for testing the map managers at
- * their public boundary (clicks in → callbacks out).
+ * Minimal fake of the `cesium` module for testing the map managers at their
+ * public boundary (clicks in → callbacks out).
+ *
+ * The managers `import * as Cesium from 'cesium'`, so tests register this fake as
+ * the module mock:
+ *
+ *   vi.mock('cesium', async () => (await import('./testing/fakeCesium')).fakeCesium);
+ *
+ * `import * as` snapshots the module's own keys, so the fake must be a single
+ * stable object with every member present (`fakeCesium`). The handful of members
+ * whose behaviour a test drives (terrain sampling + provider construction) read
+ * a module-level `active` holder that `installFakeCesium()` resets per test — the
+ * control handle it returns mutates that same holder. Everything else (the pure
+ * geometry/colour classes) is stateless and shared.
  *
  * Purpose-built: it implements only the surface CesiumManager/TrackDrawer/
  * WaypointManager actually touch, with real (spherical) math so distances and
@@ -138,6 +150,92 @@ class FakeEntityCollection {
 
 type TerrainMode = 'auto' | 'manual' | 'unavailable' | 'sample-reject';
 
+/** Per-test terrain state read by the stable `fakeCesium` module's async members
+ *  and mutated by the control handle. Reset by `installFakeCesium()`. Test files
+ *  run sequentially within a worker, so a single module-level holder is safe. */
+interface ActiveTerrain {
+  mode: TerrainMode;
+  heightFn: (lng: number, lat: number) => number;
+  pendingSamples: Array<{ cartos: Cartographic[]; resolve: () => void }>;
+  providerManual: boolean;
+  pendingProviders: Array<() => void>;
+}
+
+const freshActive = (): ActiveTerrain => ({
+  mode: 'auto',
+  heightFn: () => 0,
+  pendingSamples: [],
+  providerManual: false,
+  pendingProviders: [],
+});
+
+let active: ActiveTerrain = freshActive();
+
+const applyHeights = (cartos: Cartographic[]) => {
+  for (const c of cartos) {
+    c.height = active.heightFn((c.longitude * 180) / Math.PI, (c.latitude * 180) / Math.PI);
+  }
+};
+
+/**
+ * The stable fake `cesium` module. Every member is present so `import * as Cesium`
+ * sees real keys; the pure classes are shared, and the two async members read the
+ * module-level `active` holder so a test can drive terrain timing/availability.
+ * Register it as the module mock (see file header).
+ */
+export const fakeCesium = {
+  Cartesian2,
+  Cartesian3,
+  Cartographic,
+  Color,
+  CallbackProperty,
+  PolylineGlowMaterialProperty,
+  ScreenSpaceEventHandler: FakeScreenSpaceEventHandler,
+  ScreenSpaceEventType: {
+    LEFT_CLICK: 'LEFT_CLICK',
+    LEFT_DOUBLE_CLICK: 'LEFT_DOUBLE_CLICK',
+    LEFT_DOWN: 'LEFT_DOWN',
+    LEFT_UP: 'LEFT_UP',
+    MOUSE_MOVE: 'MOUSE_MOVE',
+  },
+  SceneMode: { SCENE2D: 'SCENE2D', SCENE3D: 'SCENE3D', COLUMBUS_VIEW: 'COLUMBUS_VIEW' },
+  HeightReference: { CLAMP_TO_GROUND: 'CLAMP_TO_GROUND' },
+  VerticalOrigin: { BOTTOM: 'BOTTOM', TOP: 'TOP', CENTER: 'CENTER' },
+  LabelStyle: { FILL: 'FILL', OUTLINE: 'OUTLINE', FILL_AND_OUTLINE: 'FILL_AND_OUTLINE' },
+  NearFarScalar,
+  Math: {
+    toDegrees: (rad: number) => (rad * 180) / Math.PI,
+    toRadians: (deg: number) => (deg * Math.PI) / 180,
+  },
+  defined: (v: any) => v !== undefined && v !== null,
+  CesiumTerrainProvider: {
+    fromIonAssetId: () => {
+      if (active.providerManual) {
+        return new Promise((resolve, reject) => {
+          active.pendingProviders.push(() => {
+            if (active.mode === 'unavailable') reject(new Error('fake: terrain unavailable'));
+            else resolve({ fake: 'terrain' });
+          });
+        });
+      }
+      if (active.mode === 'unavailable') return Promise.reject(new Error('fake: terrain unavailable'));
+      return Promise.resolve({ fake: 'terrain' });
+    },
+  },
+  sampleTerrainMostDetailed: (_provider: unknown, cartos: Cartographic[]) => {
+    if (active.mode === 'sample-reject') {
+      return Promise.reject(new Error('fake: terrain sampling failed'));
+    }
+    if (active.mode === 'manual') {
+      return new Promise<void>(resolve => {
+        active.pendingSamples.push({ cartos, resolve });
+      });
+    }
+    applyHeights(cartos);
+    return Promise.resolve(cartos);
+  },
+};
+
 export interface FakeCesiumWorld {
   Cesium: any;
   viewer: any;
@@ -167,80 +265,22 @@ export interface FakeCesiumWorld {
   flushProvider(): Promise<void>;
   /** Entities currently on the fake viewer. */
   entities(): any[];
-  /** Remove the fake from the window global. */
+  /** Reset the fake's per-test state (terrain + handler registry). */
   uninstall(): void;
 }
 
-/** Install a fresh fake `window.Cesium` + stub viewer; returns the control handle. */
+/**
+ * Reset the fake's per-test state and hand back a fresh stub viewer + control
+ * handle. The managers reach Cesium through the mocked `cesium` module
+ * (`fakeCesium`), so this no longer touches any global — it only resets `active`
+ * and the handler registry, then wires a viewer whose picks the handle can queue.
+ */
 export function installFakeCesium(): FakeCesiumWorld {
   handlerRegistry = [];
+  active = freshActive();
 
-  let terrainMode: TerrainMode = 'auto';
-  let heightFn: (lng: number, lat: number) => number = () => 0;
-  const pendingSamples: Array<{ cartos: Cartographic[]; resolve: () => void }> = [];
   const pickQueue: Cartesian3[] = [];
   const scenePickQueue: any[] = [];
-  let providerManual = false;
-  const pendingProviders: Array<() => void> = [];
-
-  const applyHeights = (cartos: Cartographic[]) => {
-    for (const c of cartos) {
-      c.height = heightFn((c.longitude * 180) / Math.PI, (c.latitude * 180) / Math.PI);
-    }
-  };
-
-  const Cesium = {
-    Cartesian2,
-    Cartesian3,
-    Cartographic,
-    Color,
-    CallbackProperty,
-    PolylineGlowMaterialProperty,
-    ScreenSpaceEventHandler: FakeScreenSpaceEventHandler,
-    ScreenSpaceEventType: {
-      LEFT_CLICK: 'LEFT_CLICK',
-      LEFT_DOUBLE_CLICK: 'LEFT_DOUBLE_CLICK',
-      LEFT_DOWN: 'LEFT_DOWN',
-      LEFT_UP: 'LEFT_UP',
-      MOUSE_MOVE: 'MOUSE_MOVE',
-    },
-    SceneMode: { SCENE2D: 'SCENE2D', SCENE3D: 'SCENE3D', COLUMBUS_VIEW: 'COLUMBUS_VIEW' },
-    HeightReference: { CLAMP_TO_GROUND: 'CLAMP_TO_GROUND' },
-    VerticalOrigin: { BOTTOM: 'BOTTOM', TOP: 'TOP', CENTER: 'CENTER' },
-    LabelStyle: { FILL: 'FILL', OUTLINE: 'OUTLINE', FILL_AND_OUTLINE: 'FILL_AND_OUTLINE' },
-    NearFarScalar,
-    Math: {
-      toDegrees: (rad: number) => (rad * 180) / Math.PI,
-      toRadians: (deg: number) => (deg * Math.PI) / 180,
-    },
-    defined: (v: any) => v !== undefined && v !== null,
-    CesiumTerrainProvider: {
-      fromIonAssetId: () => {
-        if (providerManual) {
-          return new Promise((resolve, reject) => {
-            pendingProviders.push(() => {
-              if (terrainMode === 'unavailable') reject(new Error('fake: terrain unavailable'));
-              else resolve({ fake: 'terrain' });
-            });
-          });
-        }
-        if (terrainMode === 'unavailable') return Promise.reject(new Error('fake: terrain unavailable'));
-        return Promise.resolve({ fake: 'terrain' });
-      },
-    },
-    sampleTerrainMostDetailed: (_provider: unknown, cartos: Cartographic[]) => {
-      if (terrainMode === 'sample-reject') {
-        return Promise.reject(new Error('fake: terrain sampling failed'));
-      }
-      if (terrainMode === 'manual') {
-        return new Promise<void>(resolve => {
-          pendingSamples.push({ cartos, resolve });
-        });
-      }
-      applyHeights(cartos);
-      return Promise.resolve(cartos);
-    },
-  };
 
   const entities = new FakeEntityCollection();
   const viewer = {
@@ -250,7 +290,7 @@ export function installFakeCesium(): FakeCesiumWorld {
     },
     scene: {
       canvas: {},
-      mode: Cesium.SceneMode.SCENE2D,
+      mode: fakeCesium.SceneMode.SCENE2D,
       pickPositionSupported: false,
       pickPosition: () => undefined,
       pick: () => scenePickQueue.shift(),
@@ -266,11 +306,6 @@ export function installFakeCesium(): FakeCesiumWorld {
     entities,
   };
 
-  const previousWindow = (globalThis as any).window;
-  if (!(globalThis as any).window) (globalThis as any).window = {};
-  const previousCesium = (globalThis as any).window.Cesium;
-  (globalThis as any).window.Cesium = Cesium;
-
   const fire = (type: string, event: any = { position: new Cartesian2(0, 0) }) => {
     for (const handler of [...handlerRegistry]) {
       if (handler.destroyed) continue;
@@ -279,7 +314,7 @@ export function installFakeCesium(): FakeCesiumWorld {
   };
 
   return {
-    Cesium,
+    Cesium: fakeCesium,
     viewer,
     fire,
     hasAction: (type: string) =>
@@ -299,13 +334,13 @@ export function installFakeCesium(): FakeCesiumWorld {
       scenePickQueue.push(picked);
     },
     setTerrainHeightFn(fn) {
-      heightFn = fn;
+      active.heightFn = fn;
     },
     setTerrainMode(mode) {
-      terrainMode = mode;
+      active.mode = mode;
     },
     async flushTerrain() {
-      const pending = pendingSamples.splice(0);
+      const pending = active.pendingSamples.splice(0);
       for (const { cartos, resolve } of pending) {
         applyHeights(cartos);
         resolve();
@@ -314,17 +349,17 @@ export function installFakeCesium(): FakeCesiumWorld {
       await new Promise(r => setTimeout(r, 0));
     },
     setProviderManual(manual: boolean) {
-      providerManual = manual;
+      active.providerManual = manual;
     },
     async flushProvider() {
-      const pending = pendingProviders.splice(0);
+      const pending = active.pendingProviders.splice(0);
       for (const settle of pending) settle();
       await new Promise(r => setTimeout(r, 0));
     },
     entities: () => entities.values,
     uninstall() {
-      if (previousWindow === undefined) delete (globalThis as any).window;
-      else (globalThis as any).window.Cesium = previousCesium;
+      active = freshActive();
+      handlerRegistry = [];
     },
   };
 }

@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import * as Cesium from 'cesium';
 import { CesiumManager } from './CesiumManager';
 import type { LatLng } from '../types/adventure';
 import { TrailSnapService, type SnapResult } from './TrailSnapService';
@@ -165,7 +166,6 @@ export default class TrackDrawer extends CesiumManager {
   }
 
   protected setup(handler: any) {
-    const Cesium = window.Cesium;
 
     handler.setInputAction((event: any) => {
       if (!this.drawing) return;
@@ -263,7 +263,6 @@ export default class TrackDrawer extends CesiumManager {
   }
 
   private async addPoint(position: any) {
-    const Cesium = window.Cesium;
     const cartographic = Cesium.Cartographic.fromCartesian(position);
     const clickedLat = Cesium.Math.toDegrees(cartographic.latitude);
     const clickedLng = Cesium.Math.toDegrees(cartographic.longitude);
@@ -347,7 +346,6 @@ export default class TrackDrawer extends CesiumManager {
       return;
     }
 
-    const Cesium = window.Cesium;
     const positions = this.currentPoints.map(p => p.position);
     // Preview = lightweight orange glow. Intentionally lighter than the finished
     // casing+core — committing a route should read as a visual upgrade, not a downgrade.
@@ -530,7 +528,6 @@ export default class TrackDrawer extends CesiumManager {
    * via `toggleSlopeOverlay()`.
    */
   private renderTrack(track: Track): void {
-    const Cesium = window.Cesium;
     const pts = track.points;
     if (pts.length < 2) return;
 
@@ -570,7 +567,6 @@ export default class TrackDrawer extends CesiumManager {
 
   /** Dodgerblue core — full opacity normally, dimmed when slope overlay is active. */
   private coreMaterial(): any {
-    const Cesium = window.Cesium;
     const alpha = this.slopeOverlayEnabled ? 0.3 : 1.0;
     return Cesium.Color.fromCssColorString('#2563eb').withAlpha(alpha);
   }
@@ -578,7 +574,6 @@ export default class TrackDrawer extends CesiumManager {
   /** Build per-segment colored polylines for the Steepness overlay on a track. */
   private addSlopeOverlay(track: Track) {
     if (track.slopeOverlay || track.points.length < 2) return;
-    const Cesium = window.Cesium;
     const pts = track.points;
     const segments: any[] = [];
 
@@ -652,8 +647,8 @@ export default class TrackDrawer extends CesiumManager {
       name: track.name,
       waypoints: track.points.map(p => ({
         coordinates: [
-          window.Cesium.Math.toDegrees(p.cartographic.latitude),
-          window.Cesium.Math.toDegrees(p.cartographic.longitude),
+          Cesium.Math.toDegrees(p.cartographic.latitude),
+          Cesium.Math.toDegrees(p.cartographic.longitude),
         ] as LatLng,
         elevation: p.elevationKnown ? p.elevation : undefined,
       })),
@@ -690,7 +685,7 @@ export default class TrackDrawer extends CesiumManager {
 
     for (let i = 1; i < points.length; i++) {
       const d =
-        window.Cesium.Cartesian3.distance(points[i - 1].position, points[i].position) / 1000;
+        Cesium.Cartesian3.distance(points[i - 1].position, points[i].position) / 1000;
       distance += d;
       profile.push({ dist: distance, ele: points[i].elevation });
       const delta = points[i].elevation - points[i - 1].elevation;
@@ -771,7 +766,6 @@ export default class TrackDrawer extends CesiumManager {
   getLatestTrackPositions(): Array<[number, number, number]> | null {
     const track = this.tracks[this.tracks.length - 1];
     if (!track || track.points.length < 2) return null;
-    const Cesium = window.Cesium;
     return track.points.map(p => {
       const lng = Cesium.Math.toDegrees(p.cartographic.longitude);
       const lat = Cesium.Math.toDegrees(p.cartographic.latitude);
@@ -803,10 +797,10 @@ export default class TrackDrawer extends CesiumManager {
         // whether the stored waypoint carried a value at all, never re-sampled
         // (see the parent PRD: reopening must distinguish "unknown" from
         // "sea level" without requiring terrain to be available again).
-        const position = window.Cesium.Cartesian3.fromDegrees(lng, lat, wp.elevation ?? 0);
+        const position = Cesium.Cartesian3.fromDegrees(lng, lat, wp.elevation ?? 0);
         return {
           position,
-          cartographic: window.Cesium.Cartographic.fromCartesian(position),
+          cartographic: Cesium.Cartographic.fromCartesian(position),
           elevation: wp.elevation ?? 0,
           elevationKnown: wp.elevation !== undefined,
           timestamp: new Date(),
@@ -845,8 +839,8 @@ export default class TrackDrawer extends CesiumManager {
 
     const pts = track.points
       .map(p => {
-        const lat = window.Cesium.Math.toDegrees(p.cartographic.latitude);
-        const lng = window.Cesium.Math.toDegrees(p.cartographic.longitude);
+        const lat = Cesium.Math.toDegrees(p.cartographic.latitude);
+        const lng = Cesium.Math.toDegrees(p.cartographic.longitude);
         // Omit <ele> entirely for an unconfirmed height — a GPS device reading
         // "0m" would be indistinguishable from a real sea-level measurement.
         const ele = p.elevationKnown ? `<ele>${p.elevation}</ele>` : '';
@@ -965,7 +959,6 @@ export default class TrackDrawer extends CesiumManager {
 
   /** Draw the live polyline + control handles + midpoint handles */
   private renderEditOverlay() {
-    const Cesium = window.Cesium;
 
     // Live polyline using CallbackProperty for real-time drag updates.
     // Same lightweight glow as the drawing preview — feels like "in flux".
@@ -987,7 +980,6 @@ export default class TrackDrawer extends CesiumManager {
 
   /** Render/re-render control point and midpoint handle entities */
   private renderEditHandles() {
-    const Cesium = window.Cesium;
 
     // Clear old handles
     for (const h of this.editHandles) this.viewer.entities.remove(h);
@@ -1048,7 +1040,6 @@ export default class TrackDrawer extends CesiumManager {
 
   /** Set up LEFT_DOWN / MOUSE_MOVE / LEFT_UP for handle dragging */
   private setupEditDragHandler() {
-    const Cesium = window.Cesium;
     this.editHandler = new Cesium.ScreenSpaceEventHandler(this.viewer.scene.canvas);
 
     // Disable default camera drag while we're over a handle

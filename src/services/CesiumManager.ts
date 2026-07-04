@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+import * as Cesium from 'cesium';
 /**
  * Base class for Cesium map interaction managers.
  *
@@ -74,7 +76,7 @@ export abstract class CesiumManager {
     }
 
     try {
-      this.handler = new window.Cesium.ScreenSpaceEventHandler(this.viewer.scene.canvas);
+      this.handler = new Cesium.ScreenSpaceEventHandler(this.viewer.scene.canvas);
       this.setup(this.handler);
       // initialized
     } catch (err) {
@@ -107,7 +109,7 @@ export abstract class CesiumManager {
     if (this.samplingTerrainTried) return this.samplingTerrain;
     this.samplingTerrainTried = true;
     try {
-      this.samplingTerrain = await window.Cesium.CesiumTerrainProvider.fromIonAssetId(1);
+      this.samplingTerrain = await Cesium.CesiumTerrainProvider.fromIonAssetId(1);
     } catch {
       this.samplingTerrain = null; // no Ion token / offline — fall back to picked heights
     }
@@ -125,7 +127,6 @@ export abstract class CesiumManager {
    */
   protected async enrichElevation(points: ElevationPoint[]): Promise<void> {
     if (!points.length) return;
-    const Cesium = window.Cesium;
     const terrain = await this.getSamplingTerrain();
     if (!terrain) return;
     const cartos = points.map(p => Cesium.Cartographic.fromCartesian(p.position));
@@ -147,7 +148,6 @@ export abstract class CesiumManager {
   }
 
   protected pickPosition(screenPosition: any): any | null {
-    const Cesium = window.Cesium;
     const scene = this.viewer?.scene;
     // In 3D, pick the actual rendered terrain surface via the depth buffer so a
     // click lands where the cursor is — not on the sea-level ellipsoid that sits

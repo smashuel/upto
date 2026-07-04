@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import * as Cesium from 'cesium';
 import { CesiumManager } from './CesiumManager';
 
 export interface MapNote {
@@ -64,7 +65,7 @@ export default class NoteManager extends CesiumManager {
           : 'general') as MapNote['type'];
         this.addNote(pos, { content, title, type });
       }
-    }, window.Cesium.ScreenSpaceEventType.LEFT_CLICK);
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
   }
 
   setMode(enabled: boolean) {
@@ -73,7 +74,7 @@ export default class NoteManager extends CesiumManager {
   }
 
   addNote(position: any, data: { content: string; title: string; type: MapNote['type'] }): MapNote {
-    const cartographic = window.Cesium.Cartographic.fromCartesian(position);
+    const cartographic = Cesium.Cartographic.fromCartesian(position);
 
     const note: MapNote = {
       id: this.generateId('note'),
@@ -92,7 +93,6 @@ export default class NoteManager extends CesiumManager {
   }
 
   private renderNote(note: MapNote): any {
-    const Cesium = window.Cesium;
     const lat = Cesium.Math.toDegrees(note.cartographic.latitude).toFixed(6);
     const lng = Cesium.Math.toDegrees(note.cartographic.longitude).toFixed(6);
 

@@ -17,6 +17,10 @@ import {
 } from './RouteSettlement';
 import { installFakeCesium, waitFor, type FakeCesiumWorld } from './testing/fakeCesium';
 
+// TrackDrawer (via CesiumManager) does `import * as Cesium from 'cesium'`; route
+// that import to the fake module. installFakeCesium() resets its per-test state.
+vi.mock('cesium', async () => (await import('./testing/fakeCesium')).fakeCesium);
+
 // Two spots ~840 m apart on the (fake) Southern Alps
 const A = { lng: 172.0, lat: -41.0 };
 const B = { lng: 172.01, lat: -41.0 };

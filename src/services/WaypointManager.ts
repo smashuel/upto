@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import * as Cesium from 'cesium';
 import { CesiumManager, type ElevationPoint } from './CesiumManager';
 import type { LatLng } from '../types/adventure';
 
@@ -60,7 +61,7 @@ export default class WaypointManager extends CesiumManager {
       if (!this.active) return;
       const pos = this.pickPosition(event.position);
       if (pos) this.addWaypoint(pos);
-    }, window.Cesium.ScreenSpaceEventType.LEFT_CLICK);
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
   }
 
   setMode(enabled: boolean) {
@@ -76,7 +77,7 @@ export default class WaypointManager extends CesiumManager {
    * so re-sampling on every mount would be wasted network traffic, not a fix.
    */
   addWaypoint(position: any, meta: Partial<Waypoint['metadata']> = {}, backfill = true): Waypoint {
-    const cartographic = window.Cesium.Cartographic.fromCartesian(position);
+    const cartographic = Cesium.Cartographic.fromCartesian(position);
     // "No elevation given" (fresh placement) uses the picked height as a
     // provisional value; "elevation explicitly undefined" (rehydrated,
     // honestly unknown) must NOT fall back to the picked height — a plain
@@ -142,7 +143,6 @@ export default class WaypointManager extends CesiumManager {
   }
 
   private renderWaypoint(wp: Waypoint): any {
-    const Cesium = window.Cesium;
     const icon = WAYPOINT_ICONS[wp.metadata.type] ?? WAYPOINT_ICONS.generic;
 
     return this.viewer.entities.add({
@@ -171,8 +171,8 @@ export default class WaypointManager extends CesiumManager {
   }
 
   private buildDescription(wp: Waypoint): string {
-    const lat = window.Cesium.Math.toDegrees(wp.cartographic.latitude).toFixed(6);
-    const lng = window.Cesium.Math.toDegrees(wp.cartographic.longitude).toFixed(6);
+    const lat = Cesium.Math.toDegrees(wp.cartographic.latitude).toFixed(6);
+    const lng = Cesium.Math.toDegrees(wp.cartographic.longitude).toFixed(6);
     const ele = wp.metadata.elevation !== undefined ? `${wp.metadata.elevation.toFixed(0)}m` : 'elevation unknown';
     return `<div><h4>${wp.metadata.name}</h4><p>${wp.metadata.type}</p><p>${lat}, ${lng}</p><p>${ele}</p></div>`;
   }
@@ -198,7 +198,7 @@ export default class WaypointManager extends CesiumManager {
       // harmless render fallback. The `elevation` key below is written
       // explicitly (even when undefined) so addWaypoint's hasOwnProperty check
       // preserves "unknown" instead of re-defaulting it to the picked height.
-      const position = window.Cesium.Cartesian3.fromDegrees(lng, lat, wp.elevation ?? 0);
+      const position = Cesium.Cartesian3.fromDegrees(lng, lat, wp.elevation ?? 0);
       this.addWaypoint(position, { name: wp.name, type: wp.type as any, elevation: wp.elevation }, false);
     }
   }

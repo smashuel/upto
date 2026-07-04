@@ -5,9 +5,13 @@
  * ellipsoid) corrects to the true terrain height a moment later — same
  * mechanism, same UX contract as TrackDrawer's route points.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WaypointManager, { type Waypoint } from './WaypointManager';
 import { installFakeCesium, waitFor, type FakeCesiumWorld } from './testing/fakeCesium';
+
+// WaypointManager (via CesiumManager) does `import * as Cesium from 'cesium'`; route
+// that import to the fake module. installFakeCesium() resets its per-test state.
+vi.mock('cesium', async () => (await import('./testing/fakeCesium')).fakeCesium);
 
 const PEAK = { lng: 172.0, lat: -41.0 };
 const terrainHeight = (lng: number) => (lng < 172.005 ? 500 : 1900);

@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+import * as Cesium from 'cesium';
 /* eslint-disable no-console */
 /**
  * TrailLayerManager — renders DOC tracks within the current map viewport.
@@ -83,7 +85,6 @@ export default class TrailLayerManager extends CesiumManager {
   }
 
   protected setup(handler: any) {
-    const Cesium = window.Cesium;
     handler.setInputAction((event: any) => {
       if (!this.enabled) return;
       const picked = this.viewer.scene.pick(event.position);
@@ -233,7 +234,6 @@ export default class TrailLayerManager extends CesiumManager {
   // ── Viewport gating + fetch ────────────────────────────────────────────────
 
   private getViewportBbox(): { w: number; s: number; e: number; n: number } | null {
-    const Cesium = window.Cesium;
 
     // computeViewRectangle returns null in 2D/Columbus View — fall back to
     // picking the four screen corners against the ellipsoid.
@@ -390,7 +390,6 @@ export default class TrailLayerManager extends CesiumManager {
   }
 
   private renderTrail(trail: BboxTrail): any {
-    const Cesium = window.Cesium;
     const positions = trail.geometry.flatMap(([lat, lng]) => [lng, lat]);
     const { unselected } = this.widthsForTier();
     return this.viewer.entities.add({
@@ -418,7 +417,6 @@ export default class TrailLayerManager extends CesiumManager {
    * select tests still resolve to the same LayerEntity.
    */
   private applyStyle(layer: LayerEntity, selected: boolean) {
-    const Cesium = window.Cesium;
     const widths = this.widthsForTier();
     const positions = Cesium.Cartesian3.fromDegreesArray(
       layer.geometry.flatMap(([lat, lng]) => [lng, lat]),
@@ -462,13 +460,11 @@ export default class TrailLayerManager extends CesiumManager {
 
   /** Thin solid AllTrails-green — reads cleanly on both satellite and LINZ topo. */
   private defaultMaterial(): any {
-    const Cesium = window.Cesium;
     return Cesium.Color.fromCssColorString('rgba(95,173,65,0.85)').withAlpha(0.7 * this.opacity);
   }
 
   /** Dodgerblue core for the selected discovery trail — same as user routes. */
   private selectedCoreMaterial(): any {
-    const Cesium = window.Cesium;
     return Cesium.Color.fromCssColorString('#2563eb');
   }
 

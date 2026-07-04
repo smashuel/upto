@@ -75,7 +75,7 @@ CORS is configured on the backend to allow requests from `localhost:5173`, `loca
 
 ### Cesium Ion (3D Globe)
 - **What**: Satellite imagery (Sentinel-2, asset ID 2) and world terrain (asset ID 1) for the 3D trip planning map
-- **How**: Loaded via CDN (`cesium.com/downloads/cesiumjs/releases/1.132/`) in `index.html`, configured in `TripPlanningMap.tsx`
+- **How**: Bundled from the npm `cesium` package via `vite-plugin-cesium` (which sets `CESIUM_BASE_URL`, self-hosts Cesium's static assets, and injects `widgets.css`), imported as `import * as Cesium from 'cesium'`; configured in `TripPlanningMap.tsx`
 - **Auth**: `VITE_CESIUM_ION_TOKEN` env var. Falls back to OpenStreetMap tiles if token is missing
 - **Used by**: `TripPlanningMap.tsx`, `WaypointManager.ts`, `TrackDrawer.ts`, `NoteManager.ts`
 
@@ -211,7 +211,7 @@ upto/
 ├── doc-sync.js                     # DOC API sync script (NZTM2000 → WGS84)
 ├── deploy.sh                       # Automated Linode deployment script
 ├── nginx-config                    # Nginx reverse proxy configuration
-├── index.html                      # Entry HTML (Cesium CDN loaded here)
+├── index.html                      # Entry HTML (Cesium bundled via vite-plugin-cesium; widgets.css injected)
 ├── vercel.json                     # Vercel build + SPA rewrite config
 ├── package.json                    # Frontend dependencies + scripts
 ├── tsconfig.json                   # TypeScript config
@@ -330,7 +330,7 @@ See [brain/features/doc-integration.md](brain/features/doc-integration.md) for f
 - **Basemap persisted on TripLink**: routes (`SerializableTrack`) ARE saved into the TripLink's JSONB `data` and rendered on view pages (shipped 2026-06-18); the remaining gap is the chosen `MapLayer` + camera framing, planned as a rider on live-GPS stage 1. See [brain/features/triplink-route-persistence.md](brain/features/triplink-route-persistence.md).
 
 ### Known Quirks
-- Cesium is loaded via CDN (not npm) and accessed through `window.Cesium` global — all map services use `any` types for Cesium objects
+- Cesium is bundled from the npm `cesium` package via `vite-plugin-cesium` (no CDN, no `window.Cesium` global) and imported as `import * as Cesium from 'cesium'`. The package's own bundled `.d.ts` provides real types under `moduleResolution: bundler` (no `@types/cesium`). Some map internals (viewer/entity refs, Cesium option bags) are still `any` behind a file-level `eslint-disable`, but direct Cesium API calls are now type-checked
 - The four map managers (WaypointManager, TrackDrawer, NoteManager, TrailLayerManager) extend `CesiumManager` base class which handles setup/retry and gives each its own `ScreenSpaceEventHandler` to avoid overwriting each other's click handlers
 - Each manager retries initialization up to 50 times (5 seconds) waiting for the Cesium viewer to be ready
 - Default camera position is NZ overview (`172.0, -41.5, 2500000m`)
@@ -345,13 +345,13 @@ See [brain/features/doc-integration.md](brain/features/doc-integration.md) for f
 - React components use functional components with TypeScript interfaces
 - Forms use `react-hook-form` with `useFormContext` for shared state across wizard steps
 - UI components in `src/components/ui/` wrap Bootstrap (`react-bootstrap`)
-- Services in `src/services/` are class-based with Cesium `window.Cesium` global
-- Cesium is loaded via CDN in `index.html`, not npm — version 1.132
+- Services in `src/services/` are class-based; map services `import * as Cesium from 'cesium'`
+- Cesium is bundled from the npm `cesium` package (via `vite-plugin-cesium`), not a CDN — 1.13x line
 - Icons use `lucide-react`
 - Toast notifications via `react-hot-toast`
 - State management: React Query (`@tanstack/react-query`) for server state, `useState` for local state
 - Routing: `react-router-dom` v7 with `BrowserRouter`
-- Tests: **Vitest** for map/service tests (`src/services/**/*.test.ts`, see `vitest.config.ts`); the older lifecycle tests (`triplink-lifecycle.test.js`, `src/utils/lifecycleReducer.test.ts`) run under `node --test`. `npm test` runs both; `npm run test:watch` for Vitest watch mode. Map services are tested at their public boundary against the fake `window.Cesium` in `src/services/testing/fakeCesium.ts` — see [ADR 013](brain/decisions/013-vitest-alongside-node-test.md)
+- Tests: **Vitest** for map/service tests (`src/services/**/*.test.ts`, see `vitest.config.ts`); the older lifecycle tests (`triplink-lifecycle.test.js`, `src/utils/lifecycleReducer.test.ts`) run under `node --test`. `npm test` runs both; `npm run test:watch` for Vitest watch mode. Map services are tested at their public boundary against a fake `cesium` module registered with `vi.mock('cesium', …)` from `src/services/testing/fakeCesium.ts` — see [ADR 013](brain/decisions/013-vitest-alongside-node-test.md)
 
 ## Specialist Agents and Skills
 

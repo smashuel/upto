@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable no-console */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import * as Cesium from 'cesium';
 import { MapPin, Route, StickyNote, Download, RotateCcw, Navigation, Layers, Undo2, Redo2, Footprints, X, Eye, Pencil, Check, Play, Square, TrendingUp, Maximize2, Minimize2 } from 'lucide-react';
 import { getTopoTileUrl, LINZ_CESIUM_RECTANGLE, LINZ_ATTRIBUTION } from '../../services/LinzMapService';
 import {
@@ -19,13 +20,6 @@ import type { TrailSelection } from '../../services/TrailLayerManager';
 import type { MapNote } from '../../services/NoteManager';
 import NoteModal from './NoteModal';
 import type { LatLng } from '../../types/adventure';
-
-// Cesium types (using CDN, so we declare globals)
-declare global {
-  interface Window {
-    Cesium: any;
-  }
-}
 
 type SceneMode = '2d' | '3d';
 
@@ -387,16 +381,9 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   const [terrainUnavailable, setTerrainUnavailable] = useState(false);
   const [terrainNoticeDismissed, setTerrainNoticeDismissed] = useState(false);
 
-  // Check if Cesium is loaded
+  // Cesium is bundled (module import), so it is always available on mount.
   useEffect(() => {
-    const checkCesium = () => {
-      if (window.Cesium) {
-        setCesiumReady(true);
-      } else {
-        setTimeout(checkCesium, 100);
-      }
-    };
-    checkCesium();
+    setCesiumReady(true);
   }, []);
 
   // Initialize Cesium viewer
@@ -409,7 +396,6 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
 
     const initializeMap = async () => {
       try {
-        const Cesium = window.Cesium;
 
         const cesiumToken = import.meta.env.VITE_CESIUM_ION_TOKEN;
         const hasValidToken = cesiumToken && cesiumToken !== 'your_cesium_ion_token_here';
@@ -427,16 +413,16 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
             );
           } catch {
             baseLayer = Cesium.ImageryLayer.fromProviderAsync(
-              Cesium.OpenStreetMapImageryProvider.fromUrl('https://a.tile.openstreetmap.org/'),
+              Promise.resolve(new Cesium.OpenStreetMapImageryProvider({ url: 'https://a.tile.openstreetmap.org/' })),
             );
           }
         } else {
           baseLayer = Cesium.ImageryLayer.fromProviderAsync(
-            Cesium.OpenStreetMapImageryProvider.fromUrl('https://a.tile.openstreetmap.org/'),
+            Promise.resolve(new Cesium.OpenStreetMapImageryProvider({ url: 'https://a.tile.openstreetmap.org/' })),
           );
         }
 
-        const viewer = new Cesium.Viewer(mapContainerRef.current, {
+        const viewer = new Cesium.Viewer(mapContainerRef.current!, {
           baseLayer,
           shouldAnimate: true,
           // On-demand rendering: the scene only repaints on camera moves, tile
@@ -557,7 +543,6 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         // callers (AdventureLocationStep) expect plain lat/lng numbers.
         waypointManagerRef.current = new WaypointManager(viewer, (wp: any) => {
           if (!onWaypointAdded) return;
-          const Cesium = window.Cesium;
           const lat = Cesium.Math.toDegrees(wp.cartographic.latitude);
           const lng = Cesium.Math.toDegrees(wp.cartographic.longitude);
           onWaypointAdded({ lat, lng, name: wp.metadata?.name });
@@ -660,10 +645,10 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
     if (!viewerRef.current || centerLat == null || centerLng == null) return;
     if (hasPreselectedTrail) return;
     viewerRef.current.camera.flyTo({
-      destination: window.Cesium.Cartesian3.fromDegrees(centerLng, centerLat, 8000),
+      destination: Cesium.Cartesian3.fromDegrees(centerLng, centerLat, 8000),
       orientation: {
-        heading: window.Cesium.Math.toRadians(0),
-        pitch: window.Cesium.Math.toRadians(-45),
+        heading: Cesium.Math.toRadians(0),
+        pitch: Cesium.Math.toRadians(-45),
         roll: 0.0,
       },
       duration: 1.2,
@@ -737,7 +722,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
 
   const handleLayerChange = (target: MapLayer) => {
     if (!viewerRef.current) return;
-    applyBasemap(viewerRef.current, window.Cesium, target);
+    applyBasemap(viewerRef.current, Cesium, target);
     localStorage.setItem(LAYER_STORAGE_KEY, target);
     setUserOverride(target);
     setMapLayer(target);
@@ -752,7 +737,6 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   useEffect(() => {
     if (!cesiumReady || !viewerRef.current) return;
     const viewer = viewerRef.current;
-    const Cesium = window.Cesium;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     const recompute = () => {
@@ -812,7 +796,6 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
 
   const handleSceneModeChange = async (next: SceneMode) => {
     if (next === sceneMode || !viewerRef.current) return;
-    const Cesium = window.Cesium;
     const viewer = viewerRef.current;
     const camera = viewer.camera;
 
@@ -944,7 +927,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
     if (viewerRef.current) viewerRef.current.scene.requestRenderMode = false;
 
     if (mapLayer !== 'satellite') {
-      applyBasemap(viewerRef.current, window.Cesium, 'satellite');
+      applyBasemap(viewerRef.current, Cesium, 'satellite');
       setMapLayer('satellite');
     }
     if (sceneMode !== '3d') {
@@ -957,7 +940,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         // Restore the working view the user had before the flyover.
         if (prevScene !== '3d') handleSceneModeChange(prevScene);
         if (prevLayer !== 'satellite') {
-          applyBasemap(viewerRef.current, window.Cesium, prevLayer);
+          applyBasemap(viewerRef.current, Cesium, prevLayer);
           setMapLayer(prevLayer);
         }
         setFlyoverRunning(false);
@@ -971,7 +954,6 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
 
   const handleProfileHover = useCallback((index: number) => {
     if (!viewerRef.current) return;
-    const Cesium = window.Cesium;
 
     // Remove previous highlight
     if (profileHighlightRef.current) {
@@ -1003,7 +985,6 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer || !cesiumReady) return;
-    const Cesium = window.Cesium;
     if (checkInMarkerRef.current) {
       viewer.entities.remove(checkInMarkerRef.current);
       checkInMarkerRef.current = null;
@@ -1126,14 +1107,14 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   const resetView = () => {
     if (viewerRef.current) {
       viewerRef.current.camera.flyTo({
-        destination: window.Cesium.Cartesian3.fromDegrees(
+        destination: Cesium.Cartesian3.fromDegrees(
           center?.[1] ?? 172.0,
           center?.[0] ?? -41.5,
           center ? 10000 : 2500000,
         ),
         orientation: {
-          heading: window.Cesium.Math.toRadians(0),
-          pitch: window.Cesium.Math.toRadians(-45),
+          heading: Cesium.Math.toRadians(0),
+          pitch: Cesium.Math.toRadians(-45),
           roll: 0.0,
         },
         duration: 1.5,
@@ -1146,14 +1127,14 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
       navigator.geolocation.getCurrentPosition(
         ({ coords }) => {
           viewerRef.current.camera.flyTo({
-            destination: window.Cesium.Cartesian3.fromDegrees(
+            destination: Cesium.Cartesian3.fromDegrees(
               coords.longitude,
               coords.latitude,
               5000,
             ),
             orientation: {
-              heading: window.Cesium.Math.toRadians(0),
-              pitch: window.Cesium.Math.toRadians(-45),
+              heading: Cesium.Math.toRadians(0),
+              pitch: Cesium.Math.toRadians(-45),
               roll: 0.0,
             },
             duration: 1.5,

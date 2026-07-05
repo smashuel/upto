@@ -827,12 +827,15 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
       viewer.scene.requestRender();
     });
 
+    // Morph instantly (duration 0). Cesium's *animated* morph swings the camera
+    // out to a global view and back — that's the zoom-out users see. An instant
+    // morph flips the mode in place, and restoreCamera() keeps the saved spot.
     if (next === '2d') {
       // Flatten terrain so topo tiles render cleanly
       viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
-      viewer.scene.morphTo2D(1.5);
+      viewer.scene.morphTo2D(0);
     } else {
-      viewer.scene.morphTo3D(1.5);
+      viewer.scene.morphTo3D(0);
       // Restore 3D terrain
       try {
         const terrainProvider = await Cesium.CesiumTerrainProvider.fromIonAssetId(1, {

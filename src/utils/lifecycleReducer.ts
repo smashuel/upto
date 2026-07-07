@@ -76,7 +76,14 @@ export function applyLifecycleEvent(prev: TripLink, event: LifecycleEvent): Trip
 
     case 'position': {
       // Live position is orthogonal to the lifecycle status machine — it only ever touches
-      // `livePosition`. (The `sharing: 'unavailable'` branch lands in Slice 02.)
+      // `livePosition`.
+      if (event.sharing === 'unavailable') {
+        // Device stopped supplying fixes — flag the last-known point not-current but keep its
+        // coords/timestamp for reference. Nothing to mark if we never had a position.
+        return prev.livePosition
+          ? { ...prev, livePosition: { ...prev.livePosition, sharing: 'unavailable' } }
+          : prev;
+      }
       if (event.sharing === 'live' && event.lat != null && event.lng != null) {
         // Monotonic: drop out-of-order / duplicate broadcasts, keep the freshest fix.
         if (prev.livePosition && event.timestamp <= prev.livePosition.timestamp) {

@@ -68,7 +68,12 @@ export interface TripLink {
     lng: number;
     timestamp: string;     // ISO 8601 — when the fix was taken
     accuracy?: number;     // metres, when the device reports it
+    // 'unavailable' marks the last signal as a stop beacon (permission denied / tab closed):
+    // the coords are retained as last-known, but must not be presented as current.
+    sharing?: 'live' | 'unavailable';
   };
+  // Per-trip live-location privacy (Slice 03). Absent is treated as 'with-trip'.
+  liveSharing?: 'with-trip' | 'owner-only' | 'off';
 }
 
 export interface TripWaypoint {

@@ -198,3 +198,27 @@ test('a position event leaves all lifecycle state untouched (isolation invariant
   assert.deepEqual(next.checkIns, prev.checkIns);
   assert.equal(next.livePosition?.lat, -41.5);
 });
+
+test('an unavailable beacon marks last-known unavailable, keeps coords, leaves lifecycle untouched', () => {
+  const prev = base({
+    status: 'active',
+    lastCheckIn: '2026-06-30T09:20:00.000Z',
+    livePosition: { lat: -41.5, lng: 172.0, timestamp: '2026-06-30T09:30:00.000Z', sharing: 'live' },
+  });
+  const next = applyLifecycleEvent(prev, {
+    kind: 'position',
+    sharing: 'unavailable',
+    timestamp: '2026-06-30T09:36:00.000Z',
+  });
+  assert.deepEqual(next.livePosition, {
+    lat: -41.5, lng: 172.0, timestamp: '2026-06-30T09:30:00.000Z', sharing: 'unavailable',
+  });
+  assert.equal(next.status, 'active');
+  assert.equal(next.lastCheckIn, '2026-06-30T09:20:00.000Z');
+});
+
+test('an unavailable beacon with no prior position is a no-op', () => {
+  const prev = base({ status: 'active' });
+  const next = applyLifecycleEvent(prev, { kind: 'position', sharing: 'unavailable', timestamp: '2026-06-30T09:36:00.000Z' });
+  assert.equal(next.livePosition, undefined);
+});

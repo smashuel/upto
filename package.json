@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "test": "node --test --experimental-strip-types triplink-lifecycle.test.js src/utils/lifecycleReducer.test.ts src/utils/liveness.test.ts && vitest run",
+    "test": "node --test --experimental-strip-types triplink-lifecycle.test.js live-privacy.test.js src/utils/lifecycleReducer.test.ts src/utils/liveness.test.ts && vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {

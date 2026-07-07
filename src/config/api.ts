@@ -236,6 +236,23 @@ export const api = {
   },
 
   /**
+   * Set who sees the traveller's live position for this trip (live location Stage 1 privacy).
+   * A runtime choice on ActiveTrip, persisted on the TripLink; the position endpoint re-reads
+   * it as the authoritative broadcast gate. 'off' also stops the device sampling entirely.
+   */
+  async setLiveSharing(
+    shareToken: string,
+    liveSharing: 'with-trip' | 'owner-only' | 'off',
+  ): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/api/triplinks/${shareToken}/sharing`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ liveSharing }),
+    });
+    if (!response.ok) throw new Error('Failed to update sharing');
+  },
+
+  /**
    * Best-effort "tracking stopped" beacon, sent on tab close/hide via sendBeacon (the one
    * transport that survives a page unload). Never relied on — the server's staleness
    * threshold is the honest floor if it doesn't land. Returns whether it was queued.

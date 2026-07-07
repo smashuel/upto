@@ -13,6 +13,7 @@ import {
   sweepOverdue,
   createDbRepo,
 } from './triplink-lifecycle.js';
+import { shouldBroadcastPosition } from './live-privacy.js';
 
 const { Pool } = pg;
 
@@ -937,18 +938,46 @@ app.patch('/api/triplinks/:token/complete', rateLimitByToken(), async (req, res)
   }
 });
 
+// PATCH /api/triplinks/:token/sharing — traveller sets who sees their live position.
+// A runtime privacy choice (with-trip | owner-only | off), mutable while active/overdue,
+// stored on the TripLink's JSONB data so GET returns it and the position endpoint re-reads it
+// as the authoritative gate. Enforcement is by-not-publishing on the client; this persists the
+// setting and is the source of truth the server guard checks. See brain/plans/live-location.md.
+const LIVE_SHARING_VALUES = new Set(['with-trip', 'owner-only', 'off']);
+app.patch('/api/triplinks/:token/sharing', rateLimitByToken(), async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { liveSharing } = req.body || {};
+    if (!LIVE_SHARING_VALUES.has(liveSharing)) {
+      return res.status(400).json({ error: 'liveSharing must be one of with-trip, owner-only, off' });
+    }
+    const { rowCount } = await db.query(
+      `UPDATE triplinks
+       SET data = jsonb_set(COALESCE(data, '{}'::jsonb), '{liveSharing}', $2::jsonb, true)
+       WHERE share_token = $1`,
+      [token, JSON.stringify(liveSharing)]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: 'TripLink not found' });
+    res.json({ ok: true, liveSharing });
+  } catch (err) {
+    console.error('Set liveSharing error:', err.message);
+    res.status(500).json({ error: 'Failed to update sharing' });
+  }
+});
+
 // POST /api/triplinks/:token/position — traveller's device reports its current position.
 // Live location Stage 1 (foreground web): last-known, not a lifecycle transition, so it does
 // NOT go through the lifecycle module and never changes status. The server stamps the
-// timestamp so the watcher-side monotonic guard runs off one clock. Every fix is broadcast;
-// the DB persist is coarse (rehydrate-only). (The with-trip/owner-only/off guard is Slice 03.)
+// timestamp so the watcher-side monotonic guard runs off one clock. A live fix is broadcast
+// only when the trip's stored liveSharing is with-trip (shouldBroadcastPosition); the DB
+// persist is coarse (rehydrate-only).
 app.post('/api/triplinks/:token/position', rateLimitByToken(30, 60_000), async (req, res) => {
   try {
     const { token } = req.params;
     const { lat, lng, accuracy, sharing = 'live' } = req.body || {};
 
     const { rows } = await db.query(
-      `SELECT status FROM triplinks WHERE share_token = $1`, [token]);
+      `SELECT status, data->>'liveSharing' AS live_sharing FROM triplinks WHERE share_token = $1`, [token]);
     if (rows.length === 0) return res.status(404).json({ error: 'TripLink not found' });
     const status = rows[0].status;
     if (status !== 'active' && status !== 'overdue') {
@@ -960,12 +989,26 @@ app.post('/api/triplinks/:token/position', rateLimitByToken(30, 60_000), async (
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         return res.status(400).json({ error: 'lat and lng are required for a live position' });
       }
+      // Privacy gate (defense in depth): a live fix only reaches watchers when the trip's
+      // CURRENT stored liveSharing is with-trip. A stale client that keeps POSTing after the
+      // owner switched to owner-only/off is silently dropped — enforce by not publishing. The
+      // 'unavailable' beacon below is exempt: "stop showing me" must always reach watchers.
+      if (!shouldBroadcastPosition(rows[0].live_sharing)) {
+        return res.status(202).json({ ok: true, suppressed: true, timestamp });
+      }
       const pos = { lat, lng, timestamp, accuracy: Number.isFinite(accuracy) ? accuracy : null };
+      // A live fix that follows an 'unavailable' one is a RECOVERY: persist it immediately so a
+      // watcher loading mid-trip can't read a stale 'unavailable' from the DB for up to the
+      // throttle window. (After a restart the in-memory map is empty, so the || 0 below already
+      // forces the first persist — this covers the same-process recover-within-10-min case.)
+      const recoveringFromUnavailable = livePositions.get(token)?.sharing === 'unavailable';
       livePositions.set(token, pos);
       broadcast(token, 'position', { sharing: 'live', ...pos });
       // Coarse persist so a watcher loading mid-trip rehydrates the last-known point.
       const last = livePositionPersistedAt.get(token) || 0;
-      if (Date.now() - last >= LIVE_PERSIST_INTERVAL_MS) persistLivePosition(token, pos);
+      if (recoveringFromUnavailable || Date.now() - last >= LIVE_PERSIST_INTERVAL_MS) {
+        persistLivePosition(token, pos);
+      }
     } else {
       // 'unavailable' beacon (permission denied / tab closed): flag the last-known point
       // not-current but keep its coords. Persist immediately — it's a state change a

@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
-import { Check, MapPin, Clock, Share2, Copy, CheckCircle2, Shield, MessageSquare, Mail, Star, CheckCheck } from 'lucide-react';
+import { Check, MapPin, Clock, Share2, Copy, CheckCircle2, Shield, MessageSquare, Mail, Star, CheckCheck, Radio, Users, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../config/api';
 import { what3wordsService } from '../services/what3words';
 import { TripPlanningMap } from '../components/map/TripPlanningMap';
 import { applyLifecycleEvent } from '../utils/lifecycleReducer';
-import { describeLiveness } from '../utils/liveness';
+import { LIVE_STALE_MS } from '../utils/liveness';
 import type { TripLink } from '../types/adventure';
 
 // How often this device samples + reports its position (live location Stage 1). Coarse by
@@ -154,6 +154,78 @@ const CheckInPanel: React.FC<CheckInPanelProps> = ({ shareToken, onCheckedIn }) 
   );
 };
 
+// ── Live-sharing control (Slice 03) ──────────────────────────────────────────
+// The persistent consent surface: a three-way toggle that doubles as the "you are
+// broadcasting" indicator, so the traveller always knows who can see them. Mutable mid-trip.
+
+type LiveSharing = 'with-trip' | 'owner-only' | 'off';
+
+interface LiveSharingControlProps {
+  value: LiveSharing;
+  denied: boolean;
+  onChange: (next: LiveSharing) => void;
+}
+
+const SHARING_OPTIONS: { value: LiveSharing; label: string; icon: React.ReactNode }[] = [
+  { value: 'with-trip', label: 'Watchers', icon: <Radio size={14} /> },
+  { value: 'owner-only', label: 'Only me', icon: <Users size={14} /> },
+  { value: 'off', label: 'Off', icon: <EyeOff size={14} /> },
+];
+
+const LiveSharingControl: React.FC<LiveSharingControlProps> = ({ value, denied, onChange }) => {
+  // Status line — honest about what each mode means for watchers. Denial only matters while
+  // broadcasting (owner-only/off aren't publishing anything to be denied).
+  const status: { dot: string; text: string } =
+    value === 'with-trip'
+      ? denied
+        ? { dot: 'var(--upto-danger, oklch(60% 0.18 25))', text: 'Location access denied — watchers see your last check-in only. Enable location for this site to share live.' }
+        : { dot: '#2563eb', text: 'Sharing your live location with watchers.' }
+      : value === 'owner-only'
+        ? { dot: 'var(--upto-text-muted)', text: 'Only you can see your live location — watchers see your last check-in only.' }
+        : { dot: 'var(--upto-text-muted)', text: 'Live location off — watchers see your last check-in only.' };
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <MapPin size={14} style={{ color: 'var(--upto-text-muted)' }} />
+        <h2 style={{ fontFamily: 'var(--font-ui)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--upto-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
+          Live location
+        </h2>
+      </div>
+      <div role="radiogroup" aria-label="Who can see your live location" style={{ display: 'flex', gap: 1, border: '1.5px solid var(--upto-border)', borderRadius: 10, overflow: 'hidden' }}>
+        {SHARING_OPTIONS.map(opt => {
+          const active = value === opt.value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => onChange(opt.value)}
+              style={{
+                flex: 1,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                padding: '10px 8px',
+                fontFamily: 'var(--font-ui)', fontSize: '0.85rem', fontWeight: 600,
+                cursor: 'pointer', border: 'none',
+                background: active ? 'var(--upto-primary)' : 'white',
+                color: active ? 'white' : 'var(--upto-text-secondary)',
+              }}
+            >
+              {opt.icon}
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+      <p style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'var(--font-ui)', fontSize: '0.8rem', color: 'var(--upto-text-secondary)', marginTop: 8, marginBottom: 0 }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: status.dot, flexShrink: 0 }} />
+        {status.text}
+      </p>
+    </div>
+  );
+};
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export const ActiveTrip: React.FC = () => {
@@ -166,6 +238,14 @@ export const ActiveTrip: React.FC = () => {
   const [lastCheckIn, setLastCheckIn] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [completing, setCompleting] = useState(false);
+
+  // Live-location privacy (Slice 03). Who sees this device's position, mutable mid-trip.
+  // Default with-trip (safe common case); synced from the stored TripLink once loaded.
+  const [liveSharing, setSharingState] = useState<'with-trip' | 'owner-only' | 'off'>('with-trip');
+  // The device's own freshest fix, rendered on the owner's map regardless of sharing (it's
+  // their own location). For owner-only this is the ONLY source — nothing is POSTed.
+  const [ownPosition, setOwnPosition] = useState<{ lat: number; lng: number; timestamp: string } | null>(null);
+  const [locationDenied, setLocationDenied] = useState(false);
 
   const now = useNow(30000);
 
@@ -183,6 +263,7 @@ export const ActiveTrip: React.FC = () => {
       if (found) {
         setTripLink(found);
         setLastCheckIn(found.lastCheckIn || null);
+        setSharingState(found.liveSharing ?? 'with-trip');
       }
     };
     if (shareToken) {
@@ -191,6 +272,7 @@ export const ActiveTrip: React.FC = () => {
           if (cancelled) return;
           setTripLink(t);
           setLastCheckIn(t.lastCheckIn || null);
+          setSharingState(t.liveSharing ?? 'with-trip');
         })
         .catch(() => { if (!cancelled) localFallback(); })
         .finally(() => { if (!cancelled) setLoading(false); });
@@ -226,14 +308,17 @@ export const ActiveTrip: React.FC = () => {
   }, [shareToken, !!tripLink]); // intentionally limited — avoid re-subscribing on unrelated state changes
 
   // Live location Stage 1 (foreground web): while the trip is active/overdue, sample this
-  // device's position on a coarse timer and report it — the server broadcasts it to watchers.
-  // Coarse by design (battery): a ~3-min getCurrentPosition, not a continuous watchPosition.
-  // The privacy toggle (with-trip/owner-only/off) + contextual permission land in Slice 03;
-  // the 'unavailable' beacon on denial/close lands in Slice 02.
+  // device's position on a coarse timer. Coarse by design (battery): a ~3-min
+  // getCurrentPosition, not a continuous watchPosition. Privacy is enforced here by NOT
+  // publishing (Slice 03): 'off' doesn't sample at all; 'owner-only' samples for the owner's
+  // own map but never POSTs; 'with-trip' POSTs so the server broadcasts to watchers. Requesting
+  // location only inside this effect keeps the browser permission prompt contextual (fires when
+  // the trip is live and sharing is on — never a cold prompt on load).
   useEffect(() => {
     if (!shareToken) return;
     const status = tripLink?.status;
     if (status !== 'active' && status !== 'overdue') return;
+    if (liveSharing === 'off') return; // enforced: never sample when sharing is off
     if (typeof navigator === 'undefined' || !('geolocation' in navigator)) return;
 
     let cancelled = false;
@@ -241,6 +326,10 @@ export const ActiveTrip: React.FC = () => {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           if (cancelled) return;
+          setLocationDenied(false);
+          // Always keep the owner's own marker current — it's their device's truth.
+          setOwnPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude, timestamp: new Date().toISOString() });
+          if (liveSharing !== 'with-trip') return; // owner-only: render locally, never POST
           api.reportPosition(shareToken, {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
@@ -248,8 +337,10 @@ export const ActiveTrip: React.FC = () => {
             sharing: 'live',
           }).catch(() => {}); // fire-and-forget — a dropped sample is caught by the next tick
         },
-        () => {
+        (err) => {
           if (cancelled) return;
+          if (err.code === err.PERMISSION_DENIED) setLocationDenied(true);
+          if (liveSharing !== 'with-trip') return; // owner-only/off never signal watchers
           // Permission denied or fix failed — tell watchers tracking is unavailable so the
           // last-known point isn't shown as current (honest degradation).
           api.reportPosition(shareToken, { sharing: 'unavailable' }).catch(() => {});
@@ -260,15 +351,35 @@ export const ActiveTrip: React.FC = () => {
     sample(); // first fix immediately so watchers see something without waiting a full cycle
     const id = window.setInterval(sample, LIVE_SAMPLE_INTERVAL_MS);
     // Best-effort "tracking stopped" beacon when the page is closed/hidden — the one
-    // transport that survives unload. Staleness is the floor if it doesn't land.
-    const onHide = () => api.beaconPositionUnavailable(shareToken);
+    // transport that survives unload. Staleness is the floor if it doesn't land. Only meaningful
+    // while broadcasting; owner-only/off aren't publishing anything to retract.
+    const onHide = () => { if (liveSharing === 'with-trip') api.beaconPositionUnavailable(shareToken); };
     window.addEventListener('pagehide', onHide);
     return () => {
       cancelled = true;
       window.clearInterval(id);
       window.removeEventListener('pagehide', onHide);
     };
-  }, [shareToken, tripLink?.status]);
+  }, [shareToken, tripLink?.status, liveSharing]);
+
+  // Toggle who sees the live position, mid-trip. Optimistic + persisted. When leaving
+  // with-trip, immediately tell watchers to stop showing the live point (they don't learn the
+  // new liveSharing until they reload, so an explicit 'unavailable' keeps them honest now).
+  const handleSetSharing = useCallback(async (next: 'with-trip' | 'owner-only' | 'off') => {
+    if (!shareToken) return;
+    const prev = liveSharing;
+    if (next === prev) return;
+    setSharingState(next);
+    if (prev === 'with-trip' && next !== 'with-trip') {
+      api.reportPosition(shareToken, { sharing: 'unavailable' }).catch(() => {});
+    }
+    try {
+      await api.setLiveSharing(shareToken, next);
+    } catch {
+      setSharingState(prev); // rollback on failure
+      toast.error('Could not update live sharing');
+    }
+  }, [shareToken, liveSharing]);
 
   const handleCheckedIn = useCallback((timestamp: string) => {
     // Optimistic — the SSE echo reconciles authoritative status; the reducer dedups it.
@@ -387,11 +498,13 @@ export const ActiveTrip: React.FC = () => {
     const ci = tripLink?.checkIns?.find(c => c.lat != null && c.lng != null);
     return ci ? { lat: ci.lat as number, lng: ci.lng as number } : null;
   })();
-  // Live location: the traveller's own current position, so they can confirm tracking is
-  // working. Greyed when stale, hidden when unavailable/not-shared (honest degradation).
-  const ownLiveness = tripLink ? describeLiveness(tripLink, now) : 'not-shared';
-  const liveCoords = (ownLiveness === 'fresh' || ownLiveness === 'stale') && tripLink?.livePosition
-    ? { lat: tripLink.livePosition.lat, lng: tripLink.livePosition.lng }
+  // Live location: the traveller's own current position (from this device's sampling loop), so
+  // they can confirm tracking is working. Shown for with-trip and owner-only alike — it's their
+  // own location — and hidden only when sharing is off. Greyed when the last fix has gone stale.
+  const ownFixAgeMs = ownPosition ? now.getTime() - Date.parse(ownPosition.timestamp) : null;
+  const ownFixStale = ownFixAgeMs != null && ownFixAgeMs >= LIVE_STALE_MS;
+  const liveCoords = liveSharing !== 'off' && ownPosition
+    ? { lat: ownPosition.lat, lng: ownPosition.lng }
     : null;
 
   // Timing
@@ -432,10 +545,13 @@ export const ActiveTrip: React.FC = () => {
               initialRoutes={tripLink?.routes ?? []}
               checkInMarker={lastCheckInCoords}
               liveMarker={liveCoords}
-              liveMarkerStale={ownLiveness === 'stale'}
+              liveMarkerStale={ownFixStale}
             />
           </div>
         )}
+
+        {/* ── Live-location sharing control ── */}
+        <LiveSharingControl value={liveSharing} denied={locationDenied} onChange={handleSetSharing} />
 
         {/* ── Overdue banner ── */}
         {isOverdue && (

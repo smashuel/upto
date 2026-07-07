@@ -1,8 +1,14 @@
 # Slice 2 — Honest liveness + mid-trip rehydrate
 
-Status: ready-for-agent
+Status: done (verified end-to-end 2026-07-07)
 Parent: [.scratch/live-location/PRD.md](../PRD.md)
 Covers user stories: 3, 4, 5, 8, 11, 17, 22, 25
+
+> Verified via driven states: fresh (blue + "updated"), unavailable (dot hidden + notice),
+> stale (greyed "Last known" + "paused" — via a temporary threshold drop), and rehydrate
+> (persisted state renders on fresh load with no SSE). Seams TDD'd (describeLiveness 7 +
+> reducer unavailable 2). Honesty refinement: the "not enabled" notice shows only for explicit
+> off/owner-only; a with-trip trip awaiting its first fix stays silent (no false claim).
 
 ## What to build
 

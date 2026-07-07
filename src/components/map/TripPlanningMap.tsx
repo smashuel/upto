@@ -43,9 +43,11 @@ interface TripPlanningMapProps {
   readOnly?: boolean;
   /** Drops a "last check-in" pin on the map (view pages). */
   checkInMarker?: { lat: number; lng: number } | null;
-  /** Drops a distinct "live" marker at the traveller's current position (live location
-   *  Stage 1). Distinct from the static check-in pin. Stale/greyed treatment lands in Slice 02. */
+  /** Drops a distinct "live" marker at the traveller's current position (live location).
+   *  Distinct from the static check-in pin. */
   liveMarker?: { lat: number; lng: number } | null;
+  /** When true, the live marker is rendered greyed + labelled "Last known" (stale fix). */
+  liveMarkerStale?: boolean;
 }
 
 interface MapMode {
@@ -308,6 +310,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   readOnly = false,
   checkInMarker = null,
   liveMarker = null,
+  liveMarkerStale = false,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -1036,23 +1039,27 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
       liveMarkerRef.current = null;
     }
     if (!liveMarker) { viewer.scene.requestRender(); return; }
+    // Greyed "Last known" when the fix is stale; live blue otherwise. Heavier white outline
+    // keeps the dot legible over water as well as land.
+    const dotColor = liveMarkerStale ? '#64748b' : '#2563eb';
+    const labelOutline = liveMarkerStale ? '#334155' : '#1e3a8a';
     liveMarkerRef.current = viewer.entities.add({
       position: Cesium.Cartesian3.fromDegrees(liveMarker.lng, liveMarker.lat),
       point: {
-        pixelSize: 15,
-        color: Cesium.Color.fromCssColorString('#2563eb'),
+        pixelSize: 16,
+        color: Cesium.Color.fromCssColorString(dotColor),
         outlineColor: Cesium.Color.WHITE,
-        outlineWidth: 3,
+        outlineWidth: 4,
         // No CLAMP_TO_GROUND: clamped `point` graphics don't render in SCENE2D (the view
         // pages' default). disableDepthTestDistance keeps it on top in both 2D and 3D.
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
       label: {
-        text: 'Live',
+        text: liveMarkerStale ? 'Last known' : 'Live',
         font: '600 11pt sans-serif',
         pixelOffset: new Cesium.Cartesian2(0, -24),
         fillColor: Cesium.Color.WHITE,
-        outlineColor: Cesium.Color.fromCssColorString('#1e3a8a'),
+        outlineColor: Cesium.Color.fromCssColorString(labelOutline),
         outlineWidth: 3,
         style: Cesium.LabelStyle.FILL_AND_OUTLINE,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
@@ -1060,7 +1067,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
       },
     });
     viewer.scene.requestRender();
-  }, [liveMarker?.lat, liveMarker?.lng, cesiumReady, isLoading]);
+  }, [liveMarker?.lat, liveMarker?.lng, liveMarkerStale, cesiumReady, isLoading]);
 
   // ── Render mode: continuous during interaction, on-demand when idle ─────────
   // Drawing/editing use CallbackProperty geometry and the flyover uses the clock —

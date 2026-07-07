@@ -236,6 +236,17 @@ export const api = {
   },
 
   /**
+   * Best-effort "tracking stopped" beacon, sent on tab close/hide via sendBeacon (the one
+   * transport that survives a page unload). Never relied on — the server's staleness
+   * threshold is the honest floor if it doesn't land. Returns whether it was queued.
+   */
+  beaconPositionUnavailable(shareToken: string): boolean {
+    if (typeof navigator === 'undefined' || !navigator.sendBeacon) return false;
+    const blob = new Blob([JSON.stringify({ sharing: 'unavailable' })], { type: 'application/json' });
+    return navigator.sendBeacon(`${API_BASE_URL}/api/triplinks/${shareToken}/position`, blob);
+  },
+
+  /**
    * List the authenticated user's own trips (lightweight summaries — no route geometry).
    * Throws an ApiError with status 401 if the session is stale, so callers can sign out.
    */

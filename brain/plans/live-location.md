@@ -80,7 +80,7 @@ live in [.scratch/live-location/issues/](../../.scratch/live-location/issues/).
 | Slice | What | Seam | Blocked by | State |
 |---|---|---|---|---|
 | [01](../../.scratch/live-location/issues/01-live-marker-end-to-end.md) | Live marker flows device → watcher (with-trip, both pages open) | reducer `position` kind | — | **DONE — verified end-to-end 2026-07-07** (two-window: SSE-driven blue marker tracks the route when data follows it, diverges when it doesn't). Fixed a real 2D-clamp marker bug en route ([journal 07-07](../journal/2026-07-07-live-marker-2d-clamp.md)). Follow-ups logged: over-water contrast → Slice 02; camera-chases-every-fix → Slice 04 |
-| [02](../../.scratch/live-location/issues/02-honest-liveness-and-rehydrate.md) | Honest liveness + mid-trip rehydrate (stale/unavailable/not-shared, coarse persist, beacons) | `describeLiveness` | 01 | not started |
+| [02](../../.scratch/live-location/issues/02-honest-liveness-and-rehydrate.md) | Honest liveness + mid-trip rehydrate (stale/unavailable/not-shared, coarse persist, beacons) | `describeLiveness` | 01 | **DONE — verified end-to-end 2026-07-07** (all 4 states shown live + rehydrate). Seams TDD'd (9 cases). Honesty refinement: "not enabled" notice only for explicit off/owner-only, silent while awaiting first fix |
 | [03](../../.scratch/live-location/issues/03-privacy-toggle-and-server-guard.md) | Privacy toggle + server guard (with-trip/owner-only/off, consent chip, contextual permission) | `shouldBroadcastPosition` | 01, 02 | not started |
 | [04](../../.scratch/live-location/issues/04-basemap-persistence-rider.md) | Basemap persistence rider (`plannedBasemap` save/rehydrate, framing includes live point) | — | — | not started |
 

@@ -131,6 +131,28 @@ function broadcast(shareToken, eventName, data) {
   });
 }
 
+// ── Live position registry (in-memory latest + coarse DB persist) ─────────────
+// Broadcasts are per-fix and cheap; the DB persist is throttled so a long trip is a
+// handful of writes/hour. The persisted value only exists to rehydrate a watcher who
+// loads mid-trip — the next broadcast corrects it within a sample. Single PM2 process,
+// so an in-memory Map is sufficient (a restart falls back to the last persisted value).
+const livePositions = new Map();          // shareToken → { lat, lng, timestamp, accuracy, sharing? }
+const livePositionPersistedAt = new Map(); // shareToken → epoch ms of last DB write
+const LIVE_PERSIST_INTERVAL_MS = 10 * 60 * 1000;
+
+async function persistLivePosition(shareToken, pos) {
+  try {
+    await db.query(
+      `UPDATE triplinks SET data = jsonb_set(COALESCE(data, '{}'::jsonb), '{livePosition}', $2::jsonb, true)
+       WHERE share_token = $1`,
+      [shareToken, JSON.stringify(pos)]
+    );
+    livePositionPersistedAt.set(shareToken, Date.now());
+  } catch (err) {
+    console.error('persist livePosition error:', err.message);
+  }
+}
+
 // ── TripLink lifecycle wiring ─────────────────────────────────────────────────
 // The lifecycle module owns every status transition + its side-effect fan-out.
 // Here we wire its seams to production: Postgres (atomic writes), SSE (broadcast),
@@ -916,10 +938,10 @@ app.patch('/api/triplinks/:token/complete', rateLimitByToken(), async (req, res)
 });
 
 // POST /api/triplinks/:token/position — traveller's device reports its current position.
-// Live location Stage 1 (foreground web): broadcast-only, last-known — not a lifecycle
-// transition, so it does NOT go through the lifecycle module and never changes status.
-// The server stamps the timestamp so the watcher-side monotonic guard runs off one clock.
-// (Coarse DB persist lands in Slice 02; the with-trip/owner-only/off guard in Slice 03.)
+// Live location Stage 1 (foreground web): last-known, not a lifecycle transition, so it does
+// NOT go through the lifecycle module and never changes status. The server stamps the
+// timestamp so the watcher-side monotonic guard runs off one clock. Every fix is broadcast;
+// the DB persist is coarse (rehydrate-only). (The with-trip/owner-only/off guard is Slice 03.)
 app.post('/api/triplinks/:token/position', rateLimitByToken(30, 60_000), async (req, res) => {
   try {
     const { token } = req.params;
@@ -938,17 +960,30 @@ app.post('/api/triplinks/:token/position', rateLimitByToken(30, 60_000), async (
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         return res.status(400).json({ error: 'lat and lng are required for a live position' });
       }
-      broadcast(token, 'position', {
-        sharing: 'live',
-        timestamp,
-        lat,
-        lng,
-        accuracy: Number.isFinite(accuracy) ? accuracy : null,
-      });
+      const pos = { lat, lng, timestamp, accuracy: Number.isFinite(accuracy) ? accuracy : null };
+      livePositions.set(token, pos);
+      broadcast(token, 'position', { sharing: 'live', ...pos });
+      // Coarse persist so a watcher loading mid-trip rehydrates the last-known point.
+      const last = livePositionPersistedAt.get(token) || 0;
+      if (Date.now() - last >= LIVE_PERSIST_INTERVAL_MS) persistLivePosition(token, pos);
     } else {
-      // 'unavailable' beacon — watcher-side handling lands in Slice 02; accepted now so the
-      // client contract is stable.
+      // 'unavailable' beacon (permission denied / tab closed): flag the last-known point
+      // not-current but keep its coords. Persist immediately — it's a state change a
+      // reloading watcher must see, not throttled telemetry.
       broadcast(token, 'position', { sharing: 'unavailable', timestamp });
+      const prev = livePositions.get(token);
+      if (prev) {
+        const marked = { ...prev, sharing: 'unavailable' };
+        livePositions.set(token, marked);
+        persistLivePosition(token, marked);
+      } else {
+        // No in-memory fix (e.g. after a restart) — mark an existing stored position if present.
+        db.query(
+          `UPDATE triplinks SET data = jsonb_set(data, '{livePosition,sharing}', '"unavailable"')
+           WHERE share_token = $1 AND data ? 'livePosition'`,
+          [token]
+        ).catch(err => console.error('mark livePosition unavailable error:', err.message));
+      }
     }
     res.status(202).json({ ok: true, timestamp });
   } catch (err) {

@@ -6,6 +6,7 @@ import { api } from '../config/api';
 import { what3wordsService } from '../services/what3words';
 import { TripPlanningMap } from '../components/map/TripPlanningMap';
 import { applyLifecycleEvent } from '../utils/lifecycleReducer';
+import { describeLiveness } from '../utils/liveness';
 import type { TripLink } from '../types/adventure';
 
 // How often this device samples + reports its position (live location Stage 1). Coarse by
@@ -247,13 +248,26 @@ export const ActiveTrip: React.FC = () => {
             sharing: 'live',
           }).catch(() => {}); // fire-and-forget — a dropped sample is caught by the next tick
         },
-        () => { /* permission denied / error — 'unavailable' beacon lands in Slice 02 */ },
+        () => {
+          if (cancelled) return;
+          // Permission denied or fix failed — tell watchers tracking is unavailable so the
+          // last-known point isn't shown as current (honest degradation).
+          api.reportPosition(shareToken, { sharing: 'unavailable' }).catch(() => {});
+        },
         { enableHighAccuracy: false, maximumAge: 60_000, timeout: 30_000 },
       );
     };
     sample(); // first fix immediately so watchers see something without waiting a full cycle
     const id = window.setInterval(sample, LIVE_SAMPLE_INTERVAL_MS);
-    return () => { cancelled = true; window.clearInterval(id); };
+    // Best-effort "tracking stopped" beacon when the page is closed/hidden — the one
+    // transport that survives unload. Staleness is the floor if it doesn't land.
+    const onHide = () => api.beaconPositionUnavailable(shareToken);
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      window.removeEventListener('pagehide', onHide);
+    };
   }, [shareToken, tripLink?.status]);
 
   const handleCheckedIn = useCallback((timestamp: string) => {
@@ -373,9 +387,10 @@ export const ActiveTrip: React.FC = () => {
     const ci = tripLink?.checkIns?.find(c => c.lat != null && c.lng != null);
     return ci ? { lat: ci.lat as number, lng: ci.lng as number } : null;
   })();
-  // Live location Stage 1: the traveller's own current position, so they can confirm
-  // tracking is working. Liveness gating + notice land in Slice 02.
-  const liveCoords = (tripLink?.status === 'active' || tripLink?.status === 'overdue') && tripLink?.livePosition
+  // Live location: the traveller's own current position, so they can confirm tracking is
+  // working. Greyed when stale, hidden when unavailable/not-shared (honest degradation).
+  const ownLiveness = tripLink ? describeLiveness(tripLink, now) : 'not-shared';
+  const liveCoords = (ownLiveness === 'fresh' || ownLiveness === 'stale') && tripLink?.livePosition
     ? { lat: tripLink.livePosition.lat, lng: tripLink.livePosition.lng }
     : null;
 
@@ -417,6 +432,7 @@ export const ActiveTrip: React.FC = () => {
               initialRoutes={tripLink?.routes ?? []}
               checkInMarker={lastCheckInCoords}
               liveMarker={liveCoords}
+              liveMarkerStale={ownLiveness === 'stale'}
             />
           </div>
         )}

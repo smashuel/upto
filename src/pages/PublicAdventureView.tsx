@@ -4,6 +4,7 @@ import { Phone, Mail, Shield, MapPin, Clock, Calendar, AlertTriangle, CheckCircl
 import { api } from '../config/api';
 import { TripPlanningMap } from '../components/map/TripPlanningMap';
 import { applyLifecycleEvent } from '../utils/lifecycleReducer';
+import { describeLiveness } from '../utils/liveness';
 import type { TripLink, Contact } from '../types/adventure';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -47,6 +48,12 @@ export const PublicAdventureView: React.FC = () => {
   const [tripLink, setTripLink] = useState<TripLink | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Ticks so liveness ("updated 3m ago" → "paused") recomputes between SSE events.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (!token) return;
@@ -131,11 +138,29 @@ export const PublicAdventureView: React.FC = () => {
     const ci = tripLink.checkIns?.find(c => c.lat != null && c.lng != null);
     return ci ? { lat: ci.lat as number, lng: ci.lng as number } : null;
   })();
-  // Live location Stage 1: show the traveller's current position while the trip is active.
-  // Liveness (fresh/stale/not-shared) gating + notice land in Slice 02.
-  const liveCoords = (tripLink.status === 'active' || tripLink.status === 'overdue') && tripLink.livePosition
+  // Live location: honest degradation. Only a fresh/stale fix is placed on the map (greyed
+  // when stale); an unavailable/not-shared trip shows no live marker and a qualifying notice
+  // so the static check-in pin is never mistaken for a current position.
+  const liveness = describeLiveness(tripLink, now);
+  const isActive = tripLink.status === 'active' || tripLink.status === 'overdue';
+  const liveCoords = (liveness === 'fresh' || liveness === 'stale') && tripLink.livePosition
     ? { lat: tripLink.livePosition.lat, lng: tripLink.livePosition.lng }
     : null;
+  // 'not-shared' covers two cases: genuinely off/owner-only (say so) vs with-trip-but-no-fix-yet
+  // (say nothing — the traveller has it on, we just don't have a point yet; a false "not
+  // enabled" would be its own dishonesty).
+  const explicitlyNotShared = tripLink.liveSharing === 'off' || tripLink.liveSharing === 'owner-only';
+  const liveNotice: { text: string; tone: 'live' | 'warn' | 'muted' } | null = !isActive
+    ? null
+    : liveness === 'fresh'
+      ? { text: `Live · updated ${timeAgo(tripLink.livePosition!.timestamp)}`, tone: 'live' }
+      : liveness === 'stale'
+        ? { text: `Live tracking paused — last known ${timeAgo(tripLink.livePosition!.timestamp)}, may not be current`, tone: 'warn' }
+        : liveness === 'unavailable'
+          ? { text: 'Live tracking unavailable — showing last check-in, which may not be their current location', tone: 'warn' }
+          : explicitlyNotShared
+            ? { text: 'Live tracking not enabled for this trip — last check-in may not be their current location', tone: 'muted' }
+            : null;
 
   return (
     <div className="public-view-page">
@@ -243,6 +268,32 @@ export const PublicAdventureView: React.FC = () => {
             {(hasRoute || routeCenter) && (
               <div className="public-view-section">
                 <h2 className="public-view-section-title">Planned route</h2>
+                {liveNotice && (
+                  <div
+                    role="status"
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      margin: '0 0 8px', padding: '7px 11px', borderRadius: 9,
+                      fontFamily: 'var(--font-ui)', fontSize: '0.82rem', fontWeight: 500,
+                      color: liveNotice.tone === 'live' ? 'oklch(45% 0.13 155)'
+                        : liveNotice.tone === 'warn' ? 'oklch(50% 0.14 60)'
+                        : 'var(--upto-text-muted)',
+                      background: liveNotice.tone === 'live' ? 'oklch(90% 0.06 155 / 0.5)'
+                        : liveNotice.tone === 'warn' ? 'oklch(92% 0.07 70 / 0.55)'
+                        : 'var(--upto-surface-2, rgba(0,0,0,0.04))',
+                    }}
+                  >
+                    <span
+                      aria-hidden
+                      style={{
+                        width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                        background: liveNotice.tone === 'live' ? 'oklch(60% 0.16 155)'
+                          : liveNotice.tone === 'warn' ? 'oklch(65% 0.17 60)' : 'oklch(60% 0 0)',
+                      }}
+                    />
+                    {liveNotice.text}
+                  </div>
+                )}
                 <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--upto-border, rgba(0,0,0,0.1))' }}>
                   <TripPlanningMap
                     readOnly
@@ -252,6 +303,7 @@ export const PublicAdventureView: React.FC = () => {
                     initialRoutes={tripLink.routes ?? []}
                     checkInMarker={lastCheckInCoords}
                     liveMarker={liveCoords}
+                    liveMarkerStale={liveness === 'stale'}
                   />
                 </div>
               </div>

@@ -8,6 +8,10 @@ import { TripPlanningMap } from '../components/map/TripPlanningMap';
 import { applyLifecycleEvent } from '../utils/lifecycleReducer';
 import type { TripLink } from '../types/adventure';
 
+// How often this device samples + reports its position (live location Stage 1). Coarse by
+// design — battery matters on a phone in the backcountry. See brain/plans/live-location.md.
+const LIVE_SAMPLE_INTERVAL_MS = 3 * 60 * 1000;
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatDuration(ms: number): string {
@@ -213,9 +217,44 @@ export const ActiveTrip: React.FC = () => {
       onOverdue: (d) => {
         setTripLink(prev => prev ? applyLifecycleEvent(prev, { kind: 'overdue', overdueSince: d.overdueSince }) : prev);
       },
+      onPosition: (d) => {
+        setTripLink(prev => prev ? applyLifecycleEvent(prev, { kind: 'position', sharing: d.sharing, timestamp: d.timestamp, lat: d.lat, lng: d.lng, accuracy: d.accuracy }) : prev);
+      },
     });
     return () => es.close();
   }, [shareToken, !!tripLink]); // intentionally limited — avoid re-subscribing on unrelated state changes
+
+  // Live location Stage 1 (foreground web): while the trip is active/overdue, sample this
+  // device's position on a coarse timer and report it — the server broadcasts it to watchers.
+  // Coarse by design (battery): a ~3-min getCurrentPosition, not a continuous watchPosition.
+  // The privacy toggle (with-trip/owner-only/off) + contextual permission land in Slice 03;
+  // the 'unavailable' beacon on denial/close lands in Slice 02.
+  useEffect(() => {
+    if (!shareToken) return;
+    const status = tripLink?.status;
+    if (status !== 'active' && status !== 'overdue') return;
+    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) return;
+
+    let cancelled = false;
+    const sample = () => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          if (cancelled) return;
+          api.reportPosition(shareToken, {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+            sharing: 'live',
+          }).catch(() => {}); // fire-and-forget — a dropped sample is caught by the next tick
+        },
+        () => { /* permission denied / error — 'unavailable' beacon lands in Slice 02 */ },
+        { enableHighAccuracy: false, maximumAge: 60_000, timeout: 30_000 },
+      );
+    };
+    sample(); // first fix immediately so watchers see something without waiting a full cycle
+    const id = window.setInterval(sample, LIVE_SAMPLE_INTERVAL_MS);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [shareToken, tripLink?.status]);
 
   const handleCheckedIn = useCallback((timestamp: string) => {
     // Optimistic — the SSE echo reconciles authoritative status; the reducer dedups it.
@@ -334,6 +373,11 @@ export const ActiveTrip: React.FC = () => {
     const ci = tripLink?.checkIns?.find(c => c.lat != null && c.lng != null);
     return ci ? { lat: ci.lat as number, lng: ci.lng as number } : null;
   })();
+  // Live location Stage 1: the traveller's own current position, so they can confirm
+  // tracking is working. Liveness gating + notice land in Slice 02.
+  const liveCoords = (tripLink?.status === 'active' || tripLink?.status === 'overdue') && tripLink?.livePosition
+    ? { lat: tripLink.livePosition.lat, lng: tripLink.livePosition.lng }
+    : null;
 
   // Timing
   const startedAt = tripLink?.startedAt ? new Date(tripLink.startedAt) : null;
@@ -369,9 +413,10 @@ export const ActiveTrip: React.FC = () => {
               readOnly
               height="320px"
               initialMode="2d-topo"
-              center={lastCheckInCoords ? [lastCheckInCoords.lat, lastCheckInCoords.lng] : routeCenter}
+              center={liveCoords ? [liveCoords.lat, liveCoords.lng] : lastCheckInCoords ? [lastCheckInCoords.lat, lastCheckInCoords.lng] : routeCenter}
               initialRoutes={tripLink?.routes ?? []}
               checkInMarker={lastCheckInCoords}
+              liveMarker={liveCoords}
             />
           </div>
         )}

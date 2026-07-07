@@ -22,7 +22,15 @@ export type LifecycleEvent =
       lat?: number;
       lng?: number;
     }
-  | { kind: 'overdue'; overdueSince: string };
+  | { kind: 'overdue'; overdueSince: string }
+  | {
+      kind: 'position';
+      sharing: 'live' | 'unavailable';
+      timestamp: string;
+      lat?: number;
+      lng?: number;
+      accuracy?: number;
+    };
 
 function checkInFromEvent(e: Extract<LifecycleEvent, { kind: 'checkin' }>): CheckIn {
   return {
@@ -64,6 +72,27 @@ export function applyLifecycleEvent(prev: TripLink, event: LifecycleEvent): Trip
           ? prev.checkIns
           : [checkInFromEvent(event), ...prev.checkIns],
       };
+    }
+
+    case 'position': {
+      // Live position is orthogonal to the lifecycle status machine — it only ever touches
+      // `livePosition`. (The `sharing: 'unavailable'` branch lands in Slice 02.)
+      if (event.sharing === 'live' && event.lat != null && event.lng != null) {
+        // Monotonic: drop out-of-order / duplicate broadcasts, keep the freshest fix.
+        if (prev.livePosition && event.timestamp <= prev.livePosition.timestamp) {
+          return prev;
+        }
+        return {
+          ...prev,
+          livePosition: {
+            lat: event.lat,
+            lng: event.lng,
+            timestamp: event.timestamp,
+            accuracy: event.accuracy,
+          },
+        };
+      }
+      return prev;
     }
   }
 }

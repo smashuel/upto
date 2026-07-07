@@ -115,3 +115,86 @@ test('completed status is preserved (terminal, not overwritten)', () => {
   assert.equal(next.status, 'completed');
   assert.equal(next.overdueSince, undefined);
 });
+
+test('live position event sets livePosition from the fix', () => {
+  const prev = base({ status: 'active' });
+  const next = applyLifecycleEvent(prev, {
+    kind: 'position',
+    sharing: 'live',
+    timestamp: '2026-06-30T09:30:00.000Z',
+    lat: -41.5,
+    lng: 172.0,
+    accuracy: 12,
+  });
+  assert.deepEqual(next.livePosition, {
+    lat: -41.5,
+    lng: 172.0,
+    timestamp: '2026-06-30T09:30:00.000Z',
+    accuracy: 12,
+  });
+});
+
+test('a newer-timestamp position replaces an older livePosition', () => {
+  const prev = base({
+    status: 'active',
+    livePosition: { lat: -41.5, lng: 172.0, timestamp: '2026-06-30T09:30:00.000Z' },
+  });
+  const next = applyLifecycleEvent(prev, {
+    kind: 'position',
+    sharing: 'live',
+    timestamp: '2026-06-30T09:33:00.000Z',
+    lat: -41.6,
+    lng: 172.1,
+  });
+  assert.equal(next.livePosition?.timestamp, '2026-06-30T09:33:00.000Z');
+  assert.equal(next.livePosition?.lat, -41.6);
+});
+
+test('an older-or-equal-timestamp position is ignored (monotonic)', () => {
+  const current = { lat: -41.6, lng: 172.1, timestamp: '2026-06-30T09:33:00.000Z' };
+  const prev = base({ status: 'active', livePosition: current });
+
+  // Out-of-order (older) broadcast — dropped.
+  const older = applyLifecycleEvent(prev, {
+    kind: 'position',
+    sharing: 'live',
+    timestamp: '2026-06-30T09:30:00.000Z',
+    lat: -41.5,
+    lng: 172.0,
+  });
+  assert.deepEqual(older.livePosition, current);
+
+  // Duplicate broadcast of the same fix — also dropped (no-op).
+  const dup = applyLifecycleEvent(prev, {
+    kind: 'position',
+    sharing: 'live',
+    timestamp: '2026-06-30T09:33:00.000Z',
+    lat: -41.6,
+    lng: 172.1,
+  });
+  assert.deepEqual(dup.livePosition, current);
+});
+
+test('a position event leaves all lifecycle state untouched (isolation invariant)', () => {
+  const prev = base({
+    status: 'overdue',
+    overdueSince: '2026-06-30T10:00:00.000Z',
+    startedAt: '2026-06-30T08:00:00.000Z',
+    lastCheckIn: '2026-06-30T09:20:00.000Z',
+    checkIns: [{ timestamp: '2026-06-30T09:20:00.000Z', message: 'past the hut' }],
+  });
+  const next = applyLifecycleEvent(prev, {
+    kind: 'position',
+    sharing: 'live',
+    timestamp: '2026-06-30T10:05:00.000Z',
+    lat: -41.5,
+    lng: 172.0,
+  });
+  // Live position never re-derives the state machine — it only adds livePosition.
+  assert.equal(next.status, 'overdue');
+  assert.equal(next.overdueSince, '2026-06-30T10:00:00.000Z');
+  assert.equal(next.startedAt, '2026-06-30T08:00:00.000Z');
+  assert.equal(next.lastCheckIn, '2026-06-30T09:20:00.000Z');
+  assert.deepEqual(next.checkIns, prev.checkIns);
+  assert.equal(next.livePosition?.lat, -41.5);
+});

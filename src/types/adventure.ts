@@ -61,6 +61,14 @@ export interface TripLink {
   lastCheckIn?: string;    // ISO 8601 — timestamp of most recent check-in
   overdueSince?: string;   // ISO 8601 — when overdue state was triggered
   checkIns: CheckIn[];
+  // Last-known live position while the traveller has an active trip page open (Stage 1,
+  // foreground-web). Last-known only — not a breadcrumb history. See brain/plans/live-location.md.
+  livePosition?: {
+    lat: number;
+    lng: number;
+    timestamp: string;     // ISO 8601 — when the fix was taken
+    accuracy?: number;     // metres, when the device reports it
+  };
 }
 
 export interface TripWaypoint {

@@ -915,6 +915,48 @@ app.patch('/api/triplinks/:token/complete', rateLimitByToken(), async (req, res)
   }
 });
 
+// POST /api/triplinks/:token/position — traveller's device reports its current position.
+// Live location Stage 1 (foreground web): broadcast-only, last-known — not a lifecycle
+// transition, so it does NOT go through the lifecycle module and never changes status.
+// The server stamps the timestamp so the watcher-side monotonic guard runs off one clock.
+// (Coarse DB persist lands in Slice 02; the with-trip/owner-only/off guard in Slice 03.)
+app.post('/api/triplinks/:token/position', rateLimitByToken(30, 60_000), async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { lat, lng, accuracy, sharing = 'live' } = req.body || {};
+
+    const { rows } = await db.query(
+      `SELECT status FROM triplinks WHERE share_token = $1`, [token]);
+    if (rows.length === 0) return res.status(404).json({ error: 'TripLink not found' });
+    const status = rows[0].status;
+    if (status !== 'active' && status !== 'overdue') {
+      return res.status(409).json({ error: `Cannot report position on a ${status} trip` });
+    }
+
+    const timestamp = new Date().toISOString();
+    if (sharing === 'live') {
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return res.status(400).json({ error: 'lat and lng are required for a live position' });
+      }
+      broadcast(token, 'position', {
+        sharing: 'live',
+        timestamp,
+        lat,
+        lng,
+        accuracy: Number.isFinite(accuracy) ? accuracy : null,
+      });
+    } else {
+      // 'unavailable' beacon — watcher-side handling lands in Slice 02; accepted now so the
+      // client contract is stable.
+      broadcast(token, 'position', { sharing: 'unavailable', timestamp });
+    }
+    res.status(202).json({ ok: true, timestamp });
+  } catch (err) {
+    console.error('Position report error:', err.message);
+    res.status(500).json({ error: 'Failed to report position' });
+  }
+});
+
 // GET /api/triplinks/:token/events — SSE stream for watchers
 app.get('/api/triplinks/:token/events', (req, res) => {
   const { token } = req.params;

@@ -72,6 +72,9 @@ export const PublicAdventureView: React.FC = () => {
       onOverdue: (data) => {
         setTripLink(prev => prev ? applyLifecycleEvent(prev, { kind: 'overdue', overdueSince: data.overdueSince }) : prev);
       },
+      onPosition: (data) => {
+        setTripLink(prev => prev ? applyLifecycleEvent(prev, { kind: 'position', sharing: data.sharing, timestamp: data.timestamp, lat: data.lat, lng: data.lng, accuracy: data.accuracy }) : prev);
+      },
     });
     return () => es.close();
   }, [token, !!tripLink]); // intentionally limited — avoid re-subscribing on unrelated state changes
@@ -128,6 +131,11 @@ export const PublicAdventureView: React.FC = () => {
     const ci = tripLink.checkIns?.find(c => c.lat != null && c.lng != null);
     return ci ? { lat: ci.lat as number, lng: ci.lng as number } : null;
   })();
+  // Live location Stage 1: show the traveller's current position while the trip is active.
+  // Liveness (fresh/stale/not-shared) gating + notice land in Slice 02.
+  const liveCoords = (tripLink.status === 'active' || tripLink.status === 'overdue') && tripLink.livePosition
+    ? { lat: tripLink.livePosition.lat, lng: tripLink.livePosition.lng }
+    : null;
 
   return (
     <div className="public-view-page">
@@ -240,9 +248,10 @@ export const PublicAdventureView: React.FC = () => {
                     readOnly
                     height="300px"
                     initialMode="2d-topo"
-                    center={lastCheckInCoords ? [lastCheckInCoords.lat, lastCheckInCoords.lng] : routeCenter}
+                    center={liveCoords ? [liveCoords.lat, liveCoords.lng] : lastCheckInCoords ? [lastCheckInCoords.lat, lastCheckInCoords.lng] : routeCenter}
                     initialRoutes={tripLink.routes ?? []}
                     checkInMarker={lastCheckInCoords}
+                    liveMarker={liveCoords}
                   />
                 </div>
               </div>

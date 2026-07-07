@@ -43,6 +43,9 @@ interface TripPlanningMapProps {
   readOnly?: boolean;
   /** Drops a "last check-in" pin on the map (view pages). */
   checkInMarker?: { lat: number; lng: number } | null;
+  /** Drops a distinct "live" marker at the traveller's current position (live location
+   *  Stage 1). Distinct from the static check-in pin. Stale/greyed treatment lands in Slice 02. */
+  liveMarker?: { lat: number; lng: number } | null;
 }
 
 interface MapMode {
@@ -304,6 +307,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   fallbackToCurrentLocation = false,
   readOnly = false,
   checkInMarker = null,
+  liveMarker = null,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -367,6 +371,8 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   const profileHighlightRef = useRef<any>(null);
   /** "Last check-in" pin entity (view pages) */
   const checkInMarkerRef = useRef<any>(null);
+  /** "Live" position marker entity (live location Stage 1) */
+  const liveMarkerRef = useRef<any>(null);
   const flyoverRef = useRef<any>(null);
   // True while a flyover is animating — suppresses the viewport basemap
   // auto-switch so the forced 3D-satellite view sticks for the whole flyover.
@@ -1000,7 +1006,8 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         color: Cesium.Color.fromCssColorString('#16a34a'),
         outlineColor: Cesium.Color.WHITE,
         outlineWidth: 3,
-        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        // No CLAMP_TO_GROUND: clamped `point` graphics don't render in SCENE2D (the view
+        // pages' default). disableDepthTestDistance keeps it on top in both 2D and 3D.
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
       label: {
@@ -1017,6 +1024,43 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
     });
     viewer.scene.requestRender();
   }, [checkInMarker?.lat, checkInMarker?.lng, cesiumReady, isLoading]);
+
+  // ── Live position marker (view pages) ──────────────────────────────────────
+  // A distinct blue "Live" marker at the traveller's current position. Kept visually
+  // separate from the static green check-in pin. Stale/greyed treatment lands in Slice 02.
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || !cesiumReady) return;
+    if (liveMarkerRef.current) {
+      viewer.entities.remove(liveMarkerRef.current);
+      liveMarkerRef.current = null;
+    }
+    if (!liveMarker) { viewer.scene.requestRender(); return; }
+    liveMarkerRef.current = viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(liveMarker.lng, liveMarker.lat),
+      point: {
+        pixelSize: 15,
+        color: Cesium.Color.fromCssColorString('#2563eb'),
+        outlineColor: Cesium.Color.WHITE,
+        outlineWidth: 3,
+        // No CLAMP_TO_GROUND: clamped `point` graphics don't render in SCENE2D (the view
+        // pages' default). disableDepthTestDistance keeps it on top in both 2D and 3D.
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text: 'Live',
+        font: '600 11pt sans-serif',
+        pixelOffset: new Cesium.Cartesian2(0, -24),
+        fillColor: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.fromCssColorString('#1e3a8a'),
+        outlineWidth: 3,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        scaleByDistance: new Cesium.NearFarScalar(1.5e2, 1.0, 1.5e7, 0.0),
+      },
+    });
+    viewer.scene.requestRender();
+  }, [liveMarker?.lat, liveMarker?.lng, cesiumReady, isLoading]);
 
   // ── Render mode: continuous during interaction, on-demand when idle ─────────
   // Drawing/editing use CallbackProperty geometry and the flyover uses the clock —

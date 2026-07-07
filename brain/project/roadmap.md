@@ -71,8 +71,10 @@ this lane — the dev lane is now idle until the capstone walkthrough below.
 ## Next — Phase 2: live GPS ([ADR 010](../decisions/010-product-direction-safety-first-social-leash.md) / [ADR 011](../decisions/011-capacitor-mobile-shell.md))
 
 Stream the traveller's *current* position to watchers on the TripLink map. Framed as
-safety, not social. **Kickoff act: write `brain/plans/live-location.md` and grill it** —
-the roadmap only fixes the shape below (agreed 2026-07-03):
+safety, not social. **Kickoff done (2026-07-05):** [plans/live-location.md](../plans/live-location.md)
+written; Stage 1 PRD ([.scratch/live-location/PRD.md](../../.scratch/live-location/PRD.md))
+written + grilled. Next: cut implementation issues, build slice 1. The shape below (agreed
+2026-07-03):
 
 - [ ] **Stage 1 — web foreground pipeline, SHIPPABLE** — geolocation → SSE position
       channel → live marker. Ships to users as honest *"live while the traveller has the

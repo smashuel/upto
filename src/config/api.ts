@@ -219,6 +219,23 @@ export const api = {
   },
 
   /**
+   * Report the traveller's current position (live location Stage 1, foreground web).
+   * Fire-and-forget from the sampling loop — the server broadcasts it to watchers.
+   * `sharing: 'unavailable'` is the beacon sent when the device stops supplying fixes.
+   */
+  async reportPosition(
+    shareToken: string,
+    data: { lat?: number; lng?: number; accuracy?: number; sharing?: 'live' | 'unavailable' },
+  ): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/api/triplinks/${shareToken}/position`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to report position');
+  },
+
+  /**
    * List the authenticated user's own trips (lightweight summaries — no route geometry).
    * Throws an ApiError with status 401 if the session is stale, so callers can sign out.
    */
@@ -241,14 +258,16 @@ export const api = {
       onStatus?: (data: any) => void;
       onCheckin?: (data: any) => void;
       onOverdue?: (data: any) => void;
+      onPosition?: (data: any) => void;
     }
   ): EventSource {
     const url = `${API_BASE_URL}/api/triplinks/${shareToken}/events`;
     const es = new EventSource(url);
 
-    if (handlers.onStatus)  es.addEventListener('status',  (e: MessageEvent) => handlers.onStatus!(JSON.parse(e.data)));
-    if (handlers.onCheckin) es.addEventListener('checkin', (e: MessageEvent) => handlers.onCheckin!(JSON.parse(e.data)));
-    if (handlers.onOverdue) es.addEventListener('overdue', (e: MessageEvent) => handlers.onOverdue!(JSON.parse(e.data)));
+    if (handlers.onStatus)   es.addEventListener('status',   (e: MessageEvent) => handlers.onStatus!(JSON.parse(e.data)));
+    if (handlers.onCheckin)  es.addEventListener('checkin',  (e: MessageEvent) => handlers.onCheckin!(JSON.parse(e.data)));
+    if (handlers.onOverdue)  es.addEventListener('overdue',  (e: MessageEvent) => handlers.onOverdue!(JSON.parse(e.data)));
+    if (handlers.onPosition) es.addEventListener('position', (e: MessageEvent) => handlers.onPosition!(JSON.parse(e.data)));
 
     return es;
   },

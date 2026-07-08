@@ -1,6 +1,6 @@
 # Slice 3 — Privacy toggle + server guard
 
-Status: implemented 2026-07-07 (unit + typecheck + lint green; two-device verify pending)
+Status: done (verified 2026-07-08 — server guard 14/14 automated + watcher UI two-window)
 Parent: [.scratch/live-location/PRD.md](../PRD.md)
 Covers user stories: 6, 10, 12, 13, 14, 15, 23
 

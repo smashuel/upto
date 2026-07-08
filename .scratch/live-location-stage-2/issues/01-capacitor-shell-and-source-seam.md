@@ -1,8 +1,22 @@
 # Slice 1 — Capacitor shell + PositionSource seam (native app, foreground parity)
 
-Status: ready-for-agent
+Status: in-progress — software half done + committed (2026-07-08); native standup pending on a Mac
 Parent: [.scratch/live-location-stage-2/PRD.md](../PRD.md)
 Covers user stories: 19, 20, 21, 22, 12 (foreground)
+
+## Progress (2026-07-08)
+
+**Software half — done, tested, committed** (`95c01c0`, branch `live-location-stage-2`): the
+`PositionSource` seam (`src/services/positionSource.ts`), ActiveTrip refactored to consume it
+(behaviour-preserving), `selectPositionSource` TDD'd under `node --test` (6 cases), all three
+reused Stage 1 seams still green (59 node-test / 41 vitest), tsc + lint + prod web build clean.
+Capacitor repo prep landed: `capacitor.config.json` seed, `/ios` `/android` gitignored.
+
+**Native half — deferred to a Mac** (Xcode + Android SDK required; can't run in the Linux/CI
+env): the `npx cap add ios/android` init + on-device foreground-parity verification. Turnkey
+steps + the exact remaining acceptance ticks are in
+[mobile-standup-runbook.md](../mobile-standup-runbook.md). `detectPlatform()` already reads the
+`window.Capacitor` native global, so no extra wiring is needed once the platforms exist.
 
 ## What to build
 

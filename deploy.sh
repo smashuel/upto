@@ -137,10 +137,26 @@ fi
 print_status "Creating deployment bundle..."
 TEMP_DIR=$(mktemp -d)
 cp backend-server.js "$TEMP_DIR/"
+# Sibling ESM modules imported by backend-server.js — keep this list in sync with
+# its `from './*.js'` imports, or the server crash-loops with ERR_MODULE_NOT_FOUND.
 cp notifications.js "$TEMP_DIR/"
+cp triplink-lifecycle.js "$TEMP_DIR/"
+cp live-privacy.js "$TEMP_DIR/"
 cp backend-package.json "$TEMP_DIR/package.json"
 cp doc-sync.js "$TEMP_DIR/"
 cp nginx-config "$TEMP_DIR/"
+
+# Guard against bundle drift: every `from './x.js'` sibling import in
+# backend-server.js must have been copied above, or the server crash-loops with
+# ERR_MODULE_NOT_FOUND on boot (502s behind Nginx). Fail loudly, before upload.
+for mod in $(grep -oE "\./[a-zA-Z0-9_-]+\.js" backend-server.js | sort -u | sed 's|\./||'); do
+    if [ ! -f "$TEMP_DIR/$mod" ]; then
+        print_error "backend-server.js imports ./$mod but it's not in the deploy bundle."
+        print_error "Add a 'cp $mod \"\$TEMP_DIR/\"' line above alongside the other modules."
+        rm -rf "$TEMP_DIR"
+        exit 1
+    fi
+done
 
 # Create PM2 ecosystem file. No secrets inline — they live in ./env on Linode,
 # sourced by start.sh before PM2 reads process.env.

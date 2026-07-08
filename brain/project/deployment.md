@@ -55,7 +55,9 @@ Vercel env vars are managed in the Vercel dashboard (not pulled locally unless y
 
 ### Deploying backend changes
 
-Use the `/deploy` skill — it does the pre-flight (TypeScript, SSH reachability, git status) and then runs `deploy.sh`, which scps `backend-server.js` + `doc-sync.js` + `backend-package.json` + an `.env` generated from the deployer's shell, then PM2-restarts with `--update-env`.
+Use the `/deploy` skill — it does the pre-flight (TypeScript, SSH reachability, git status) and then runs `deploy.sh`, which scps `backend-server.js` + its sibling ESM modules (`notifications.js`, `triplink-lifecycle.js`, `live-privacy.js`) + `doc-sync.js` + `backend-package.json` + an `.env` generated from the deployer's shell, then PM2-restarts with `--update-env`.
+
+> **Bundle must include every `from './x.js'` sibling `backend-server.js` imports**, or the server crash-loops on boot with `ERR_MODULE_NOT_FOUND` and every request 502s (PM2 still reports `online`). `deploy.sh` now has a drift guard that aborts before upload if an import is missing — but if you add a new backend module, add its `cp` line too. Always verify a real endpoint after deploy, not just PM2 status. See [journal 2026-07-08](../journal/2026-07-08-deploy-bundle-missing-sibling-modules.md).
 
 `deploy.sh` requires these env vars in the deploying shell and will fail-fast if missing: `DATABASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `BACKEND_URL`, `DOC_API_KEY`, `LINZ_LDS_API_KEY`. They are written to `/opt/upto-backend/.env` (mode 0600) on the server — never embedded in the script or committed to git.
 

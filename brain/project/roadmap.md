@@ -84,8 +84,9 @@ written + grilled. **Stage 1 SHIPPED + verified 2026-07-07/08** (all 4 slices). 
       seams TDD'd (`applyLifecycleEvent`, `describeLiveness`, `shouldBroadcastPosition`,
       `mapFraming`). Also closed the basemap half of
       [features/triplink-route-persistence.md](../features/triplink-route-persistence.md).
-      **Deploy note:** backend gained `live-privacy.js` + `PATCH /sharing` + a position-endpoint
-      guard — needs a Linode deploy to go live for real watchers. Full history in
+      **DEPLOYED to prod 2026-07-08** — backend on Linode (`live-privacy.js` + `PATCH /sharing`
+      + position guard), frontend on `main` (`2a4b8e2`). The main push also carried the
+      npm-Cesium + terrain streams to prod (previously merged only locally). Full history in
       [plans/live-location.md](../plans/live-location.md).
 - [ ] **Stage 2 — Capacitor shell** — reliable iOS background location + push.
       Battery-aware sampling lands here, where backgrounding makes it acute.

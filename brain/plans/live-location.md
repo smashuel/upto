@@ -96,10 +96,13 @@ wiring, check-in reminders) are the roadmap's separate interleaved lane.
 
 ## Next action
 
-**Stage 1 is complete** (Slices 01–04 shipped + verified 2026-07-07/08). The web foreground
+**Stage 1 is complete + DEPLOYED to prod 2026-07-08** (Slices 01–04). The web foreground
 pipeline is live: sample → POST → SSE → marker, with honest liveness, a per-trip privacy
-toggle + server guard, and basemap/framing persistence. Deploy the backend (`live-privacy.js`
-guard + `PATCH /sharing`) when promoting; the frontend rides the next Vercel push.
+toggle + server guard, and basemap/framing persistence. Backend deployed to Linode
+(`live-privacy.js` guard + `PATCH /sharing` + position guard); frontend pushed to `main`
+(`2a4b8e2`) → Vercel prod. That main push also carried the npm-Cesium + terrain streams to
+prod (they'd been merged only locally). Deploy gotcha fixed en route: `deploy.sh` wasn't
+bundling `backend-server.js`'s sibling ESM modules → 502 crash-loop ([journal](../journal/2026-07-08-deploy-bundle-missing-sibling-modules.md)).
 
 Next bet is **Stage 2 (Capacitor background location + push)** — inherits the battery-cadence
 constraint hard (see above). Not yet scoped into issues.

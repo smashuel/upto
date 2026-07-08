@@ -1,6 +1,6 @@
 # Slice 1 — Capacitor shell + PositionSource seam (native app, foreground parity)
 
-Status: in-progress — software half done + committed (2026-07-08); native standup pending on a Mac
+Status: in-progress — software half done + committed (2026-07-08); native standup pending (Android here, iOS via cloud CI → TestFlight, no Mac)
 Parent: [.scratch/live-location-stage-2/PRD.md](../PRD.md)
 Covers user stories: 19, 20, 21, 22, 12 (foreground)
 
@@ -12,11 +12,13 @@ Covers user stories: 19, 20, 21, 22, 12 (foreground)
 reused Stage 1 seams still green (59 node-test / 41 vitest), tsc + lint + prod web build clean.
 Capacitor repo prep landed: `capacitor.config.json` seed, `/ios` `/android` gitignored.
 
-**Native half — deferred to a Mac** (Xcode + Android SDK required; can't run in the Linux/CI
-env): the `npx cap add ios/android` init + on-device foreground-parity verification. Turnkey
-steps + the exact remaining acceptance ticks are in
-[mobile-standup-runbook.md](../mobile-standup-runbook.md). `detectPlatform()` already reads the
-`window.Capacitor` native global, so no extra wiring is needed once the platforms exist.
+**Native half — no physical Mac needed** (decided 2026-07-08): **Android** standup +
+on-device verification runs here on Linux; **iOS** builds on rented cloud macOS (Codemagic) →
+TestFlight, so it's verified on a real iPhone without a Mac. Apple Developer account ($99/yr)
+required for TestFlight + the background entitlement. Turnkey steps + the exact remaining
+acceptance ticks are in [mobile-standup-runbook.md](../mobile-standup-runbook.md).
+`detectPlatform()` already reads the `window.Capacitor` native global, so no extra wiring is
+needed once the platforms exist.
 
 ## What to build
 

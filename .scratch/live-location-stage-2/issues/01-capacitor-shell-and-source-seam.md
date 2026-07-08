@@ -12,13 +12,20 @@ Covers user stories: 19, 20, 21, 22, 12 (foreground)
 reused Stage 1 seams still green (59 node-test / 41 vitest), tsc + lint + prod web build clean.
 Capacitor repo prep landed: `capacitor.config.json` seed, `/ios` `/android` gitignored.
 
-**Native half — no physical Mac needed** (decided 2026-07-08): **Android** standup +
-on-device verification runs here on Linux; **iOS** builds on rented cloud macOS (Codemagic) →
-TestFlight, so it's verified on a real iPhone without a Mac. Apple Developer account ($99/yr)
-required for TestFlight + the background entitlement. Turnkey steps + the exact remaining
-acceptance ticks are in [mobile-standup-runbook.md](../mobile-standup-runbook.md).
-`detectPlatform()` already reads the `window.Capacitor` native global, so no extra wiring is
-needed once the platforms exist.
+**Native half — Android standup DONE in-repo** (`d1710d2`): Capacitor 8 installed
+(core/cli/android/ios); the `android/` project is generated + committed (appId
+`world.upto.app`); `cap sync` copies the Vite bundle in; `cap:android` npm script added.
+`detectPlatform()` resolves `'android'` via the `window.Capacitor` global, so the seam picks
+`native-background` on device (throwing the Slice-2 guard until Slice 2 builds it).
+
+**Remaining for Slice 1 (no physical Mac needed):**
+- **Android on-device** — `npm run cap:android` → Android Studio (needs the Android SDK, not in
+  this Linux env) → run on emulator/phone, verify foreground parity + privacy model.
+- **iOS** — build on cloud macOS (Codemagic) → TestFlight, verify on a real iPhone. Apple
+  Developer account ($99/yr) required (user setting up in parallel). `codemagic.yaml` + `ios/`
+  generation are the next iOS-enablement step.
+
+Turnkey steps in [mobile-standup-runbook.md](../mobile-standup-runbook.md).
 
 ## What to build
 

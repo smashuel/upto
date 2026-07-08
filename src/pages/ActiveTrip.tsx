@@ -7,6 +7,7 @@ import { what3wordsService } from '../services/what3words';
 import { TripPlanningMap } from '../components/map/TripPlanningMap';
 import { applyLifecycleEvent } from '../utils/lifecycleReducer';
 import { LIVE_STALE_MS } from '../utils/liveness';
+import { selectPositionSource, createPositionSource, detectPlatform } from '../services/positionSource';
 import type { TripLink } from '../types/adventure';
 
 // How often this device samples + reports its position (live location Stage 1). Coarse by
@@ -307,57 +308,55 @@ export const ActiveTrip: React.FC = () => {
     return () => es.close();
   }, [shareToken, !!tripLink]); // intentionally limited — avoid re-subscribing on unrelated state changes
 
-  // Live location Stage 1 (foreground web): while the trip is active/overdue, sample this
-  // device's position on a coarse timer. Coarse by design (battery): a ~3-min
-  // getCurrentPosition, not a continuous watchPosition. Privacy is enforced here by NOT
-  // publishing (Slice 03): 'off' doesn't sample at all; 'owner-only' samples for the owner's
-  // own map but never POSTs; 'with-trip' POSTs so the server broadcasts to watchers. Requesting
-  // location only inside this effect keeps the browser permission prompt contextual (fires when
-  // the trip is live and sharing is on — never a cold prompt on load).
+  // Live location: while the trip is active/overdue, sample this device's position through a
+  // PositionSource (Stage 2 Slice 1 seam) — foreground web today, native background in Slice 2.
+  // Coarse by design (battery): a ~3-min getCurrentPosition, not a continuous watchPosition.
+  // Privacy is enforced HERE by NOT publishing (Slice 03): 'off' doesn't sample at all;
+  // 'owner-only' samples for the owner's own map but never POSTs; 'with-trip' POSTs so the
+  // server broadcasts to watchers. The source is a fix producer only — this policy stays in the
+  // consumer, so swapping the source (Slice 2) leaves it untouched. Starting the source only
+  // inside this effect keeps the permission prompt contextual (fires when the trip is live and
+  // sharing is on — never a cold prompt on load).
   useEffect(() => {
     if (!shareToken) return;
     const status = tripLink?.status;
     if (status !== 'active' && status !== 'overdue') return;
     if (liveSharing === 'off') return; // enforced: never sample when sharing is off
-    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) return;
 
-    let cancelled = false;
-    const sample = () => {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          if (cancelled) return;
-          setLocationDenied(false);
-          // Always keep the owner's own marker current — it's their device's truth.
-          setOwnPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude, timestamp: new Date().toISOString() });
-          if (liveSharing !== 'with-trip') return; // owner-only: render locally, never POST
-          api.reportPosition(shareToken, {
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            accuracy: pos.coords.accuracy,
-            sharing: 'live',
-          }).catch(() => {}); // fire-and-forget — a dropped sample is caught by the next tick
-        },
-        (err) => {
-          if (cancelled) return;
-          if (err.code === err.PERMISSION_DENIED) setLocationDenied(true);
-          if (liveSharing !== 'with-trip') return; // owner-only/off never signal watchers
-          // Permission denied or fix failed — tell watchers tracking is unavailable so the
-          // last-known point isn't shown as current (honest degradation).
-          api.reportPosition(shareToken, { sharing: 'unavailable' }).catch(() => {});
-        },
-        { enableHighAccuracy: false, maximumAge: 60_000, timeout: 30_000 },
-      );
-    };
-    sample(); // first fix immediately so watchers see something without waiting a full cycle
-    const id = window.setInterval(sample, LIVE_SAMPLE_INTERVAL_MS);
+    const source = createPositionSource(
+      selectPositionSource(detectPlatform()),
+      { intervalMs: LIVE_SAMPLE_INTERVAL_MS },
+    );
+    if (!source) return; // environment can't supply positions (SSR / unsupported browser)
+
+    source.start({
+      onFix: (fix) => {
+        setLocationDenied(false);
+        // Always keep the owner's own marker current — it's their device's truth.
+        setOwnPosition({ lat: fix.lat, lng: fix.lng, timestamp: fix.timestamp });
+        if (liveSharing !== 'with-trip') return; // owner-only: render locally, never POST
+        api.reportPosition(shareToken, {
+          lat: fix.lat,
+          lng: fix.lng,
+          accuracy: fix.accuracy,
+          sharing: 'live',
+        }).catch(() => {}); // fire-and-forget — a dropped sample is caught by the next tick
+      },
+      onUnavailable: (reason) => {
+        if (reason === 'denied') setLocationDenied(true);
+        if (liveSharing !== 'with-trip') return; // owner-only/off never signal watchers
+        // Permission denied or fix failed — tell watchers tracking is unavailable so the
+        // last-known point isn't shown as current (honest degradation).
+        api.reportPosition(shareToken, { sharing: 'unavailable' }).catch(() => {});
+      },
+    });
     // Best-effort "tracking stopped" beacon when the page is closed/hidden — the one
     // transport that survives unload. Staleness is the floor if it doesn't land. Only meaningful
     // while broadcasting; owner-only/off aren't publishing anything to retract.
     const onHide = () => { if (liveSharing === 'with-trip') api.beaconPositionUnavailable(shareToken); };
     window.addEventListener('pagehide', onHide);
     return () => {
-      cancelled = true;
-      window.clearInterval(id);
+      source.stop();
       window.removeEventListener('pagehide', onHide);
     };
   }, [shareToken, tripLink?.status, liveSharing]);

@@ -8,6 +8,13 @@ yarn-error.log*
 dist/
 build/
 
+# Capacitor native platforms — generated per-machine via `npx cap add` (needs Xcode /
+# Android SDK, so they can't be created in CI/Linux). See
+# .scratch/live-location-stage-2/mobile-standup-runbook.md. Un-ignore + commit these once
+# generated on a Mac if the team decides to version them.
+/ios/
+/android/
+
 # Environment variables
 .env
 .env.local

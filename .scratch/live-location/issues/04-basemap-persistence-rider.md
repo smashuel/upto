@@ -1,6 +1,6 @@
 # Slice 4 — Basemap persistence rider
 
-Status: ready-for-agent
+Status: done (2026-07-08 — plannedBasemap save/rehydrate + drift-only live framing; pure mapFraming seam TDD'd 10 cases)
 Parent: [.scratch/live-location/PRD.md](../PRD.md)
 Covers user stories: 18, 19
 

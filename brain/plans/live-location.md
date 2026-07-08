@@ -1,6 +1,6 @@
 ---
 type: plan
-status: in-progress  # PRD written + grilled 2026-07-05; implementation not started
+status: done  # Stage 1 complete — all 4 slices shipped + verified 2026-07-07/08 (foreground-web pipeline). Stage 2 (Capacitor background) is the next bet.
 related: [.scratch/live-location/PRD.md, brain/features/triplink-route-persistence.md, src/utils/lifecycleReducer.ts, backend-server.js, src/pages/ActiveTrip.tsx, src/pages/PublicAdventureView.tsx]
 tags: [live-gps, safety, phase-2, sse, privacy, battery]
 ---
@@ -82,7 +82,7 @@ live in [.scratch/live-location/issues/](../../.scratch/live-location/issues/).
 | [01](../../.scratch/live-location/issues/01-live-marker-end-to-end.md) | Live marker flows device → watcher (with-trip, both pages open) | reducer `position` kind | — | **DONE — verified end-to-end 2026-07-07** (two-window: SSE-driven blue marker tracks the route when data follows it, diverges when it doesn't). Fixed a real 2D-clamp marker bug en route ([journal 07-07](../journal/2026-07-07-live-marker-2d-clamp.md)). Follow-ups logged: over-water contrast → Slice 02; camera-chases-every-fix → Slice 04 |
 | [02](../../.scratch/live-location/issues/02-honest-liveness-and-rehydrate.md) | Honest liveness + mid-trip rehydrate (stale/unavailable/not-shared, coarse persist, beacons) | `describeLiveness` | 01 | **DONE — verified end-to-end 2026-07-07** (all 4 states shown live + rehydrate). Seams TDD'd (9 cases). Honesty refinement: "not enabled" notice only for explicit off/owner-only, silent while awaiting first fix |
 | [03](../../.scratch/live-location/issues/03-privacy-toggle-and-server-guard.md) | Privacy toggle + server guard (with-trip/owner-only/off, consent chip, contextual permission) | `shouldBroadcastPosition` | 01, 02 | **DONE — verified 2026-07-08** — guard TDD'd (6 cases), `PATCH /sharing` persists to JSONB, position endpoint gates live fixes on stored liveSharing, ActiveTrip 3-way chip enforces by-not-publishing (off=no sample, owner-only=local render/no POST, with-trip=POST), flip-away fires `unavailable`. Server guard 14/14 automated + watcher two-window verify. Fixed a recovery-persist nit en route ([journal 07-08](../journal/2026-07-08-live-recovery-persist.md)) |
-| [04](../../.scratch/live-location/issues/04-basemap-persistence-rider.md) | Basemap persistence rider (`plannedBasemap` save/rehydrate, framing includes live point) | — | — | not started |
+| [04](../../.scratch/live-location/issues/04-basemap-persistence-rider.md) | Basemap persistence rider (`plannedBasemap` save/rehydrate, framing includes live point) | `mapFraming` (framingPoints + pointWithinView) | — | **DONE — 2026-07-08** — `plannedBasemap` saved by the wizard (`onBasemapChange` → form → TripLink), honoured on view mount (pins the durable override so auto-resolve won't switch away in-region); live-view framing bounds-fits route+live and re-frames **only on drift** (`pointWithinView` margin check), killing the Slice-01 per-fix camera yank. Pure seam TDD'd (10 cases); tsc + lint + 53 node-test/41 vitest green |
 
 Deploy note: each slice's backend half ships first or same-deploy so watchers can receive
 what travellers send; the reducer's `position` branch is inert until events arrive.
@@ -96,5 +96,10 @@ wiring, check-in reminders) are the roadmap's separate interleaved lane.
 
 ## Next action
 
-Issues cut (2026-07-05). Implement **Slice 01** test-first (reducer `position` kind is pure —
-red/green under `node --test` — then the endpoint, client handler, sampling loop, and marker).
+**Stage 1 is complete** (Slices 01–04 shipped + verified 2026-07-07/08). The web foreground
+pipeline is live: sample → POST → SSE → marker, with honest liveness, a per-trip privacy
+toggle + server guard, and basemap/framing persistence. Deploy the backend (`live-privacy.js`
+guard + `PATCH /sharing`) when promoting; the frontend rides the next Vercel push.
+
+Next bet is **Stage 2 (Capacitor background location + push)** — inherits the battery-cadence
+constraint hard (see above). Not yet scoped into issues.

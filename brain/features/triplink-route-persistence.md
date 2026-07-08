@@ -1,6 +1,6 @@
 ---
 type: feature
-status: partial  # route half shipped 2026-06-18; basemap+camera remainder rides live-GPS stage 1 (roadmap 2026-07-03)
+status: shipped  # route half 2026-06-18; basemap half + live framing shipped 2026-07-08 as live-location Slice 04. Camera framing is a live-aware bounds-fit, NOT a restored plannedCamera (deliberate — see below)
 related: [src/types/adventure.ts, src/services/TrackDrawer.ts, src/pages/CreateAdventure.tsx, src/pages/ViewAdventure.tsx, src/pages/PublicAdventureView.tsx, src/components/map/TripPlanningMap.tsx]
 tags: [triplink, persistence, tracking, safety, map]
 ---
@@ -54,3 +54,12 @@ This is half-blocked on the **persistence backend** (see Persistence section in 
 - Off-route detection: simple point-to-polyline distance check on a geolocation watch; alert if > X m for > Y seconds.
 - Progress indicator: "you're 40% along your planned route" based on cumulative distance.
 - Automatic late-running warning: if pace (distance / elapsed) is trending slow vs. the plan's estimated time, nudge the user / emergency contact early.
+
+## Shipped (2026-07-08 — basemap half, as live-location Slice 04)
+
+- `plannedBasemap?: MapLayer` on the TripLink (inline union in [adventure.ts](../../src/types/adventure.ts), mirroring `BasemapSuggest`'s `MapLayer` to keep types service-free).
+- Wizard captures the rendered basemap via a new `onBasemapChange` callback on `TripPlanningMap` → form state → saved on the TripLink. Captures the *actually-rendered* layer (after viewport auto-resolve), not just an explicit click, so an AU trip persists `topo-ga` even if the user never touched the layer picker.
+- View mount: `TripPlanningMap` honours a `plannedBasemap` prop by seeding it as the **durable override** — opens on that canvas and won't auto-switch away while the centre is still in-region (panning out still falls through to auto-suggest; it's not a hard freeze). Does *not* touch the viewer's own localStorage layer preference.
+- **No `plannedCamera` / no persisted scene mode** (deliberate, grilled): with a moving live marker a frozen planning camera would fight "keep the marker in view". Instead the view page frames with a **live-aware bounds-fit** — `mapFraming.framingPoints(route, live)` feeds `flyToRouteBounds`, and `mapFraming.pointWithinView` (pure, TDD'd) means we re-frame **only when a new fix drifts out of view**, not on every ~3 min fix. This also fixed the Slice-01 "camera yanks every fix" nit (view pages no longer feed live position in as the map `center`).
+- Backend: pure JSONB passthrough — `plannedBasemap` rides the existing `data` column (stored at [backend-server.js](../../backend-server.js) create, spread back on GET), no schema/endpoint change.
+- The **route half** (`plannedRoute`/`SerializableTrack`) shipped earlier (2026-06-18); together the shared view now opens on the planned canvas with the planned route framed. `plannedRoute` in the type is still named `routes` (array) — this feature file's original naming predates that.

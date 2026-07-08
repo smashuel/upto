@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Row, Col, Alert, Spinner, Badge } from 'react-bootstrap';
 import { useFormContext } from 'react-hook-form';
 import { Navigation, Globe, Info, Route, TrendingUp } from 'lucide-react';
+import type { MapLayer } from '../../services/BasemapSuggest';
 import type { SerializableTrack } from '../../services/TrackDrawer';
 import { upsertRouteById } from '../../services/routeUpsert';
 import { Card, Button } from '../ui';
@@ -15,6 +16,13 @@ const trailService = new GlobalTrailService();
 export const TripLinkLocationStep: React.FC = () => {
   const { setValue, watch } = useFormContext();
   const [primaryLocation, setPrimaryLocation] = useState<What3WordsLocation | null>(null);
+
+  // Capture the basemap the planner is drawing on so the shared view opens on the
+  // same canvas (Slice 04). Stable so the map's report effect doesn't re-fire.
+  const handleBasemapChange = useCallback(
+    (layer: MapLayer) => setValue('plannedBasemap', layer),
+    [setValue],
+  );
 
   // Route suggestion state
   const [routeSuggestions, setRouteSuggestions] = useState<TrailSuggestion[]>([]);
@@ -122,6 +130,7 @@ export const TripLinkLocationStep: React.FC = () => {
                   undefined
                 }
                 initialMode="2d-topo"
+                onBasemapChange={handleBasemapChange}
                 preselectedTrail={
                   selectedSuggestion?.source === 'doc' && selectedSuggestion.geometry
                     ? {

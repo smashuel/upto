@@ -13,6 +13,7 @@ import { RecipientPicker, type PickedContact } from '../components/forms/Recipie
 import { GuidePaceEstimator } from '../components/guidepace/GuidePaceEstimator';
 import { api } from '../config/api';
 import { hasPendingRouteSettles, routesSettled } from '../services/RouteSettlement';
+import type { MapLayer } from '../services/BasemapSuggest';
 import { useAuth } from '../hooks/useAuth';
 import type { TripLink, ActivityType, LatLng, TripRoute } from '../types/adventure';
 import type { What3WordsLocation } from '../types/what3words';
@@ -33,6 +34,7 @@ export interface TripLinkFormData {
   };
   waypoints: Array<{ name: string; coordinates: LatLng; elevation?: number }>;
   routes?: TripRoute[];
+  plannedBasemap?: MapLayer;
   emergencyContacts: Array<{
     id: string;
     name: string;
@@ -233,6 +235,9 @@ export const CreateTripLink: React.FC = () => {
         },
         waypoints: data.waypoints,
         routes,
+        // Basemap the route was drawn on, so the shared view opens on the same
+        // canvas instead of a default world view (Slice 04). Omit when unset.
+        ...(data.plannedBasemap ? { plannedBasemap: data.plannedBasemap } : {}),
         emergencyContacts: data.emergencyContacts,
         shareToken: token,
         status: 'planned',

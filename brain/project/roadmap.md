@@ -73,17 +73,20 @@ this lane — the dev lane is now idle until the capstone walkthrough below.
 Stream the traveller's *current* position to watchers on the TripLink map. Framed as
 safety, not social. **Kickoff done (2026-07-05):** [plans/live-location.md](../plans/live-location.md)
 written; Stage 1 PRD ([.scratch/live-location/PRD.md](../../.scratch/live-location/PRD.md))
-written + grilled. Next: cut implementation issues, build slice 1. The shape below (agreed
-2026-07-03):
+written + grilled. **Stage 1 SHIPPED + verified 2026-07-07/08** (all 4 slices). The shape
+(agreed 2026-07-03):
 
-- [ ] **Stage 1 — web foreground pipeline, SHIPPABLE** — geolocation → SSE position
+- [x] **Stage 1 — web foreground pipeline, SHIPPABLE** — geolocation → SSE position
       channel → live marker. Ships to users as honest *"live while the traveller has the
-      page open"* (real value on day walks; real users validate the plumbing before
-      Capacitor money is spent). **The per-trip privacy model (with-trip / owner-only /
-      off) is designed in stage 1** — watchers see positions from day one.
-      Natural rider: persist the chosen basemap (+ camera framing) on the TripLink so the
-      live marker renders on the planner's canvas — the unshipped half of
+      page open"*. **Done 2026-07-08** across 4 vertical slices: (01) live marker end-to-end,
+      (02) honest liveness + rehydrate, (03) per-trip privacy toggle (with-trip / owner-only /
+      off) + server guard, (04) basemap persistence + drift-only live framing. Three pure
+      seams TDD'd (`applyLifecycleEvent`, `describeLiveness`, `shouldBroadcastPosition`,
+      `mapFraming`). Also closed the basemap half of
       [features/triplink-route-persistence.md](../features/triplink-route-persistence.md).
+      **Deploy note:** backend gained `live-privacy.js` + `PATCH /sharing` + a position-endpoint
+      guard — needs a Linode deploy to go live for real watchers. Full history in
+      [plans/live-location.md](../plans/live-location.md).
 - [ ] **Stage 2 — Capacitor shell** — reliable iOS background location + push.
       Battery-aware sampling lands here, where backgrounding makes it acute.
       (The old "Capacitor vs React Native eval" is resolved: Capacitor, per ADR 011.)

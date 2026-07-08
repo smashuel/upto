@@ -13,6 +13,8 @@ import {
   NSW_ATTRIBUTION,
 } from '../../services/AusMapService';
 import { resolveBasemap, type MapLayer } from '../../services/BasemapSuggest';
+import { flyToRouteBounds } from '../../services/MapCamera';
+import { framingPoints, pointWithinView } from '../../services/mapFraming';
 import { detectDeviceTier, applyPerformanceProfile } from '../../services/MapPerformance';
 import { API_CONFIG } from '../../config/api';
 import type { DrawingStats, SerializableTrack } from '../../services/TrackDrawer';
@@ -48,6 +50,12 @@ interface TripPlanningMapProps {
   liveMarker?: { lat: number; lng: number } | null;
   /** When true, the live marker is rendered greyed + labelled "Last known" (stale fix). */
   liveMarkerStale?: boolean;
+  /** Basemap the planner drew on (Slice 04). When set, the map opens on it and pins it as the
+   *  durable override so viewport auto-resolve won't switch away while in-region. */
+  plannedBasemap?: MapLayer;
+  /** Fires with the currently-rendered basemap on mount and whenever it changes — the wizard
+   *  captures this to persist `plannedBasemap` on the TripLink. */
+  onBasemapChange?: (layer: MapLayer) => void;
 }
 
 interface MapMode {
@@ -311,6 +319,8 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   checkInMarker = null,
   liveMarker = null,
   liveMarkerStale = false,
+  plannedBasemap,
+  onBasemapChange,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -331,6 +341,10 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   // sessions; honoured only while the centre is still inside the preference's
   // native region — otherwise we fall through to the viewport suggestion.
   const [userOverride, setUserOverride] = useState<MapLayer | null>(() => {
+    // A saved plannedBasemap (view pages) wins over the local session preference:
+    // pinning it as the override keeps viewport auto-resolve from switching away
+    // while the centre is still inside its region.
+    if (plannedBasemap) return plannedBasemap;
     const raw = localStorage.getItem(LAYER_STORAGE_KEY);
     if (!raw) return null;
     if (raw === 'topo') return 'topo-linz'; // back-compat migration
@@ -340,8 +354,9 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
     return null;
   });
   // What's actually rendering right now (diverges from userOverride during auto-switch).
-  // initialMode='2d-topo' forces LINZ on mount regardless of override.
+  // plannedBasemap (view) wins; else initialMode='2d-topo' forces LINZ on mount.
   const [mapLayer, setMapLayer] = useState<MapLayer>(() => {
+    if (plannedBasemap) return plannedBasemap;
     if (initialMode === '2d-topo' && topoTileUrl) return 'topo-linz';
     return userOverride ?? 'satellite';
   });
@@ -376,6 +391,9 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   const checkInMarkerRef = useRef<any>(null);
   /** "Live" position marker entity (live location Stage 1) */
   const liveMarkerRef = useRef<any>(null);
+  // True once we've framed the live marker at least once — so subsequent fixes only
+  // re-frame when the marker drifts out of view, not on every ~3 min update (Slice 04).
+  const liveFramedRef = useRef(false);
   const flyoverRef = useRef<any>(null);
   // True while a flyover is animating — suppresses the viewport basemap
   // auto-switch so the forced 3D-satellite view sticks for the whole flyover.
@@ -490,10 +508,14 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
 
         viewerRef.current = viewer;
 
-        // Apply initial basemap. initialMode='2d-topo' wins — the wizard always
-        // opens on LINZ topo if we have a key. Otherwise honour the stored
-        // override if we have one; auto-switch will refine once the camera settles.
-        if (initialMode === '2d-topo' && topoTileUrl) {
+        // Apply initial basemap. A saved plannedBasemap (view pages) wins — open on
+        // exactly the canvas the route was drawn on, and don't touch the viewer's
+        // own device preference in localStorage. Else initialMode='2d-topo' wins
+        // (the wizard always opens on LINZ topo if we have a key). Else honour the
+        // stored override; auto-switch refines once the camera settles.
+        if (plannedBasemap) {
+          if (plannedBasemap !== 'satellite') applyBasemap(viewer, Cesium, plannedBasemap);
+        } else if (initialMode === '2d-topo' && topoTileUrl) {
           applyBasemap(viewer, Cesium, 'topo-linz');
           localStorage.setItem(LAYER_STORAGE_KEY, 'topo-linz');
         } else if (userOverride && userOverride !== 'satellite') {
@@ -777,6 +799,12 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
       try { viewer.camera.moveEnd.removeEventListener(onMoveEnd); } catch { /* ignore */ }
     };
   }, [cesiumReady, userOverride, mapLayer]);
+
+  // Report the currently-rendered basemap up so the wizard can persist it as the
+  // TripLink's plannedBasemap (Slice 04). Fires on mount and on every switch.
+  useEffect(() => {
+    onBasemapChange?.(mapLayer);
+  }, [mapLayer, onBasemapChange]);
 
   const handleTrailLayerToggle = () => {
     const next = !trailLayerEnabled;
@@ -1068,6 +1096,45 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
     });
     viewer.scene.requestRender();
   }, [liveMarker?.lat, liveMarker?.lng, liveMarkerStale, cesiumReady, isLoading]);
+
+  // ── Live-view framing (Slice 04) ────────────────────────────────────────────
+  // Keep the live marker on screen without yanking the camera on every fix. Frame
+  // the route + live point on first appearance, then re-frame only when a new fix
+  // has drifted out of the current view. Route-only geometry is the graceful
+  // fallback when there's no live point yet. Inert in the wizard (no liveMarker).
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || !cesiumReady || isLoading) return;
+    if (!liveMarker) { liveFramedRef.current = false; return; }
+
+    const routeGeom: LatLng[] = (initialRoutes ?? []).flatMap(
+      (r: any) => (r?.waypoints ?? []).map((w: any) => w.coordinates as LatLng),
+    );
+    const points = framingPoints(routeGeom, liveMarker);
+    if (points.length === 0) return;
+
+    // On a re-fix (already framed once), skip if the marker is still comfortably in
+    // view. computeViewRectangle can return undefined mid-morph or in oblique 3D — if
+    // we can't tell, don't re-frame (avoid a spurious yank).
+    if (liveFramedRef.current) {
+      const rectRad = viewer.camera.computeViewRectangle?.();
+      if (!rectRad) return;
+      const inView = pointWithinView(
+        {
+          west: Cesium.Math.toDegrees(rectRad.west),
+          south: Cesium.Math.toDegrees(rectRad.south),
+          east: Cesium.Math.toDegrees(rectRad.east),
+          north: Cesium.Math.toDegrees(rectRad.north),
+        },
+        liveMarker.lat,
+        liveMarker.lng,
+      );
+      if (inView) return;
+    }
+
+    flyToRouteBounds(viewer, points, { duration: liveFramedRef.current ? 1.2 : 0.8 });
+    liveFramedRef.current = true;
+  }, [liveMarker?.lat, liveMarker?.lng, cesiumReady, isLoading, initialRoutes]);
 
   // ── Render mode: continuous during interaction, on-demand when idle ─────────
   // Drawing/editing use CallbackProperty geometry and the flyover uses the clock —

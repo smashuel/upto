@@ -74,6 +74,11 @@ export interface TripLink {
   };
   // Per-trip live-location privacy (Slice 03). Absent is treated as 'with-trip'.
   liveSharing?: 'with-trip' | 'owner-only' | 'off';
+  // Basemap the planner drew the route on (Slice 04) — the view page opens on this
+  // instead of a default world view. Mirrors `MapLayer` in services/BasemapSuggest
+  // (kept inline so types don't depend on the services layer). Absent → view page
+  // falls back to viewport auto-resolve.
+  plannedBasemap?: 'satellite' | 'topo-linz' | 'topo-ga' | 'topo-nsw';
 }
 
 export interface TripWaypoint {

@@ -299,7 +299,10 @@ export const PublicAdventureView: React.FC = () => {
                     readOnly
                     height="300px"
                     initialMode="2d-topo"
-                    center={liveCoords ? [liveCoords.lat, liveCoords.lng] : lastCheckInCoords ? [lastCheckInCoords.lat, lastCheckInCoords.lng] : routeCenter}
+                    plannedBasemap={tripLink.plannedBasemap}
+                    // Stable center only — the live marker is framed by the map's own bounds-fit
+                    // (Slice 04), not by re-centering the camera on every incoming fix.
+                    center={lastCheckInCoords ? [lastCheckInCoords.lat, lastCheckInCoords.lng] : routeCenter}
                     initialRoutes={tripLink.routes ?? []}
                     checkInMarker={lastCheckInCoords}
                     liveMarker={liveCoords}

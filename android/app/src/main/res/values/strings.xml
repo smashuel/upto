@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Upto</string>
+    <string name="title_activity_main">Upto</string>
+    <string name="package_name">world.upto.app</string>
+    <string name="custom_url_scheme">world.upto.app</string>
+</resources>

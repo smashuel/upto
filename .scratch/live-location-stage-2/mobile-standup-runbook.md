@@ -90,6 +90,20 @@ You install from TestFlight on your iPhone and test — including the background
 A `codemagic.yaml` at repo root drives this (add in the iOS-enablement step; keep signing secrets
 in Codemagic's encrypted env, never committed — same rule as `deploy.sh`).
 
+## No physical device on hand (2026-07-09)
+
+Currently **no Android device and no Apple account** — so the on-device background matrix (the
+real acceptance gate) can't be closed for either platform yet. The chosen path is **build-ahead**:
+land all device-independent work now, hold the matrix open. See
+[RESUME.md](RESUME.md#path-chosen-2026-07-09-build-ahead-device-independent-matrix-stays-an-open-gate).
+
+- **Android emulator** (Android Studio AVD) runs a foreground + wiring smoke test using
+  mock-GPS route playback. **Run it on the Windows host, not inside WSL2** (WSL2 lacks the
+  KVM/GPU path for a usable emulator). It is **not** trustworthy for Doze/battery-optimization
+  kills, multi-hour battery drain, or true "always" reliability — those need a real device.
+- **Cheapest real unblock:** a ~$60–100 used Android phone closes the whole Android half of the
+  matrix, Apple-independent. Highest-leverage spend for a safety-critical background feature.
+
 ## Remaining Slice 1 acceptance (verify on device — Android here, iOS via TestFlight)
 
 These issue-01 criteria need a running native app to tick:

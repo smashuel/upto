@@ -3,6 +3,31 @@
 Bookmark set 2026-07-09. Paused mid-Slice-01 to wait on the Apple Developer account +
 Codemagic setup. Working on other things in the meantime.
 
+## Path chosen 2026-07-09: BUILD-AHEAD (device-independent), matrix stays an open gate
+
+Constraints: Apple Developer account pending **and no physical Android device**. Decision:
+build everything device-independent now; the **on-device background matrix is an explicit open
+gate** (a green unit suite is *necessary but not sufficient* — PRD). Closes when a real Android
+phone or TestFlight (post-Apple) is in hand. Recommendation on record: a ~$60–100 used Android
+phone is the highest-leverage unblock — Apple-independent, closes the entire Android half of the
+gate. Emulator (Android Studio AVD, run on the Windows host — WSL2 can't) is a foreground +
+wiring smoke test only, **not** trustworthy for Doze/battery/kill reliability, which is the risk.
+
+### Build-ahead landed 2026-07-09
+- **Skill review** (`/capacitor-best-practices` + `/capacitor-plugins`) → findings folded into
+  [issues 02](issues/02-native-background-location.md) / [04](issues/04-offline-store-and-forward.md) /
+  [05](issues/05-watcher-push-escalation.md). Two code-confirmed 🔴: Android WebView HTTP throttle
+  (>5 min bg) → use CapacitorHttp; native API base URL was `''` same-origin → broken in the shell.
+- **Config hardening:** `capacitor.config.json` → `capacitor.config.ts` with `android.useLegacyBridge`
+  + `CapacitorHttp` enabled; native builds now target an absolute backend origin; backend CORS
+  extended to the Capacitor origin.
+- **Slice 3 `resolveSampleCadence`** + **Slice 4 `nextFlushBatch`** — pure functions, TDD'd under
+  `node --test`. (Slice 3 profile power-mode UI + persistence still pending; the seam is done.)
+
+### Still device-gated (the open matrix)
+Slice 2 native background source, Slice 5 push *delivery*, battery drain, dead-zone reconnect —
+all need a real device. Code can be written to "device-ready"; sign-off cannot happen here.
+
 ## Where we are
 
 Branch **`live-location-stage-2`** (off `429c3bf`), **NOT pushed** — all local.

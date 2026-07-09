@@ -30,6 +30,18 @@ The queue exists for **delivery reliability, not history** — so a watcher who 
 stale marker snaps to the traveller's real *current* position the moment signal returns, never
 a replay of an hours-old point. This deliberately keeps the door shut on a breadcrumb schema.
 
+## Implementation notes (from skill review 2026-07-09)
+
+- **Online/offline detection:** use `@capacitor/network` (`Network.getStatus()` +
+  `addListener('networkStatusChange', …)`) on native — not `navigator.onLine`, which is
+  unreliable in a WebView. Feed its `connected` flag into `nextFlushBatch`'s `online` arg.
+- **Buffer storage:** because Stage 2 is last-known-only and the queue coalesces to a single
+  event, a single `@capacitor/preferences` key holds the pending fix — **no SQLite needed.**
+- **Relation to the Android WebView throttle (Slice 2 finding #1):** the offline queue handles
+  *no connectivity*; it does **not** cover WebView HTTP throttling while backgrounded-but-online
+  — that's fixed separately by routing the POST through CapacitorHttp (Slice 2). Keep the two
+  concerns distinct.
+
 ## Acceptance criteria
 
 - [ ] `nextFlushBatch(queue, now, online)` is a pure function, unit-tested under `node --test`:

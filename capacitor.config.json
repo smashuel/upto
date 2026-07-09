@@ -1,8 +1,0 @@
-{
-  "appId": "world.upto.app",
-  "appName": "Upto",
-  "webDir": "dist",
-  "server": {
-    "androidScheme": "https"
-  }
-}

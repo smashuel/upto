@@ -8,11 +8,16 @@ import { TripPlanningMap } from '../components/map/TripPlanningMap';
 import { applyLifecycleEvent } from '../utils/lifecycleReducer';
 import { LIVE_STALE_MS } from '../utils/liveness';
 import { selectPositionSource, createPositionSource, detectPlatform } from '../services/positionSource';
+import { FG_FLOOR_MS } from '../utils/sampleCadence';
 import type { TripLink } from '../types/adventure';
 
-// How often this device samples + reports its position (live location Stage 1). Coarse by
-// design — battery matters on a phone in the backcountry. See brain/plans/live-location.md.
-const LIVE_SAMPLE_INTERVAL_MS = 3 * 60 * 1000;
+// How often this device samples + reports its position. Coarse by design — battery matters on a
+// phone in the backcountry. The web foreground case uses resolveSampleCadence's foreground floor
+// directly (single source of truth). Full context-driven cadence (background/battery/power-mode
+// → recompute) lands with the native background source in Slice 2, its primary consumer — the
+// web foreground case stays on this fixed floor so shipped Stage-1 behaviour is unchanged.
+// See src/utils/sampleCadence.ts and brain/plans/live-location.md.
+const LIVE_SAMPLE_INTERVAL_MS = FG_FLOOR_MS;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

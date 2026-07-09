@@ -192,7 +192,9 @@ const corsOptions = {
     'https://upto.world',
     'https://www.upto.world',
     'http://172.105.178.48',  // Nginx proxy
-    'http://localhost'        // Local Nginx proxy
+    'http://localhost',       // Local Nginx proxy
+    'capacitor://localhost',  // Capacitor iOS WebView origin (native shell, Stage 2)
+    'https://localhost'       // Capacitor Android WebView origin (androidScheme: https)
   ],
   credentials: true,
   optionsSuccessStatus: 200,

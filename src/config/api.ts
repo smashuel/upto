@@ -3,10 +3,21 @@
 // VITE_DEV_API_URL overrides in dev; VITE_API_BASE_URL is used in production builds
 const isDevelopment = import.meta.env.MODE === 'development' || import.meta.env.DEV;
 
-const API_BASE_URL = isDevelopment
-  ? (import.meta.env.VITE_DEV_API_URL || 'http://localhost:3001')
-  // In production, use empty string so /api/* calls go to the same origin (Vercel proxy)
-  : (import.meta.env.VITE_API_BASE_URL || '');
+// In the Capacitor native shell there is NO Vercel origin — the WebView serves the bundle from
+// capacitor://localhost / https://localhost, so the web's same-origin '' base (which relies on
+// the Vercel /api/* proxy) resolves to the WebView itself, not the backend. Native builds must
+// therefore target an absolute backend origin. (Stage 2 finding, 2026-07-09.)
+const isNativePlatform = (): boolean =>
+  !!(globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.();
+
+const NATIVE_API_BASE_URL = import.meta.env.VITE_NATIVE_API_BASE_URL || 'https://api.upto.world';
+
+const API_BASE_URL = isNativePlatform()
+  ? NATIVE_API_BASE_URL
+  : isDevelopment
+    ? (import.meta.env.VITE_DEV_API_URL || 'http://localhost:3001')
+    // In production (web), use empty string so /api/* calls go to the same origin (Vercel proxy)
+    : (import.meta.env.VITE_API_BASE_URL || '');
 
 // API Configuration
 export const API_CONFIG = {

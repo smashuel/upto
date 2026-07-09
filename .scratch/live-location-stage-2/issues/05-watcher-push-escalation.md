@@ -27,6 +27,25 @@ of scope — that's the roadmap's check-in-reminder fast-follow.
 This slice needs only the shell (Slice 1) for registration and is independent of the
 background-location work (Slices 2–4) — it can run in parallel.
 
+## Implementation notes (from skill review 2026-07-09)
+
+- **Plugin:** `@capacitor/push-notifications` (APNs on iOS, FCM on Android). The overdue push
+  is a **visible alert** notification, so the plugin's caveats *"iOS does not support
+  silent/background push"* and *"Android won't fire callbacks for data-only notifications when
+  killed"* do **not** bite here — we're not using push to wake the app or resume tracking, only
+  to alert a watcher. Good: keeps push off the background-reliability critical path.
+- **Apple split (matters given the pending Apple account):** the **Android/FCM half is not
+  Apple-blocked** — token registration + `google-services.json` + backend FCM dispatch can be
+  built and (with a device) verified now. The **iOS half needs an APNs auth key from the Apple
+  Developer account** and the Push Notifications capability in Xcode, so it batches with the
+  Codemagic/TestFlight iOS-enablement pass. Build FCM first; APNs follows the account.
+- **Android 13+** needs the `POST_NOTIFICATIONS` runtime permission
+  (`checkPermissions()` / `requestPermissions()`) before tokens deliver notifications.
+- **Backend:** associate device tokens with the user (and, for watchers, watched trips) reusing
+  the existing account/contact model; the existing 60s overdue trigger in `notifications.js`
+  gains a push dispatch **alongside** the email — one event, two transports. APNs/FCM secrets
+  stay server-side (never committed), same rule as `deploy.sh`.
+
 ## Acceptance criteria
 
 - [ ] Capacitor Push Notifications wired; app users register a device token, associated with

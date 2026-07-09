@@ -37,6 +37,9 @@ export interface TripRoute {
   };
 }
 
+/** TripLink lifecycle status. Named so seams (e.g. resolveSampleCadence) can type against it. */
+export type TripStatus = 'planned' | 'active' | 'completed' | 'overdue';
+
 export interface TripLink {
   id: string;
   userId?: string;         // set when creator is logged in
@@ -55,7 +58,7 @@ export interface TripLink {
   routes?: TripRoute[];    // drawn routes — rendered read-only on the view pages
   emergencyContacts: Contact[];
   shareToken: string;
-  status: 'planned' | 'active' | 'completed' | 'overdue';
+  status: TripStatus;
   createdAt: string;       // ISO 8601
   startedAt?: string;      // ISO 8601 — when creator tapped "Start Trip"
   lastCheckIn?: string;    // ISO 8601 — timestamp of most recent check-in

@@ -104,7 +104,38 @@ land all device-independent work now, hold the matrix open. See
 - **Cheapest real unblock:** a ~$60–100 used Android phone closes the whole Android half of the
   matrix, Apple-independent. Highest-leverage spend for a safety-critical background feature.
 
-## Remaining Slice 1 acceptance (verify on device — Android here, iOS via TestFlight)
+## iOS build (cloud) — the WORKING Codemagic recipe (2026-07-26)
+
+The no-Mac Codemagic → TestFlight pipeline is live and green ([codemagic.yaml](../../codemagic.yaml)).
+Hard-won gotchas, in the order they bit us — keep these when touching the pipeline:
+
+1. **Capacitor 8 iOS = Swift Package Manager, not CocoaPods.** `cap add ios` generates
+   `ios/App/App.xcodeproj` + a `CapApp-SPM` package + `Package.swift` — **no `Podfile`, no
+   `.xcworkspace`**. Build with `xcode-project build-ipa --project ios/App/App.xcodeproj --scheme App`.
+   Do **not** run `pod install` or reference a workspace (both fail). Plugins are pulled via SPM on
+   `cap sync`, not pods — this is the direction the `capacitor-best-practices` skill recommends.
+2. **Signing is explicit + needs an RSA key.** `app-store-connect fetch-signing-files "$BUNDLE_ID"
+   --type IOS_APP_STORE --certificate-key "@env:CERTIFICATE_PRIVATE_KEY" --create`. The `--create`
+   makes the (first-time) iOS Distribution cert + App Store profile, but cert creation needs an RSA
+   key: generate once (`openssl genrsa -out key.pem 2048`), store its contents as a **secure
+   Codemagic var `CERTIFICATE_PRIVATE_KEY`** in group `ios_signing`. Codemagic reuses the cert on
+   later builds. Then `keychain add-certificates` + `xcode-project use-profiles --project
+   <explicit path>` (its default `**/*.xcodeproj` glob misses the nested Capacitor path).
+   Prereq: bundle id `world.upto.app` registered in the Developer portal (Identifiers).
+3. **Integration name** — `codemagic.yaml`'s `integrations: app_store_connect:` must match the App
+   Store Connect API key name in Codemagic (currently `Sam Wood`).
+4. **Publishing = upload-only** (`submit_to_testflight: false`). Uploading makes the build available
+   to **internal** testers automatically (no Beta App Review). `submit_to_testflight: true` submits
+   for **external** testing → demands Test Information (feedback email + reviewer contact) we don't
+   need. Add self as internal tester in App Store Connect → TestFlight → Internal Testing.
+5. **Export compliance** on first upload → "None of the algorithms mentioned above" (Upto is HTTPS
+   only, no custom crypto) → exempt. Bake `ITSAppUsesNonExemptEncryption=false` into `Info.plist`
+   at Slice 2 to stop the per-build prompt.
+
+**At Slice 2, start committing `ios/`** (remove it from `.gitignore`): background permission strings
+in `ios/App/App/Info.plist` must persist across builds, which CI-regeneration would wipe.
+
+## Remaining Slice 1 acceptance (verify on device — iOS via TestFlight now; Android still needs a device)
 
 These issue-01 criteria need a running native app to tick:
 

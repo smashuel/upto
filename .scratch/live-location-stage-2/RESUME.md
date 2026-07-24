@@ -28,39 +28,49 @@ wiring smoke test only, **not** trustworthy for Doze/battery/kill reliability, w
 Slice 2 native background source, Slice 5 push *delivery*, battery drain, dead-zone reconnect —
 all need a real device. Code can be written to "device-ready"; sign-off cannot happen here.
 
+## 🎉 MILESTONE 2026-07-26: iOS app live on TestFlight — the Codemagic pipeline works
+
+The Apple account landed and the **no-Mac cloud build is fully working end to end**: deps →
+web build → Capacitor SPM sync → iOS compile → cert+profile creation → signed archive →
+App Store Connect upload → TestFlight. The app installs and runs on a real iPhone. This
+closes the iOS-build/signing/store ops unknown ADR 011 flagged as the project's new risk.
+
+**The Codemagic recipe (hard-won — full detail in the runbook §"iOS build (cloud)"):**
+- Capacitor 8 iOS is **Swift Package Manager, not CocoaPods** — no `Podfile`/`.xcworkspace`;
+  build `--project ios/App/App.xcodeproj` (scheme `App`), no `pod install`.
+- Signing is **explicit**: `fetch-signing-files --create` needs an RSA key → secure Codemagic
+  var `CERTIFICATE_PRIVATE_KEY` (group `ios_signing`) creates+reuses the distribution cert;
+  `use-profiles --project <path>` (default glob misses the nested Capacitor path).
+- Publishing is **upload-only** (`submit_to_testflight: false`) → internal testers get every
+  processed build with no Beta App Review. Export compliance = "None of the algorithms" (HTTPS
+  only) → exempt.
+
 ## Where we are
 
-Branch **`live-location-stage-2`** (off `429c3bf`), **NOT pushed** — all local.
-Uncommitted (leave as-is, per convention): `data/doc-*.json`, `.claude/settings.local.json`.
+Branch **`live-location-stage-2`**, **pushed** to `origin` (Codemagic builds from it). `ios/`
+is gitignored + CI-generated each build. Uncommitted (leave, per convention): `data/doc-*.json`,
+`.claude/settings.local.json`.
 
 ### Done ✅
-- **Software seam** — `src/services/positionSource.ts` (`selectPositionSource`,
-  `createPositionSource`, `detectPlatform`, `WebForegroundPositionSource`); ActiveTrip
-  refactored to consume it (behaviour-preserving). 6 node-test cases. `59 node-test / 41 vitest`,
-  tsc + lint clean.
-- **Capacitor + Android** — Capacitor 8 installed; `android/` project generated + committed
-  (appId `world.upto.app`); `cap sync` copies the Vite bundle; `cap:sync` / `cap:android` npm
-  scripts added.
-- PRD + 5 sliced issues + mobile standup runbook, all in `.scratch/live-location-stage-2/`.
+- **Software seam** — `src/services/positionSource.ts`; ActiveTrip consumes it. node-test + vitest green.
+- **Capacitor + Android + iOS** — Capacitor 8; `android/` committed; **`codemagic.yaml` → TestFlight working**.
+- **Build-ahead seams** — `resolveSampleCadence` (Slice 3) + `nextFlushBatch` (Slice 4), TDD'd.
+- PRD + 5 sliced issues + runbook in `.scratch/live-location-stage-2/`.
 
-### Pending ⏳
-1. **Android on-device verify** (needs Android SDK / Android Studio — not in the Linux dev env):
-   `npm run cap:android` → Run on emulator/phone → confirm foreground live-marker parity +
-   privacy toggle. Ticks the last of Slice 01's on-device acceptance.
-2. **iOS via Codemagic → TestFlight** — BLOCKED on the user's Apple Developer account (pending).
-   When ready: user links GitHub↔Codemagic + uploads an App Store Connect API key + registers
-   bundle id `world.upto.app`; **I** then write `codemagic.yaml` + generate `ios/`. First
-   requirement: **`git push`** this branch (Codemagic builds from GitHub).
+### Pending ⏳ — the next actions
+1. **Verify Slice 01 foreground acceptance on the iPhone** (now possible via TestFlight): live-marker
+   parity + liveness labels + privacy toggle (`with-trip`/`owner-only`/`off`) behave as web. Ticks
+   the last Slice-01 boxes. **This is the immediate next step** before building background on top.
+2. **Slice 02 — native background location** (the make-or-break). At this point **`ios/` must start
+   being committed** (gitignore the CI-generate) so Slice-2 `Info.plist` permission strings
+   (`NSLocation*UsageDescription`, `UIBackgroundModes`, `ITSAppUsesNonExemptEncryption=false`)
+   persist across builds. Background-geolocation plugin via **SPM**, CapacitorHttp POST routing,
+   then the on-device background matrix (locked/backgrounded/killed) — the acceptance gate.
 
-## Resume trigger
+Note: no Android device still — the Android half of the matrix stays open; iOS via TestFlight is
+now the live verification path.
 
-When the Apple account is active → say "wire Codemagic" and I'll draft `codemagic.yaml` +
-`ios/` generation. See [mobile-standup-runbook.md](mobile-standup-runbook.md) §"iOS build (cloud)".
+## After Slice 01 verifies → Slice 02 (native background location)
 
-## After Slice 01 closes → Slice 02 (native background location)
-
-The real Stage 2 work. `native-background` source behind the seam + `resolveSampleCadence`
-(Slice 03) + `nextFlushBatch` (Slice 04) are all cross-platform TS, buildable/testable here.
-Android background matrix verifies on-device; iOS via TestFlight. This is the ADR-011
-make-or-break slice — on-device matrix is the acceptance gate, not the unit suite.
-Issues: [issues/](issues/).
+The real Stage 2 work. This is the ADR-011 make-or-break slice — on-device matrix (iOS via
+TestFlight now) is the acceptance gate, not the unit suite. Issues: [issues/](issues/).

@@ -41,17 +41,20 @@ workflows:
             || { echo "FATAL: App.xcodeproj missing after cap sync"; exit 1; }
       - name: Fetch/create the signing certificate + provisioning profile, then apply
         # Explicit signing: --create makes Codemagic CREATE the App Store distribution cert and
-        # provisioning profile for the bundle id if they don't exist yet (the first-build case),
-        # rather than only searching for a pre-existing profile. Credentials come from the
-        # 'Sam Wood' App Store Connect integration above. The bundle id must be registered in the
-        # Developer portal first (Identifiers). use-profiles then wires them into the Xcode project.
+        # provisioning profile for the bundle id if they don't exist yet, then use-profiles wires
+        # them into the Xcode project (manual signing). Point use-profiles at the exact project
+        # (its default **/*.xcodeproj glob can miss the nested Capacitor path) and list the
+        # downloaded profiles so a mismatch is visible in the log.
         script: |
+          set -e
           keychain initialize
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
             --create
           keychain add-certificates
-          xcode-project use-profiles
+          echo "==== provisioning profiles on runner ===="
+          ls -la "$HOME/Library/MobileDevice/Provisioning Profiles/" 2>/dev/null || echo "(none downloaded)"
+          xcode-project use-profiles --project "$CM_BUILD_DIR/ios/App/App.xcodeproj"
       - name: Set the build number to Codemagic's incrementing counter
         script: |
           cd ios/App

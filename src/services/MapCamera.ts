@@ -15,6 +15,17 @@ import * as Cesium from 'cesium';
 
 type LatLng = [number, number];
 
+/**
+ * True when the OS asks for reduced motion. Camera flights are large
+ * whole-viewport movement — under reduced motion they become jump cuts
+ * (duration 0) rather than flying.
+ */
+export function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 export interface FlyToRouteBoundsOptions {
   /** Animation duration in seconds. Default 1.2. */
   duration?: number;
@@ -47,7 +58,7 @@ export function flyToRouteBounds(
   const pitch = Cesium.Math.toRadians(is2D ? -90 : -45);
 
   viewer.camera.flyToBoundingSphere(sphere, {
-    duration,
+    duration: prefersReducedMotion() ? 0 : duration,
     offset: new Cesium.HeadingPitchRange(0, pitch, sphere.radius * 2),
   });
 }

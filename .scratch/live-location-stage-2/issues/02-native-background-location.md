@@ -2,6 +2,7 @@
 
 Status: ready-for-agent
 Parent: [.scratch/live-location-stage-2/PRD.md](../PRD.md)
+**Concrete build plan: [PRD-slice-02-native-background.md](../PRD-slice-02-native-background.md)** (scoped 2026-07-26)
 Covers user stories: 1, 2, 3, 4, 5, 13, 14, 18, 17 (regression)
 
 ## What to build

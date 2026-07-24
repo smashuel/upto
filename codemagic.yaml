@@ -1,0 +1,57 @@
+# Codemagic CI/CD — iOS cloud build → TestFlight for the Upto Capacitor shell (ADR 011,
+# live-location Stage 2). No Mac required locally: this runs on Codemagic's macOS runner, which
+# generates ios/ (gitignored), builds the web bundle, syncs Capacitor, auto-signs with the App
+# Store Connect API key, and uploads to TestFlight. The web app keeps deploying to Vercel
+# unchanged — this pipeline is additive. See .scratch/live-location-stage-2/mobile-standup-runbook.md.
+
+workflows:
+  ios-testflight:
+    name: Upto iOS — TestFlight
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      # Must match the App Store Connect API key integration name you created in Codemagic
+      # (Team settings → Integrations → App Store Connect). Rename yours to this, or edit here.
+      app_store_connect: Upto App Store Connect
+    environment:
+      ios_signing:
+        # Codemagic auto-manages certs + provisioning from the API key above — no local certs.
+        distribution_type: app_store
+        bundle_identifier: world.upto.app
+      vars:
+        BUNDLE_ID: "world.upto.app"
+      node: 22
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Install JS dependencies
+        script: npm ci
+      - name: Build the web bundle (dist/)
+        script: npm run build
+      - name: Generate the iOS platform (gitignored — created fresh each build)
+        script: |
+          if [ ! -d "ios" ]; then
+            npx cap add ios
+          fi
+      - name: Capacitor sync iOS (copies dist/ + native config, runs pod install)
+        script: npx cap sync ios
+      - name: Apply managed signing profiles to the Xcode project
+        script: xcode-project use-profiles
+      - name: Set the build number to Codemagic's incrementing counter
+        script: |
+          cd ios/App
+          agvtool new-version -all "$BUILD_NUMBER"
+      - name: Build the signed .ipa
+        script: |
+          xcode-project build-ipa \
+            --workspace "ios/App/App.xcworkspace" \
+            --scheme "App"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Ship each green build to TestFlight automatically. Internal testers (you) get it on the
+        # TestFlight app after the first build clears export compliance.
+        submit_to_testflight: true

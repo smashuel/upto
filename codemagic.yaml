@@ -14,6 +14,10 @@ workflows:
       # (Team settings → Integrations → Apple Developer Portal).
       app_store_connect: Sam Wood
     environment:
+      groups:
+        # Codemagic variable group holding CERTIFICATE_PRIVATE_KEY (secure) — the RSA key used to
+        # create/reuse the iOS Distribution certificate. Add it in the app's Environment variables.
+        - ios_signing
       vars:
         BUNDLE_ID: "world.upto.app"
       node: 22
@@ -50,6 +54,7 @@ workflows:
           keychain initialize
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
+            --certificate-key "@env:CERTIFICATE_PRIVATE_KEY" \
             --create
           keychain add-certificates
           echo "==== provisioning profiles on runner ===="

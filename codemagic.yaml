@@ -29,8 +29,16 @@ workflows:
           if [ ! -d "ios" ]; then
             npx cap add ios
           fi
-      - name: Capacitor sync iOS (copies dist/ + native config, runs pod install)
-        script: npx cap sync ios
+      - name: Capacitor sync iOS + install CocoaPods (generates App.xcworkspace)
+        # cap sync copies dist/ + native config and normally runs pod install, but if pods don't
+        # install there's no .xcworkspace and build-ipa fails. Run pod install explicitly (it's
+        # idempotent) and list the dir so the log shows the real layout if anything is off.
+        script: |
+          npx cap sync ios
+          cd ios/App
+          pod install
+          echo "---- ios/App contents ----"
+          ls -la
       - name: Fetch/create the signing certificate + provisioning profile, then apply
         # Explicit signing: --create makes Codemagic CREATE the App Store distribution cert and
         # provisioning profile for the bundle id if they don't exist yet (the first-build case),

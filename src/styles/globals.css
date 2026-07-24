@@ -128,17 +128,24 @@
   --radius-xl: 16px;
   --radius-full: 9999px;
   
-  /* Transitions */
-  --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-fast: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-bounce: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  /* Motion — property-less primitives; call sites name explicit properties */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);      /* strong ease-out — enter/exit, hover lifts */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);  /* on-screen movement/morph */
+  --dur-fast: 150ms;   /* hover/color, small controls */
+  --dur-base: 200ms;   /* buttons, cards, chips */
+  --dur-slow: 250ms;   /* accordion, chevrons, larger panels */
 }
 
 /* Global Typography & Base Styles */
 html {
   font-family: var(--font-body);
   line-height: 1.6;
-  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 body {
@@ -223,19 +230,28 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   font-family: var(--font-body);
   font-weight: 500;
   border-radius: var(--radius-md);
-  transition: var(--transition-smooth);
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    background-color var(--dur-fast) ease,
+    color var(--dur-fast) ease,
+    filter var(--dur-fast) ease;
   border: none;
   box-shadow: var(--shadow-soft);
   letter-spacing: 0.025em;
 }
 
-.btn:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-medium);
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-medium);
+  }
 }
 
+/* Press feedback — snaps in faster (120ms) than the hover lift releases (200ms) */
 .btn:active {
-  transform: translateY(0);
+  transform: scale(0.97);
+  transition: transform 120ms var(--ease-out);
 }
 
 .btn-adventure {
@@ -261,7 +277,6 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   background: var(--gradient-earth);
   filter: brightness(1.1);
   color: white;
-  transform: translateY(-3px);
 }
 
 .btn-mountain {
@@ -273,7 +288,6 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
 .btn-mountain:hover {
   background: var(--adventure-primary-light);
   color: white;
-  transform: translateY(-2px);
 }
 
 .btn-sky {
@@ -286,7 +300,6 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   background: var(--gradient-sky);
   filter: brightness(1.1);
   color: white;
-  transform: translateY(-2px);
 }
 
 .btn-highland {
@@ -299,7 +312,6 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   background: var(--gradient-highland);
   filter: brightness(1.1);
   color: white;
-  transform: translateY(-2px);
 }
 
 .btn-fjord {
@@ -312,7 +324,6 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   background: var(--gradient-fjord);
   filter: brightness(1.1);
   color: white;
-  transform: translateY(-2px);
 }
 
 /* Card Styles */
@@ -325,12 +336,14 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
 
 /* Opt-in hover lift — use .card-interactive for cards that should lift */
 .card-interactive {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
 }
 
-.card-interactive:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-medium);
+@media (hover: hover) and (pointer: fine) {
+  .card-interactive:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-medium);
+  }
 }
 
 .card-premium {
@@ -356,7 +369,7 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   bottom: 0;
   background: var(--gradient-mountain);
   opacity: 0;
-  transition: var(--transition-smooth);
+  transition: opacity var(--dur-base) ease;
   pointer-events: none;
 }
 
@@ -474,7 +487,10 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--radius-lg);
   padding: 2rem;
-  transition: var(--transition-smooth);
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) ease;
   position: relative;
   overflow: hidden;
 }
@@ -488,17 +504,7 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   height: 2px;
   background: var(--gradient-mountain);
   transform: translateX(-100%);
-  transition: var(--transition-smooth);
-}
-
-.feature-card:hover::before {
-  transform: translateX(0);
-}
-
-.feature-card:hover {
-  transform: translateY(-8px) scale(1.02);
-  box-shadow: var(--shadow-large);
-  border-color: var(--adventure-accent-light);
+  transition: transform 300ms var(--ease-out);
 }
 
 .feature-icon {
@@ -511,12 +517,25 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   justify-content: center;
   margin: 0 auto 1.5rem;
   box-shadow: var(--shadow-adventure);
-  transition: var(--transition-smooth);
+  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
 }
 
-.feature-card:hover .feature-icon {
-  transform: scale(1.1) rotate(5deg);
-  box-shadow: var(--shadow-large);
+@media (hover: hover) and (pointer: fine) {
+  .feature-card:hover::before {
+    transform: translateX(0);
+  }
+
+  .feature-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-large);
+    border-color: var(--adventure-accent-light);
+  }
+
+  /* Playful icon tilt — rare, on-brand for the Home page */
+  .feature-card:hover .feature-icon {
+    transform: scale(1.1) rotate(5deg);
+    box-shadow: var(--shadow-large);
+  }
 }
 
 .feature-icon svg {
@@ -529,7 +548,11 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
 .form-control {
   border: 2px solid var(--adventure-light-gray);
   border-radius: var(--radius-md);
-  transition: var(--transition-smooth);
+  /* No transform on focus — keyboard-initiated actions never move */
+  transition:
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease,
+    background-color var(--dur-fast) ease;
   font-family: var(--font-body);
   background-color: rgba(255, 255, 255, 0.9);
 }
@@ -538,7 +561,6 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   border-color: var(--adventure-accent);
   box-shadow: 0 0 0 0.25rem rgba(52, 152, 219, 0.25);
   background-color: white;
-  transform: translateY(-1px);
 }
 
 .form-label {
@@ -547,6 +569,21 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   margin-bottom: 0.5rem;
   font-size: 0.9rem;
   letter-spacing: 0.025em;
+}
+
+/* Selectable wizard cards (activity type, difficulty, route suggestions) —
+   selection toggles Bootstrap border/background/text utility classes */
+.selectable-card {
+  transition:
+    border-color var(--dur-base) ease,
+    background-color var(--dur-base) ease,
+    color var(--dur-base) ease,
+    transform var(--dur-base) var(--ease-out);
+}
+
+.selectable-card:active {
+  transform: scale(0.98);
+  transition: transform 120ms var(--ease-out);
 }
 
 /* Step Wizard Enhancement */
@@ -565,7 +602,10 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   backdrop-filter: blur(15px);
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: var(--radius-lg);
-  transition: var(--transition-smooth);
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    background-color var(--dur-base) ease;
   position: relative;
 }
 
@@ -588,7 +628,9 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   background: var(--gradient-mountain);
   border-radius: var(--radius-full);
   box-shadow: 0 2px 4px rgba(44, 62, 80, 0.3);
-  transition: var(--transition-smooth);
+  /* width is a layout property, but a stepped progress fill without motion pops —
+     accepted trade-off, kept short */
+  transition: width var(--dur-slow) var(--ease-in-out);
 }
 
 /* ── Map Floating Controls ─────────────────────────────────────────────── */
@@ -648,12 +690,16 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   flex-direction: column;
   gap: 4px;
 }
-.map-overlay-tl { top: 12px; left: 12px; }
-.map-overlay-tr { top: 12px; right: 12px; align-items: flex-end; }
-.map-overlay-bl { bottom: 12px; left: 12px; }
-.map-overlay-br { bottom: 12px; right: 12px; }
-.map-overlay-tc { top: 12px; left: 50%; transform: translateX(-50%); }
-.map-overlay-bc { bottom: 12px; left: 50%; transform: translateX(-50%); }
+/* Corner offsets add the device safe-area inset so controls clear the notch / Dynamic
+   Island / status bar and the rounded screen corners in fullscreen on curved-screen phones.
+   env(safe-area-inset-*) is 0 unless the element sits at a true screen edge (i.e. fullscreen),
+   so these are behaviour-preserving for the in-card web layout. Requires viewport-fit=cover. */
+.map-overlay-tl { top: calc(12px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); }
+.map-overlay-tr { top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); align-items: flex-end; }
+.map-overlay-bl { bottom: calc(12px + env(safe-area-inset-bottom)); left: calc(12px + env(safe-area-inset-left)); }
+.map-overlay-br { bottom: calc(12px + env(safe-area-inset-bottom)); right: calc(12px + env(safe-area-inset-right)); }
+.map-overlay-tc { top: calc(12px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); }
+.map-overlay-bc { bottom: calc(12px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); }
 .map-overlay-center {
   position: absolute;
   top: 50%;
@@ -677,11 +723,20 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   cursor: pointer;
   backdrop-filter: blur(8px);
   box-shadow: 0 1px 4px rgba(0,0,0,0.15);
-  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  transition:
+    background var(--dur-fast) ease,
+    color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease,
+    transform var(--dur-fast) var(--ease-out);
 }
 .map-btn:hover {
   background: #fff;
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+/* Press feedback — the most-touched controls in the map window */
+.map-btn:active:not(:disabled) {
+  transform: scale(0.96);
+  transition: transform 120ms var(--ease-out);
 }
 .map-btn:disabled {
   opacity: 0.35;
@@ -829,7 +884,11 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   font-weight: 500;
   cursor: pointer;
   text-align: center;
-  transition: all 0.15s;
+  transition:
+    border-color var(--dur-fast) ease,
+    background-color var(--dur-fast) ease,
+    color var(--dur-fast) ease,
+    transform var(--dur-fast) var(--ease-out);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -837,6 +896,10 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
 }
 .map-layer-chip:hover {
   border-color: #94a3b8;
+}
+.map-layer-chip:active:not(:disabled) {
+  transform: scale(0.96);
+  transition: transform 120ms var(--ease-out);
 }
 .map-layer-chip.active {
   background: var(--upto-primary);
@@ -877,10 +940,14 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  transition: border-color 0.15s ease, transform 0.15s ease;
+  transition: border-color var(--dur-fast) ease, transform var(--dur-fast) var(--ease-out);
 }
 .map-layer-thumb:hover:not(:disabled) {
   border-color: #94a3b8;
+}
+.map-layer-thumb:active:not(:disabled) {
+  transform: scale(0.96);
+  transition: transform 120ms var(--ease-out);
 }
 .map-layer-thumb.active {
   border-color: var(--upto-primary);
@@ -994,7 +1061,18 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   color: #1e3a8a;
   box-shadow: 0 2px 8px rgba(0,0,0,0.12);
   z-index: 10;
+  transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
 }
+
+/* Enter from below with a fade instead of popping in.
+   translateX(-50%) is the centering transform — keep it in every state. */
+@starting-style {
+  .map-selected-trail {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px);
+  }
+}
+
 .map-selected-trail strong {
   font-weight: 600;
 }
@@ -1024,7 +1102,17 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   gap: 6px;
   z-index: 10;
   backdrop-filter: blur(4px);
+  transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
 }
+
+/* Enter from below with a fade — translateX(-50%) centering preserved in every state */
+@starting-style {
+  .map-loading-pill {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px);
+  }
+}
+
 .map-loading-dot {
   width: 8px;
   height: 8px;
@@ -1146,7 +1234,10 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   display: flex;
   align-items: center;
   gap: 4px;
-  transition: all 0.15s;
+  transition:
+    border-color var(--dur-fast) ease,
+    background-color var(--dur-fast) ease,
+    color var(--dur-fast) ease;
   color: #475569;
 }
 .note-type-chip:hover {
@@ -1272,7 +1363,7 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-large);
   overflow: hidden;
-  transition: var(--transition-smooth);
+  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
   position: relative;
 }
 
@@ -1286,9 +1377,11 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   background: var(--gradient-mountain);
 }
 
-.adventure-preview:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 2rem 4rem rgba(44, 62, 80, 0.2);
+@media (hover: hover) and (pointer: fine) {
+  .adventure-preview:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 2rem 4rem rgba(44, 62, 80, 0.2);
+  }
 }
 
 .adventure-header {
@@ -1325,11 +1418,11 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
 }
 
 .fade-in {
-  animation: fadeIn 0.6s ease-out;
+  animation: fadeIn 300ms var(--ease-out);
 }
 
 .slide-up {
-  animation: slideUp 0.8s ease-out;
+  animation: slideUp 300ms var(--ease-out);
 }
 
 @keyframes fadeIn {
@@ -1338,7 +1431,7 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(30px); }
+  from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -1388,13 +1481,16 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   backdrop-filter: blur(20px);
   border-bottom: 1px solid rgba(52, 152, 219, 0.2);
   box-shadow: var(--shadow-soft);
-  transition: var(--transition-smooth);
+  transition: background-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
 }
 
 .nav-link {
   color: var(--adventure-secondary-dark);
   font-weight: 500;
-  transition: var(--transition-smooth);
+  transition:
+    color var(--dur-fast) ease,
+    background-color var(--dur-fast) ease,
+    transform var(--dur-base) var(--ease-out);
   border-radius: var(--radius-md);
   position: relative;
 }
@@ -1402,7 +1498,12 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
 .nav-link:hover {
   color: var(--adventure-primary);
   background-color: var(--adventure-light-gray);
-  transform: translateY(-1px);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .nav-link:hover {
+    transform: translateY(-1px);
+  }
 }
 
 .nav-link.active {
@@ -1438,13 +1539,21 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   background: var(--adventure-accent);
   border: 1px solid var(--adventure-accent);
   color: white;
-  transition: var(--transition-smooth);
+  transition:
+    background-color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    transform var(--dur-base) var(--ease-out);
 }
 
 .copy-button:hover {
   background: var(--adventure-accent-dark);
   border-color: var(--adventure-accent-dark);
-  transform: translateY(-1px);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .copy-button:hover {
+    transform: translateY(-1px);
+  }
 }
 
 .copy-button.copied {
@@ -1490,12 +1599,22 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   }
 }
 
-/* Accessibility Enhancements */
+/* Accessibility Enhancements — reduced motion means gentler, not zero */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+  }
+  /* transitions: keep opacity/color fades that aid comprehension, drop movement */
+  * {
+    transition-property: opacity, background-color, border-color, color, box-shadow !important;
+  }
+  /* Exempt-by-need: loading indicators communicate ongoing work.
+     The spinner keeps its rotation; the map dot's pulse is opacity-only. */
+  .adventure-spinner,
+  .map-loading-dot {
+    animation-duration: 1s !important;
+    animation-iteration-count: infinite !important;
   }
 }
 
@@ -1548,24 +1667,27 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   transform: translateY(-10vh); /* Move content up by 10% of viewport height */
 }
 
-/* Button with hover description */
+/* Button with hover description — the description is a tooltip: fast in, fast out */
 .button-with-description {
   position: relative;
   display: inline-block;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform var(--dur-base) var(--ease-out);
 }
 
 .button-description {
   position: absolute;
   top: 100%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) translateY(4px);
   margin-top: 1rem;
   padding: 1rem 1.5rem;
   max-width: 400px;
   opacity: 0;
   visibility: hidden;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    visibility var(--dur-fast);
   font-size: 0.95rem;
   line-height: 1.6;
   text-align: center;
@@ -1575,14 +1697,16 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   pointer-events: none;
 }
 
-.button-with-description:hover {
-  transform: translateY(-8px);
-}
+@media (hover: hover) and (pointer: fine) {
+  .button-with-description:hover {
+    transform: translateY(-4px);
+  }
 
-.button-with-description:hover .button-description {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(-50%) translateY(0);
+  .button-with-description:hover .button-description {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 /* Responsive adjustments for minimal home */
@@ -2016,7 +2140,7 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
 
 .expand-chevron {
   color: var(--upto-text-muted);
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform var(--dur-slow) var(--ease-out);
   flex-shrink: 0;
 }
 
@@ -2024,11 +2148,13 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   transform: rotate(180deg);
 }
 
-/* Grid-template-rows height animation (no layout-property animation) */
+/* Grid-template-rows height animation — grid-template-rows IS a layout property,
+   but it's the only sane CSS way to animate height:auto (accepted trade-off).
+   The inner padding is constant; the collapsing grid row clips it. */
 .expand-content {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: grid-template-rows var(--dur-slow) var(--ease-out);
 }
 
 .expand-content.is-open {
@@ -2037,11 +2163,6 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
 
 .expand-inner {
   overflow: hidden;
-  padding-bottom: 0;
-  transition: padding-bottom 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.expand-content.is-open .expand-inner {
   padding-bottom: 28px;
 }
 
@@ -3131,18 +3252,13 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   border-radius: 9999px;
 }
 
-/* Pulsing dot for active status */
+/* Pulsing dot for active status — @keyframes pulse-ring defined once above */
 .public-view-pulse {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--upto-success);
   animation: pulse-ring 2s ease infinite;
-}
-
-@keyframes pulse-ring {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(1.4); }
 }
 
 .public-view-description {

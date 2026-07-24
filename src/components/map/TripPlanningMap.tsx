@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable no-console */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import toast from 'react-hot-toast';
 import * as Cesium from 'cesium';
 import { MapPin, Route, StickyNote, Download, RotateCcw, Navigation, Layers, Undo2, Redo2, Footprints, X, Eye, Pencil, Check, Play, Square, TrendingUp, Maximize2, Minimize2 } from 'lucide-react';
 import { getTopoTileUrl, LINZ_CESIUM_RECTANGLE, LINZ_ATTRIBUTION } from '../../services/LinzMapService';
@@ -13,7 +14,7 @@ import {
   NSW_ATTRIBUTION,
 } from '../../services/AusMapService';
 import { resolveBasemap, type MapLayer } from '../../services/BasemapSuggest';
-import { flyToRouteBounds } from '../../services/MapCamera';
+import { flyToRouteBounds, prefersReducedMotion } from '../../services/MapCamera';
 import { framingPoints, pointWithinView } from '../../services/mapFraming';
 import { detectDeviceTier, applyPerformanceProfile } from '../../services/MapPerformance';
 import { API_CONFIG } from '../../config/api';
@@ -633,7 +634,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
                     pos.coords.latitude,
                     8000,
                   ),
-                  duration: 1.2,
+                  duration: prefersReducedMotion() ? 0 : 1.2,
                 });
               },
               () => { /* permission denied / unavailable — leave default view */ },
@@ -682,7 +683,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         pitch: Cesium.Math.toRadians(-45),
         roll: 0.0,
       },
-      duration: 1.2,
+      duration: prefersReducedMotion() ? 0 : 1.2,
     });
   }, [centerLat, centerLng, hasPreselectedTrail]);
 
@@ -751,13 +752,23 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
     };
   }
 
+  // Under requestRenderMode a single requestRender() after an imagery add/remove can paint
+  // before the swap has fully settled — most visible switching TO satellite in 2D, where the
+  // base layer must repaint through the just-removed topo overlay and the one frame lands stale
+  // (looks "stuck on topo"). Nudge a few renders across ~1s so the settled scene is shown.
+  const nudgeRenders = (viewer: any) => {
+    [0, 120, 300, 600, 1000].forEach((ms) =>
+      setTimeout(() => { try { viewer.scene.requestRender(); } catch { /* torn down */ } }, ms),
+    );
+  };
+
   const handleLayerChange = (target: MapLayer) => {
     if (!viewerRef.current) return;
     applyBasemap(viewerRef.current, Cesium, target);
     localStorage.setItem(LAYER_STORAGE_KEY, target);
     setUserOverride(target);
     setMapLayer(target);
-    viewerRef.current.scene.requestRender();
+    nudgeRenders(viewerRef.current);
   };
 
   // Debounced viewport → basemap auto-switch.
@@ -956,6 +967,13 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
     }
     const positions = trackDrawerRef.current?.getLatestTrackPositions();
     if (!positions || positions.length < 2) return;
+
+    // Reduced motion: a 6–60s continuous camera flight is exactly what the
+    // OS setting asks to avoid. Skip before touching scene mode or basemap.
+    if (prefersReducedMotion()) {
+      toast('Route flyover is disabled while your system prefers reduced motion.');
+      return;
+    }
 
     // Flyover looks best as 3D satellite (topo tiles distort draped on terrain).
     // Remember the working view, force 3D + satellite, and restore on stop.
@@ -1238,7 +1256,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
           pitch: Cesium.Math.toRadians(-45),
           roll: 0.0,
         },
-        duration: 1.5,
+        duration: prefersReducedMotion() ? 0 : 1.2,
       });
     }
   };
@@ -1258,7 +1276,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
               pitch: Cesium.Math.toRadians(-45),
               roll: 0.0,
             },
-            duration: 1.5,
+            duration: prefersReducedMotion() ? 0 : 1.2,
           });
           onWaypointAdded?.({
             lat: coords.latitude,

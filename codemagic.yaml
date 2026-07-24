@@ -18,6 +18,13 @@ workflows:
         # Codemagic variable group holding CERTIFICATE_PRIVATE_KEY (secure) — the RSA key used to
         # create/reuse the iOS Distribution certificate. Add it in the app's Environment variables.
         - ios_signing
+        # Frontend build-time keys. Vite bakes any VITE_* env var present in the build shell into
+        # the bundle, so these must be added to a Codemagic group or the native app ships without
+        # them: no VITE_CESIUM_ION_TOKEN → no Ion satellite imagery AND no 3D terrain (topo still
+        # works, it's backend-proxied). Add VITE_CESIUM_ION_TOKEN (+ VITE_WHAT3WORDS_API_KEY,
+        # VITE_LINZ_LDS_API_KEY) with the same values as Vercel. These are client-side keys
+        # (already public in the web bundle), but keep them in a group so they're not committed.
+        - vite_env
       vars:
         BUNDLE_ID: "world.upto.app"
       node: 22
@@ -28,7 +35,12 @@ workflows:
       - name: Install JS dependencies
         script: npm ci
       - name: Build the web bundle (dist/)
-        script: npm run build
+        script: |
+          if [ -z "$VITE_CESIUM_ION_TOKEN" ]; then
+            echo "WARNING: VITE_CESIUM_ION_TOKEN is empty — Ion satellite imagery + 3D terrain"
+            echo "         will be disabled in the native app. Add the vite_env group in Codemagic."
+          fi
+          npm run build
       - name: Generate the iOS platform (gitignored — created fresh each build)
         script: |
           if [ ! -d "ios" ]; then

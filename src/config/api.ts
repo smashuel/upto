@@ -7,7 +7,7 @@ const isDevelopment = import.meta.env.MODE === 'development' || import.meta.env.
 // capacitor://localhost / https://localhost, so the web's same-origin '' base (which relies on
 // the Vercel /api/* proxy) resolves to the WebView itself, not the backend. Native builds must
 // therefore target an absolute backend origin. (Stage 2 finding, 2026-07-09.)
-const isNativePlatform = (): boolean =>
+export const isNativePlatform = (): boolean =>
   !!(globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.();
 
 const NATIVE_API_BASE_URL = import.meta.env.VITE_NATIVE_API_BASE_URL || 'https://api.upto.world';

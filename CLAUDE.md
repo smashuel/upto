@@ -74,7 +74,7 @@ CORS is configured on the backend to allow requests from `localhost:5173`, `loca
 ## External APIs and Services
 
 ### Cesium Ion (3D Globe)
-- **What**: Satellite imagery (Sentinel-2, asset ID 2) and world terrain (asset ID 1) for the 3D trip planning map
+- **What**: Satellite imagery (Bing Maps Aerial, asset ID 2) and world terrain (asset ID 1) for the 3D trip planning map
 - **How**: Bundled from the npm `cesium` package via `vite-plugin-cesium` (which sets `CESIUM_BASE_URL`, self-hosts Cesium's static assets, and injects `widgets.css`), imported as `import * as Cesium from 'cesium'`; configured in `TripPlanningMap.tsx`
 - **Auth**: `VITE_CESIUM_ION_TOKEN` env var. Falls back to OpenStreetMap tiles if token is missing
 - **Used by**: `TripPlanningMap.tsx`, `WaypointManager.ts`, `TrackDrawer.ts`, `NoteManager.ts`

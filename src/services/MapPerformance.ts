@@ -19,7 +19,9 @@
  * follow-up. See brain/plans/compass_artifact.md.
  */
 
-export type DeviceTier = 'low' | 'mid' | 'high';
+import { classifyDeviceTier, type DeviceTier } from './deviceTier';
+
+export type { DeviceTier };
 
 export interface PerfProfile {
   /** Drawing-buffer scale. 1.0 = render at device pixel ratio (crisp/expensive). */
@@ -67,20 +69,18 @@ export const PERF_PROFILES: Record<DeviceTier, PerfProfile> = {
 };
 
 /**
- * Classify the current device. Desktop is always `high`. Mobile splits on the
- * Device Memory API (Chrome/Android) and logical core count — both heuristics,
- * both absent on iOS Safari, where we conservatively assume `mid`.
+ * Read the device signals off `navigator` and classify. The heuristics themselves live in
+ * deviceTier.ts so they can be unit-tested — notably the iOS carve-out: Safari reports
+ * hardwareConcurrency = 4 on iPhones, so a naive core-count rule demoted every iPhone to
+ * the `low` profile and made satellite imagery look pixelated on a high-DPI screen.
  */
 export function detectDeviceTier(): DeviceTier {
   if (typeof navigator === 'undefined') return 'high';
-  const ua = navigator.userAgent || '';
-  const isMobile = /Android|iPhone|iPad|iPod|Mobile|Silk|Kindle/i.test(ua);
-  if (!isMobile) return 'high';
-
-  const mem = (navigator as any).deviceMemory as number | undefined; // GB, Chrome-only
-  const cores = navigator.hardwareConcurrency || 0;
-  if ((mem && mem <= 4) || (cores && cores > 0 && cores <= 4)) return 'low';
-  return 'mid';
+  return classifyDeviceTier({
+    userAgent: navigator.userAgent || '',
+    cores: navigator.hardwareConcurrency || 0,
+    deviceMemory: (navigator as any).deviceMemory as number | undefined, // GB, Chromium-only
+  });
 }
 
 /**

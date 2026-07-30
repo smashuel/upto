@@ -13,7 +13,7 @@ Picks the right topographic basemap for the current viewport and honours the use
 
 | Layer | Source | Coverage | Zoom | Key? | Proxy? |
 |-------|--------|----------|------|------|--------|
-| Satellite | Cesium Ion (Sentinel-2) or OSM fallback | Global | — | Ion token (optional) | No |
+| Satellite | Cesium Ion (Bing Maps Aerial) or OSM fallback | Global | — | Ion token (optional) | No |
 | LINZ Topo50 (`topo-linz`) | LINZ LDS layer 767 | NZ (165.8–178.6°E, 33.9–47.5°S) | 5–19 | Yes (server-side) | Yes — `/api/tiles/topo/:z/:x/:y` |
 | GA National (`topo-ga`) | Geoscience Australia ArcGIS REST | AU-wide (1:250k) | 4–14 | No | No — direct |
 | NSW Topo (`topo-nsw`) | NSW Spatial Services ArcGIS REST | NSW (+ ACT enclave) (1:25k–1:100k) | 7–16 | No | No — direct |

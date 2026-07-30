@@ -15,6 +15,9 @@
  * Attribution: © LINZ CC BY 4.0 — must be displayed when layer is active.
  */
 
+import { isNativePlatform } from '../config/api';
+import { resolveTopoTileUrl } from './topoTileUrl';
+
 /** NZ mainland + coastal islands bounding box (EPSG:4326) */
 export const NZ_BOUNDS = {
   west: 165.8,
@@ -46,23 +49,13 @@ export function isWithinNZBounds(lat: number, lng: number): boolean {
  * Use with Cesium.UrlTemplateImageryProvider: `url` param.
  */
 export function getTopoTileUrl(): string | null {
-  const isDev = import.meta.env.DEV;
-
-  if (isDev) {
-    const devKey = import.meta.env.VITE_LINZ_LDS_API_KEY;
-    if (devKey && devKey !== 'your_linz_lds_api_key_here') {
-      return `https://data.linz.govt.nz/services;key=${devKey}/tiles/v4/layer=767/EPSG:3857/{z}/{x}/{y}.png`;
-    }
-    // Dev, no key — check if dev backend is at a known full URL
-    const devApi = import.meta.env.VITE_DEV_API_URL;
-    if (devApi) {
-      return `${devApi}/api/tiles/topo/{z}/{x}/{y}`;
-    }
-    return null; // can't serve topo tiles without a key in dev
-  }
-
-  // Production: same-origin proxy through Vercel → Linode backend
-  return '/api/tiles/topo/{z}/{x}/{y}';
+  return resolveTopoTileUrl({
+    isDev: import.meta.env.DEV,
+    isNative: isNativePlatform(),
+    devLinzKey: import.meta.env.VITE_LINZ_LDS_API_KEY,
+    devApiUrl: import.meta.env.VITE_DEV_API_URL,
+    nativeApiBaseUrl: import.meta.env.VITE_NATIVE_API_BASE_URL,
+  });
 }
 
 /** Attribution string required by LINZ CC BY 4.0 licence */

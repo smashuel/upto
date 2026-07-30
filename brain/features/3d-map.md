@@ -13,7 +13,7 @@ Cesium-based 2D/3D map that anchors the Location step of the wizard. Also used s
 
 - Bundled from the npm `cesium` package (1.133.x) via `vite-plugin-cesium`, which sets `CESIUM_BASE_URL`, self-hosts Cesium's static assets, and injects `widgets.css` — no CDN, no `window.Cesium` global
 - Imported as `import * as Cesium from 'cesium'` in every map module
-- Asset IDs: `2` (Sentinel-2 satellite imagery), `1` (world terrain)
+- Asset IDs: `2` (Bing Maps Aerial satellite imagery), `1` (world terrain)
 - Falls back to OpenStreetMap tiles if `VITE_CESIUM_ION_TOKEN` is missing
 - `scene3DOnly` is **NOT** set — required for `morphTo2D` to work
 
@@ -25,7 +25,7 @@ Cesium-based 2D/3D map that anchors the Location step of the wizard. Also used s
 
 ## Imagery layers
 
-- **Sat** — Cesium Ion Sentinel-2
+- **Sat** — Cesium Ion Bing Maps Aerial
 - **Topo** — LINZ Topo50 (NZ only; see [linz-topo.md](linz-topo.md))
 - Toggle in the layers popover, persisted to `localStorage['upto_map_layer']`
 - Quality tuning: `globe.maximumScreenSpaceError = 1.333`, `msaaSamples = 4`, LINZ `maximumLevel: 19`

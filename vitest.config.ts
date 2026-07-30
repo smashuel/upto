@@ -15,6 +15,8 @@ export default defineConfig({
       'src/services/positionSource.test.ts',
       'src/services/baseImagery.test.ts',
       'src/services/mapDiagnostics.test.ts',
+      'src/services/topoTileUrl.test.ts',
+      'src/services/deviceTier.test.ts',
     ],
     environment: 'node',
   },

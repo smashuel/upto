@@ -98,10 +98,10 @@ export const TripOverviewStep: React.FC = () => {
                     />
                     <Form.Label
                       htmlFor={`activity-${activity.value}`}
-                      className={`activity-card h-100 d-block p-3 rounded cursor-pointer ${
+                      className={`activity-card selectable-card h-100 d-block p-3 rounded cursor-pointer ${
                         isSelected ? 'selected border-primary bg-primary bg-opacity-10' : 'border'
                       }`}
-                      style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+                      style={{ cursor: 'pointer' }}
                     >
                       <div className="text-center">
                         <div className={`activity-icon mb-2 ${isSelected ? 'text-primary' : 'text-muted'}`}>

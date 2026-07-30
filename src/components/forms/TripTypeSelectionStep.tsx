@@ -99,10 +99,10 @@ export const TripTypeSelectionStep: React.FC = () => {
                     />
                     <Form.Label
                       htmlFor={`activity-${activity.value}`}
-                      className={`activity-card h-100 d-block p-3 rounded cursor-pointer ${
+                      className={`activity-card selectable-card h-100 d-block p-3 rounded cursor-pointer ${
                         isSelected ? 'selected border-primary bg-primary bg-opacity-10' : 'border'
                       }`}
-                      style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+                      style={{ cursor: 'pointer' }}
                     >
                       <div className="text-center">
                         <div className={`activity-icon mb-2 ${isSelected ? 'text-primary' : 'text-muted'}`}>
@@ -149,10 +149,10 @@ export const TripTypeSelectionStep: React.FC = () => {
                         />
                         <Form.Label
                           htmlFor={`difficulty-${level.value}`}
-                          className={`difficulty-card h-100 d-block p-3 rounded text-center cursor-pointer ${
+                          className={`difficulty-card selectable-card h-100 d-block p-3 rounded text-center cursor-pointer ${
                             isSelected ? 'selected border-success bg-success bg-opacity-10' : 'border'
                           }`}
-                          style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+                          style={{ cursor: 'pointer' }}
                         >
                           <h6 className={`mb-2 ${isSelected ? 'text-success' : ''}`}>
                             {level.label}

@@ -202,8 +202,8 @@ export const TripLinkLocationStep: React.FC = () => {
                     {routeSuggestions.map((suggestion) => (
                       <Col key={suggestion.id} md={6} lg={4}>
                         <div
-                          className="suggestion-card p-3 border rounded cursor-pointer"
-                          style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+                          className="suggestion-card selectable-card p-3 border rounded cursor-pointer"
+                          style={{ cursor: 'pointer' }}
                           onClick={() => handleSuggestionSelect(suggestion)}
                         >
                           <div className="d-flex justify-content-between align-items-start mb-2">

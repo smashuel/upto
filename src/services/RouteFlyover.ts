@@ -1,12 +1,17 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import * as Cesium from 'cesium';
+import { prefersReducedMotion } from './MapCamera';
 /**
  * RouteFlyover — animates a chase-cam flight along a finished route.
  *
  * Uses Cesium's clock + SampledPositionProperty so the camera interpolates
  * smoothly along the path with Hermite spline smoothing. A velocity-driven
  * orientation property keeps the heading aligned with the direction of travel.
+ *
+ * Skipped entirely under prefers-reduced-motion — a 6–60s continuous camera
+ * flight is exactly the kind of sustained whole-viewport motion the setting
+ * exists to avoid. `start()` returns false so callers can notify the user.
  */
 
 type LngLatH = [number, number, number];
@@ -37,6 +42,7 @@ export default class RouteFlyover {
   start(positions: LngLatH[], opts: FlyoverOptions = {}): boolean {
     if (this.running) return false;
     if (positions.length < 2) return false;
+    if (prefersReducedMotion()) return false;
 
     const duration = Math.max(6, Math.min(60, opts.duration ?? Math.max(10, positions.length * 1.2)));
     const altitude = opts.altitude ?? 250;

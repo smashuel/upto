@@ -914,6 +914,29 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   flex: unset;
   width: 100%;
 }
+/* On-device map diagnostics — only rendered when Cesium Ion is unhealthy. Selectable text so
+   the message can be copied off a phone into an issue (no Safari Web Inspector available). */
+.map-layers-diagnostics {
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.map-layers-diagnostics-summary {
+  font-size: 11px;
+  font-weight: 600;
+  color: #991b1b;
+}
+.map-layers-diagnostics-detail {
+  font-size: 10px;
+  color: #7f1d1d;
+  margin-top: 4px;
+  word-break: break-word;
+}
+
 .map-layers-attribution {
   font-size: 0.65rem;
   color: #94a3b8;

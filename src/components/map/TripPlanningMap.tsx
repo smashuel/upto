@@ -14,6 +14,8 @@ import {
   NSW_ATTRIBUTION,
 } from '../../services/AusMapService';
 import { resolveBasemap, type MapLayer } from '../../services/BasemapSuggest';
+import { selectBaseImagery, OSM_TILE_URL } from '../../services/baseImagery';
+import { describeMapDiagnostics } from '../../services/mapDiagnostics';
 import { flyToRouteBounds, prefersReducedMotion } from '../../services/MapCamera';
 import { framingPoints, pointWithinView } from '../../services/mapFraming';
 import { detectDeviceTier, applyPerformanceProfile } from '../../services/MapPerformance';
@@ -376,6 +378,11 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   const [selectedTrail, setSelectedTrail] = useState<TrailSelection | null>(null);
   const [trailsLoading, setTrailsLoading] = useState(false);
   const [layersPanelOpen, setLayersPanelOpen] = useState(false);
+  // Cesium Ion failure capture for the on-device diagnostics panel. There's no Mac in this
+  // toolchain, so a TestFlight build's WKWebView console is unreadable — these surface the
+  // errors in the UI instead. See services/mapDiagnostics.ts.
+  const [ionImageryError, setIonImageryError] = useState<string | null>(null);
+  const [terrainError, setTerrainError] = useState<string | null>(null);
   const [trailLayerOpacity, setTrailLayerOpacity] = useState<number>(() => {
     const saved = localStorage.getItem('upto_trail_layer_opacity');
     const n = saved ? Number(saved) : 0.9;
@@ -426,28 +433,32 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
       try {
 
         const cesiumToken = import.meta.env.VITE_CESIUM_ION_TOKEN;
-        const hasValidToken = cesiumToken && cesiumToken !== 'your_cesium_ion_token_here';
+        const imagery = selectBaseImagery(cesiumToken); // pure, tested — see services/baseImagery.ts
+        const hasValidToken = imagery.kind === 'ion-satellite';
 
         if (hasValidToken) {
           Cesium.Ion.defaultAccessToken = cesiumToken;
         }
 
-        // Satellite base layer (always present)
+        const makeOsmProvider = () =>
+          new Cesium.OpenStreetMapImageryProvider({ url: OSM_TILE_URL });
+
+        // Satellite base layer (always present).
         let baseLayer;
-        if (hasValidToken) {
-          try {
-            baseLayer = Cesium.ImageryLayer.fromProviderAsync(
-              Cesium.IonImageryProvider.fromAssetId(2),
-            );
-          } catch {
-            baseLayer = Cesium.ImageryLayer.fromProviderAsync(
-              Promise.resolve(new Cesium.OpenStreetMapImageryProvider({ url: 'https://a.tile.openstreetmap.org/' })),
-            );
-          }
-        } else {
+        if (imagery.kind === 'ion-satellite') {
+          // fromAssetId returns a PROMISE, so a synchronous try/catch could never catch its
+          // rejection — the previous code's OSM fallback was dead in exactly the failure case it
+          // existed for, leaving the map with NO imagery (the reported "satellite doesn't work").
+          // Recover on the promise instead, and record the cause for the diagnostics panel.
           baseLayer = Cesium.ImageryLayer.fromProviderAsync(
-            Promise.resolve(new Cesium.OpenStreetMapImageryProvider({ url: 'https://a.tile.openstreetmap.org/' })),
+            Cesium.IonImageryProvider.fromAssetId(imagery.assetId).catch((err: unknown) => {
+              console.error('Cesium Ion satellite imagery failed; falling back to OSM:', err);
+              setIonImageryError(err instanceof Error ? err.message : String(err));
+              return makeOsmProvider();
+            }),
           );
+        } else {
+          baseLayer = Cesium.ImageryLayer.fromProviderAsync(Promise.resolve(makeOsmProvider()));
         }
 
         const viewer = new Cesium.Viewer(mapContainerRef.current!, {
@@ -504,6 +515,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
             viewer.terrainProvider = terrainProvider;
           } catch (error) {
             console.error('Could not load Cesium World Terrain:', error);
+            setTerrainError(error instanceof Error ? error.message : String(error));
           }
         }
 
@@ -891,8 +903,11 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
           requestVertexNormals: true,
         });
         viewer.terrainProvider = terrainProvider;
-      } catch {
-        // Fall back to ellipsoid
+        setTerrainError(null); // recovered
+      } catch (error) {
+        // Fall back to ellipsoid — but record it: silently flat "3D" is the reported bug.
+        console.error('Could not load Cesium World Terrain on 3D switch:', error);
+        setTerrainError(error instanceof Error ? error.message : String(error));
       }
     }
     localStorage.setItem(SCENE_MODE_STORAGE_KEY, next);
@@ -1510,6 +1525,27 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
               {mapLayer === 'topo-nsw' && (
                 <div className="map-layers-attribution">{NSW_ATTRIBUTION}</div>
               )}
+
+              {/* On-device map diagnostics. Only shown when something is actually wrong, so it
+                  stays out of the way in the healthy case. This is the only way to read a
+                  Cesium Ion failure on a TestFlight build — there's no Mac for Safari Web
+                  Inspector. Classification is pure + tested (services/mapDiagnostics.ts). */}
+              {(() => {
+                const diag = describeMapDiagnostics({
+                  token: import.meta.env.VITE_CESIUM_ION_TOKEN,
+                  ionImageryError,
+                  terrainError,
+                });
+                if (diag.health === 'ok') return null;
+                return (
+                  <div className="map-layers-diagnostics">
+                    <div className="map-layers-diagnostics-summary">{diag.summary}</div>
+                    {diag.details.map((d, i) => (
+                      <div key={i} className="map-layers-diagnostics-detail">{d}</div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>

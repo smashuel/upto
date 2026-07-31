@@ -18,6 +18,7 @@ export default defineConfig({
       'src/services/topoTileUrl.test.ts',
       'src/services/deviceTier.test.ts',
       'src/services/screenSpaceError.test.ts',
+      'src/services/BasemapSuggest.test.ts',
     ],
     environment: 'node',
   },

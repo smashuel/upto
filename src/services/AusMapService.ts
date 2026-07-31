@@ -16,41 +16,11 @@
  * matching BOUNDS / URL / ATTRIBUTION triplets.
  */
 
-/** AU mainland + Tasmania bounding box (EPSG:4326) */
-export const AU_BOUNDS = {
-  west: 112.0,
-  south: -44.0,
-  east: 154.0,
-  north: -10.0,
-} as const;
+// Geography lives in regionBounds.ts (pure, env-free); re-exported here so existing
+// importers of this module are unaffected.
+import { AU_BOUNDS, NSW_BOUNDS } from './regionBounds';
 
-/** NSW (including ACT enclave) bounding box (EPSG:4326) */
-export const NSW_BOUNDS = {
-  west: 140.999,
-  south: -37.505,
-  east: 153.639,
-  north: -28.157,
-} as const;
-
-/** Returns true if the coordinate falls within approximate AU bounds */
-export function isWithinAuBounds(lat: number, lng: number): boolean {
-  return (
-    lat >= AU_BOUNDS.south &&
-    lat <= AU_BOUNDS.north &&
-    lng >= AU_BOUNDS.west &&
-    lng <= AU_BOUNDS.east
-  );
-}
-
-/** Returns true if the coordinate falls within approximate NSW bounds */
-export function isWithinNswBounds(lat: number, lng: number): boolean {
-  return (
-    lat >= NSW_BOUNDS.south &&
-    lat <= NSW_BOUNDS.north &&
-    lng >= NSW_BOUNDS.west &&
-    lng <= NSW_BOUNDS.east
-  );
-}
+export { AU_BOUNDS, NSW_BOUNDS, isWithinAuBounds, isWithinNswBounds } from './regionBounds';
 
 /** Geoscience Australia national topo — key-less ArcGIS REST, {z}/{y}/{x} order */
 export const GA_TOPO_URL =

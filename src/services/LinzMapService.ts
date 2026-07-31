@@ -18,23 +18,11 @@
 import { isNativePlatform } from '../config/api';
 import { resolveTopoTileUrl } from './topoTileUrl';
 
-/** NZ mainland + coastal islands bounding box (EPSG:4326) */
-export const NZ_BOUNDS = {
-  west: 165.8,
-  south: -47.5,
-  east: 178.6,
-  north: -33.9,
-} as const;
+// Geography lives in regionBounds.ts (pure, env-free); re-exported here so existing
+// importers of this module are unaffected.
+import { NZ_BOUNDS } from './regionBounds';
 
-/** Returns true if the coordinate falls within approximate NZ bounds */
-export function isWithinNZBounds(lat: number, lng: number): boolean {
-  return (
-    lat >= NZ_BOUNDS.south &&
-    lat <= NZ_BOUNDS.north &&
-    lng >= NZ_BOUNDS.west &&
-    lng <= NZ_BOUNDS.east
-  );
-}
+export { NZ_BOUNDS, isWithinNZBounds } from './regionBounds';
 
 /**
  * XYZ tile URL template for the LINZ Topo50 layer.

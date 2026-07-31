@@ -13,7 +13,15 @@ import {
   GA_ATTRIBUTION,
   NSW_ATTRIBUTION,
 } from '../../services/AusMapService';
-import { resolveBasemap, type MapLayer } from '../../services/BasemapSuggest';
+import {
+  resolveBasemap,
+  regionalTopo,
+  choiceFromStored,
+  choiceFromLayer,
+  type MapLayer,
+  type BasemapChoice,
+  type TopoLayer,
+} from '../../services/BasemapSuggest';
 import { selectBaseImagery, OSM_TILE_URL } from '../../services/baseImagery';
 import { describeMapDiagnostics } from '../../services/mapDiagnostics';
 import { flyToRouteBounds, prefersReducedMotion } from '../../services/MapCamera';
@@ -301,6 +309,20 @@ function formatTime(hours: number): string {
   return `${h}h ${m}m`;
 }
 
+// The Topo button is one button, but three different products can sit behind it. Each
+// licence requires attribution by name, so the panel names whichever is actually rendering.
+const TOPO_SOURCE_LABEL: Record<TopoLayer, string> = {
+  'topo-linz': 'LINZ Topo50',
+  'topo-ga': 'GA National (Australia)',
+  'topo-nsw': 'NSW Topo',
+};
+
+const TOPO_THUMB_CLASS: Record<TopoLayer, string> = {
+  'topo-linz': 'map-layer-thumb-topo',
+  'topo-ga': 'map-layer-thumb-ga',
+  'topo-nsw': 'map-layer-thumb-nsw',
+};
+
 const LAYER_STORAGE_KEY = 'upto_map_layer';
 const TRAIL_LAYER_STORAGE_KEY = 'upto_trail_layer';
 const SCENE_MODE_STORAGE_KEY = 'upto_scene_mode';
@@ -343,29 +365,25 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   const [mapMode, setMapMode] = useState<MapMode>({ type: 'view', active: false });
   const [cesiumReady, setCesiumReady] = useState(false);
   const topoTileUrl = getTopoTileUrl(); // null if no LINZ key available
-  // User's durable preference (null = let auto-detect decide). Persisted across
-  // sessions; honoured only while the centre is still inside the preference's
-  // native region — otherwise we fall through to the viewport suggestion.
-  const [userOverride, setUserOverride] = useState<MapLayer | null>(() => {
-    // A saved plannedBasemap (view pages) wins over the local session preference:
-    // pinning it as the override keeps viewport auto-resolve from switching away
-    // while the centre is still inside its region.
-    if (plannedBasemap) return plannedBasemap;
-    const raw = localStorage.getItem(LAYER_STORAGE_KEY);
-    if (!raw) return null;
-    if (raw === 'topo') return 'topo-linz'; // back-compat migration
-    if (raw === 'satellite' || raw === 'topo-linz' || raw === 'topo-ga' || raw === 'topo-nsw') {
-      return raw;
-    }
-    return null;
+  // The user's durable preference — Satellite or Topo, nothing more granular.
+  // null = no preference yet, let the viewport decide. Which *regional* topo product
+  // renders is derived from the viewport, never chosen by the user.
+  const [userChoice, setUserChoice] = useState<BasemapChoice | null>(() => {
+    // A saved plannedBasemap (view pages) wins over the local session preference, so a
+    // trip reopens on the canvas it was drawn on.
+    if (plannedBasemap) return choiceFromLayer(plannedBasemap);
+    return choiceFromStored(localStorage.getItem(LAYER_STORAGE_KEY));
   });
   // What's actually rendering right now (diverges from userOverride during auto-switch).
   // plannedBasemap (view) wins; else initialMode='2d-topo' forces LINZ on mount.
   const [mapLayer, setMapLayer] = useState<MapLayer>(() => {
     if (plannedBasemap) return plannedBasemap;
     if (initialMode === '2d-topo' && topoTileUrl) return 'topo-linz';
-    return userOverride ?? 'satellite';
+    return userChoice === 'topo' ? 'topo-linz' : 'satellite';
   });
+  // Whether any topo product covers the current viewport centre. Drives the Topo button's
+  // unavailable state, so "Topo does nothing here" is explained rather than just inert.
+  const [topoAvailableHere, setTopoAvailableHere] = useState(true);
   const [sceneMode, setSceneMode] = useState<SceneMode>(() => {
     if (initialMode === '2d-topo') return '2d';
     const saved = localStorage.getItem(SCENE_MODE_STORAGE_KEY) as SceneMode | null;
@@ -537,9 +555,11 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
           if (plannedBasemap !== 'satellite') applyBasemap(viewer, Cesium, plannedBasemap);
         } else if (initialMode === '2d-topo' && topoTileUrl) {
           applyBasemap(viewer, Cesium, 'topo-linz');
-          localStorage.setItem(LAYER_STORAGE_KEY, 'topo-linz');
-        } else if (userOverride && userOverride !== 'satellite') {
-          applyBasemap(viewer, Cesium, userOverride);
+          localStorage.setItem(LAYER_STORAGE_KEY, 'topo');
+        } else if (userChoice === 'topo') {
+          // Provisional: the camera hasn't settled yet, so auto-switch will refine this to
+          // the right regional product on the first moveEnd.
+          applyBasemap(viewer, Cesium, 'topo-linz');
         }
 
         // Morph to 2D before any camera movement so flyTo lands in the right scene mode.
@@ -781,13 +801,31 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
     );
   };
 
-  const handleLayerChange = (target: MapLayer) => {
-    if (!viewerRef.current) return;
-    applyBasemap(viewerRef.current, Cesium, target);
-    localStorage.setItem(LAYER_STORAGE_KEY, target);
-    setUserOverride(target);
+  /**
+   * Handle a Satellite/Topo click. The user picks a *kind* of map; which regional topo
+   * product that becomes is resolved from wherever the camera currently is.
+   */
+  const handleChoiceChange = (choice: BasemapChoice) => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+
+    let target: MapLayer = 'satellite';
+    if (choice === 'topo') {
+      const carto = viewer.camera.positionCartographic;
+      target = carto
+        ? resolveBasemap(
+            Cesium.Math.toDegrees(carto.latitude),
+            Cesium.Math.toDegrees(carto.longitude),
+            'topo',
+          )
+        : 'topo-linz';
+    }
+
+    applyBasemap(viewer, Cesium, target);
+    localStorage.setItem(LAYER_STORAGE_KEY, choice);
+    setUserChoice(choice);
     setMapLayer(target);
-    nudgeRenders(viewerRef.current);
+    nudgeRenders(viewer);
   };
 
   // Debounced viewport → basemap auto-switch.
@@ -807,7 +845,8 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
       if (!carto) return;
       const lat = Cesium.Math.toDegrees(carto.latitude);
       const lng = Cesium.Math.toDegrees(carto.longitude);
-      const target = resolveBasemap(lat, lng, userOverride);
+      setTopoAvailableHere(regionalTopo(lat, lng) !== null);
+      const target = resolveBasemap(lat, lng, userChoice);
       if (target === mapLayer) return;
       applyBasemap(viewer, Cesium, target);
       setMapLayer(target);
@@ -828,7 +867,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
       if (timer) clearTimeout(timer);
       try { viewer.camera.moveEnd.removeEventListener(onMoveEnd); } catch { /* ignore */ }
     };
-  }, [cesiumReady, userOverride, mapLayer]);
+  }, [cesiumReady, userChoice, mapLayer]);
 
   // Report the currently-rendered basemap up so the wizard can persist it as the
   // TripLink's plannedBasemap (Slice 04). Fires on mount and on every switch.
@@ -1432,54 +1471,51 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
             <div className="map-layers-panel">
               <div className="map-layers-title">Layers</div>
 
-              {/* Basemap */}
+              {/* Basemap — two choices only. Which regional topo product renders is
+                  resolved from the viewport, not picked by the user. */}
               <div className="map-layers-section">
                 <div className="map-layers-label">Basemap</div>
                 <div className="map-layers-thumbs">
                   <button
                     type="button"
                     className={`map-layer-thumb ${mapLayer === 'satellite' ? 'active' : ''}`}
-                    onClick={() => mapLayer !== 'satellite' && handleLayerChange('satellite')}
+                    onClick={() => mapLayer !== 'satellite' && handleChoiceChange('satellite')}
                     title="Satellite imagery"
                   >
                     <span className="map-layer-thumb-preview map-layer-thumb-satellite" />
                     <span className="map-layer-thumb-label">Satellite</span>
                   </button>
-                </div>
-                <div className="map-layers-sublabel">New Zealand</div>
-                <div className="map-layers-thumbs">
                   <button
                     type="button"
-                    className={`map-layer-thumb ${mapLayer === 'topo-linz' ? 'active' : ''}`}
-                    onClick={() => mapLayer !== 'topo-linz' && handleLayerChange('topo-linz')}
-                    disabled={!topoTileUrl}
-                    title={topoTileUrl ? 'LINZ Topo50' : 'Topo unavailable (no LINZ key)'}
+                    className={`map-layer-thumb ${mapLayer !== 'satellite' ? 'active' : ''}`}
+                    onClick={() => userChoice !== 'topo' && handleChoiceChange('topo')}
+                    disabled={!topoTileUrl && !topoAvailableHere}
+                    title={
+                      topoAvailableHere
+                        ? 'Topographic map'
+                        : 'No topo coverage here — showing satellite'
+                    }
                   >
-                    <span className="map-layer-thumb-preview map-layer-thumb-topo" />
-                    <span className="map-layer-thumb-label">LINZ Topo</span>
+                    <span
+                      className={`map-layer-thumb-preview ${
+                        mapLayer === 'satellite'
+                          ? TOPO_THUMB_CLASS['topo-linz']
+                          : TOPO_THUMB_CLASS[mapLayer]
+                      }`}
+                    />
+                    <span className="map-layer-thumb-label">Topo</span>
                   </button>
                 </div>
-                <div className="map-layers-sublabel">Australia</div>
-                <div className="map-layers-thumbs">
-                  <button
-                    type="button"
-                    className={`map-layer-thumb ${mapLayer === 'topo-ga' ? 'active' : ''}`}
-                    onClick={() => mapLayer !== 'topo-ga' && handleLayerChange('topo-ga')}
-                    title="Geoscience Australia National Topo"
-                  >
-                    <span className="map-layer-thumb-preview map-layer-thumb-ga" />
-                    <span className="map-layer-thumb-label">GA National</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`map-layer-thumb ${mapLayer === 'topo-nsw' ? 'active' : ''}`}
-                    onClick={() => mapLayer !== 'topo-nsw' && handleLayerChange('topo-nsw')}
-                    title="NSW Spatial Services Topo"
-                  >
-                    <span className="map-layer-thumb-preview map-layer-thumb-nsw" />
-                    <span className="map-layer-thumb-label">NSW Topo</span>
-                  </button>
-                </div>
+                {/* Name the source actually on screen — each licence requires attribution
+                    by name, and the button no longer says which product this is. */}
+                {mapLayer !== 'satellite' && (
+                  <div className="map-layers-sublabel">{TOPO_SOURCE_LABEL[mapLayer]}</div>
+                )}
+                {!topoAvailableHere && userChoice === 'topo' && (
+                  <div className="map-layers-sublabel">
+                    No topo coverage here — showing satellite
+                  </div>
+                )}
               </div>
 
               {/* Scene mode */}

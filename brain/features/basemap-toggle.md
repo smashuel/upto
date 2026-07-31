@@ -7,7 +7,7 @@ tags: [map, basemap, topo, nz, au, nsw]
 
 # Basemap Toggle
 
-Picks the right topographic basemap for the current viewport and honours the user's manual choice without stranding them on a layer that has no tiles.
+Two user-facing basemaps — **Satellite** and **Topo** — where Topo auto-resolves to the correct regional product for the current viewport. The user never picks a country or a cartographic product.
 
 ## Layers
 
@@ -22,44 +22,55 @@ GA and NSW are key-less, public, CORS-open ArcGIS REST tile services. They bypas
 
 **ArcGIS URL quirk**: GA/NSW use `{z}/{y}/{x}` (row/column), not `{z}/{x}/{y}`. Cesium recognises both tokens, so placement in the template is all that matters.
 
-## Auto-switch model
+## Choice vs rendered layer
 
-The picker resolution lives in [BasemapSuggest.ts](../../src/services/BasemapSuggest.ts) — a Cesium-free module so it's trivial to unit-test:
+Two distinct types, deliberately ([BasemapSuggest.ts](../../src/services/BasemapSuggest.ts), Cesium-free and unit-tested):
 
-- `suggestBasemap(lat, lng)` — most-specific region wins: NSW > AU > NZ > satellite.
-- `resolveBasemap(lat, lng, override)` — durable user intent layered on top of the suggestion:
-  - No override → use the suggestion.
-  - Override is `satellite` → always honoured (no region constraint).
-  - Override is a topo layer → honoured only while the centre is still inside that layer's native region; otherwise fall through to the auto-suggestion. **The override is not cleared** — panning back into the region resumes the user's preference without needing a re-click.
+- **`BasemapChoice`** = `'satellite' | 'topo'` — what the *user* picked. The entire user-facing vocabulary.
+- **`MapLayer`** = `'satellite' | 'topo-linz' | 'topo-ga' | 'topo-nsw'` — what actually *renders*, and what a TripLink persists as `plannedBasemap` (so a saved plan records the real canvas it was drawn on, and attribution can name the true source).
 
-[TripPlanningMap.tsx](../../src/components/map/TripPlanningMap.tsx) listens on `camera.moveEnd` with a 500 ms debounce, computes `resolveBasemap`, and swaps layers only if the target differs from what's currently painted. A single `basemapLayerRef` holds whichever topo overlay is active (at most one at a time); satellite is the absence of any overlay (Cesium base layer is always satellite/OSM).
+Resolution:
+
+- `regionalTopo(lat, lng)` — most-specific product covering the point: NSW > AU > NZ, else `null`.
+- `suggestBasemap(lat, lng)` — topo where it exists, else satellite. Used when no choice has been made.
+- `resolveBasemap(lat, lng, choice)`:
+  - `'satellite'` → always satellite, no region constraint.
+  - `'topo'` → the regional product, falling back to satellite outside all coverage. **The choice is never cleared**, so panning back into coverage resumes topo.
+  - `null` → the suggestion.
+- `choiceFromStored(raw)` — migrates persisted `'topo-linz'`/`'topo-ga'`/`'topo-nsw'`/`'topo'` to `'topo'`.
+- `choiceFromLayer(layer)` — recovers the choice behind a persisted `plannedBasemap`.
+
+Geography (the bounds and `isWithin*` predicates) lives in [regionBounds.ts](../../src/services/regionBounds.ts), separate from the tile-URL plumbing that reads `import.meta.env`. LinzMapService/AusMapService re-export it for back-compat.
+
+[TripPlanningMap.tsx](../../src/components/map/TripPlanningMap.tsx) listens on `camera.moveEnd` with a 500 ms debounce, computes `resolveBasemap`, and swaps only if the target differs from what is painted. A single `basemapLayerRef` holds whichever topo overlay is active (at most one); satellite is the absence of any overlay.
 
 ## State & persistence
 
 | Key | Value |
 |-----|-------|
-| `localStorage.upto_map_layer` | `'satellite'` \| `'topo-linz'` \| `'topo-ga'` \| `'topo-nsw'` |
+| `localStorage.upto_map_layer` | `'satellite'` \| `'topo'` |
 
-Legacy `'topo'` values are silently migrated to `'topo-linz'` on load (pre-AU build-up wrote plain `'topo'`).
+Older installs holding `'topo-linz'` / `'topo-ga'` / `'topo-nsw'` (the pre-simplification per-product values) and legacy `'topo'` all migrate to `'topo'` via `choiceFromStored`.
 
-React holds two related pieces of state:
-- `userOverride: MapLayer | null` — durable preference; `null` means "let auto-detect decide".
-- `mapLayer: MapLayer` — what's currently rendering. Diverges from `userOverride` during auto-switch (e.g. you picked NSW Topo but panned into Victoria → `userOverride='topo-nsw'`, `mapLayer='topo-ga'`).
+React state:
+- `userChoice: BasemapChoice | null` — durable preference; `null` means "let the viewport decide".
+- `mapLayer: MapLayer` — what is currently rendering. Diverges from `userChoice` as the viewport moves (choice `'topo'` in Victoria → `mapLayer='topo-ga'`; pan to NZ → `mapLayer='topo-linz'`, choice unchanged).
+- `topoAvailableHere: boolean` — whether any topo product covers the centre, so the Topo button can explain itself outside coverage instead of being inertly clickable.
 
 ## UI
 
-Layers popover groups the four thumbs by country:
+Two thumbs, no country grouping:
 
 ```
 Basemap
-  [Satellite]
-  NEW ZEALAND
-  [LINZ Topo]
-  AUSTRALIA
-  [GA National] [NSW Topo]
+  [Satellite] [Topo]
+  LINZ Topo50                 <- names the product actually rendering
 ```
 
-Attribution renders per active layer (CC BY 4.0 compliance):
+The Topo thumb's swatch follows the active product. Outside all coverage the panel says
+"No topo coverage here — showing satellite".
+
+Attribution renders per *rendered* layer (CC BY 4.0 compliance):
 - `topo-linz` → `© LINZ CC BY 4.0`
 - `topo-ga` → `© Commonwealth of Australia (Geoscience Australia), CC BY 4.0`
 - `topo-nsw` → `Contains NSW Spatial Services data © State of NSW (DCS), CC BY 4.0`
@@ -69,14 +80,16 @@ Attribution renders per active layer (CC BY 4.0 compliance):
 `AusMapService.ts` is deliberately structured as paired BOUNDS / URL / ATTRIBUTION triplets, so VIC/QLD/TAS/WA/SA layers slot in without touching the resolver. To add a state:
 
 1. Add `XXX_BOUNDS`, `XXX_TOPO_URL`, `XXX_ATTRIBUTION`, `isWithinXxxBounds` to [AusMapService.ts](../../src/services/AusMapService.ts)
-2. Extend `MapLayer` in [BasemapSuggest.ts](../../src/services/BasemapSuggest.ts) with `'topo-xxx'`
-3. Insert into the priority chain in `suggestBasemap` (most-specific first) and the override-validity check in `resolveBasemap`
-4. Add the branch in `applyBasemap` (provider construction) in [TripPlanningMap.tsx](../../src/components/map/TripPlanningMap.tsx)
-5. Add the thumb button under the AU sublabel and a CSS swatch (`map-layer-thumb-xxx`)
-6. Add per-layer attribution render
+2. Add `XXX_BOUNDS` + `isWithinXxxBounds` to [regionBounds.ts](../../src/services/regionBounds.ts)
+3. Extend `MapLayer` in [BasemapSuggest.ts](../../src/services/BasemapSuggest.ts) with `'topo-xxx'`
+4. Insert into the priority chain in `regionalTopo` (most-specific first)
+5. Add the branch in `applyBasemap` (provider construction) in [TripPlanningMap.tsx](../../src/components/map/TripPlanningMap.tsx)
+6. Add entries to `TOPO_SOURCE_LABEL` / `TOPO_THUMB_CLASS` and a CSS swatch (`map-layer-thumb-xxx`), plus the per-layer attribution render
+
+No new user-facing button — the new product appears automatically under the single Topo choice.
 
 ## Known gaps
 
 - No cluster/opacity control per basemap (satellite is either all-on or hidden behind a topo)
-- No fallback UX when LINZ key is missing — the LINZ thumb is just disabled
+- No fallback UX when the LINZ key is missing outside AU — Topo simply has nothing to show
 - No OSM-based topo (e.g. OpenTopoMap) as a global fallback for regions outside NZ/AU

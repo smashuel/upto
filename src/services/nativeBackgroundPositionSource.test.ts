@@ -268,6 +268,67 @@ test('no fix is emitted after stop, even if the plugin calls back late', async (
   assert.deepEqual(c.unavailable, []);
 });
 
+test('starting twice does not leak the first watcher', async () => {
+  // A leaked native watcher is not a tidiness problem: nothing holds its id any more, so
+  // nothing can ever remove it, and the OS keeps collecting the traveller's location for the
+  // life of the process — including after they set sharing to `off`.
+  const { plugin, state } = fakePlugin();
+  const src = new NativeBackgroundPositionSource({ intervalMs: INTERVAL }, plugin);
+  src.start(collector().handlers);
+  await Promise.resolve();
+  const resolveFirst = state.resolveAddWatcher!;
+
+  src.start(collector().handlers); // restart without an intervening stop
+  await Promise.resolve();
+  const resolveSecond = state.resolveAddWatcher!;
+
+  resolveFirst('watcher-1');
+  resolveSecond('watcher-2');
+  await new Promise((r) => setTimeout(r, 0));
+
+  assert.deepEqual(state.removed, ['watcher-1'], 'the superseded watcher is torn down');
+
+  src.stop();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(state.removed, ['watcher-1', 'watcher-2'], 'and the live one stops on stop');
+});
+
+test('a restart while the previous registration is in flight removes the stale watcher', async () => {
+  // stop() → start() in quick succession is what a sharing toggle does: the effect tears down
+  // and re-runs. The first addWatcher can easily resolve after the second start.
+  const { plugin, state } = fakePlugin();
+  const src = new NativeBackgroundPositionSource({ intervalMs: INTERVAL }, plugin);
+  src.start(collector().handlers);
+  await Promise.resolve();
+  const resolveFirst = state.resolveAddWatcher!;
+
+  src.stop();
+  src.start(collector().handlers);
+  await Promise.resolve();
+  const resolveSecond = state.resolveAddWatcher!;
+
+  resolveFirst('watcher-stale');
+  resolveSecond('watcher-current');
+  await new Promise((r) => setTimeout(r, 0));
+
+  assert.deepEqual(state.removed, ['watcher-stale']);
+});
+
+test('a callback from a superseded watcher is ignored', async () => {
+  const { plugin, state } = fakePlugin();
+  const c = collector();
+  const src = new NativeBackgroundPositionSource({ intervalMs: INTERVAL }, plugin);
+  src.start(c.handlers);
+  await Promise.resolve();
+  const staleCallback = state.callback!;
+
+  src.start(c.handlers); // supersedes
+  await Promise.resolve();
+
+  staleCallback(LOCATION, undefined);
+  assert.deepEqual(c.fixes, [], 'the old watcher must not feed the new handlers');
+});
+
 test('stop is safe to call without a start, and twice', async () => {
   const { plugin, state } = fakePlugin();
   const src = new NativeBackgroundPositionSource({ intervalMs: INTERVAL }, plugin);

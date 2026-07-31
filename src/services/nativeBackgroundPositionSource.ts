@@ -65,15 +65,20 @@ export class NativeBackgroundPositionSource implements PositionSource {
   private readonly deps: NativeSourceDeps;
 
   private handlers: PositionSourceHandlers | null = null;
-  private stopped = true;
   private watcherId: string | null = null;
-  /**
-   * Set when `stop()` runs before `addWatcher` has resolved. Without it the late id would be
-   * dropped and the OS would keep feeding a watcher nobody listens to — a traveller who set
-   * sharing to `off` would still be having their location collected.
-   */
-  private removeOnArrival = false;
   private lastEmittedAt: number | null = null;
+  /**
+   * Bumped by every `start()` and every `stop()`. Each registration captures the value current
+   * when it began, and anything arriving under a stale one is discarded — the late id gets
+   * removed rather than stored, and late callbacks are ignored.
+   *
+   * This is not defensive padding. `addWatcher` is async, so a `stop()` or a re-`start()` can
+   * easily beat it (a sharing toggle does exactly that: the effect tears down and re-runs).
+   * Without the generation, the losing registration's id is overwritten and lost — and an id
+   * nobody holds is a watcher nobody can ever remove, so the OS keeps collecting the
+   * traveller's location for the life of the process, including after they chose `off`.
+   */
+  private generation = 0;
 
   constructor(
     options: PositionSourceOptions,
@@ -86,9 +91,12 @@ export class NativeBackgroundPositionSource implements PositionSource {
   }
 
   start(handlers: PositionSourceHandlers): void {
+    // A start without an intervening stop supersedes the previous watcher rather than stacking
+    // on it. Tear the old one down first so it cannot outlive the handlers it was feeding.
+    this.teardown();
+
+    const generation = ++this.generation;
     this.handlers = handlers;
-    this.stopped = false;
-    this.removeOnArrival = false;
     this.lastEmittedAt = null;
 
     this.plugin
@@ -105,41 +113,50 @@ export class NativeBackgroundPositionSource implements PositionSource {
           stale: false,
           distanceFilter: this.deps.distanceFilter ?? DEFAULT_DISTANCE_FILTER_M,
         },
-        (position, error) => this.onWatcherEvent(position, error),
+        (position, error) => this.onWatcherEvent(generation, position, error),
       )
       .then((id) => {
+        // Lost the race to a stop() or a later start(): this watcher belongs to nobody, so it
+        // has to be removed right here — this is the only moment its id is ever visible.
+        if (generation !== this.generation) {
+          this.removeById(id);
+          return;
+        }
         this.watcherId = id;
-        if (this.removeOnArrival) this.removeWatcher();
       })
       .catch((err: WatcherError) => {
-        if (this.stopped || !this.handlers) return;
+        if (generation !== this.generation || !this.handlers) return;
         this.handlers.onUnavailable(reasonFor(err));
       });
   }
 
   stop(): void {
-    this.stopped = true;
-    this.handlers = null;
-    if (this.watcherId !== null) {
-      this.removeWatcher();
-    } else {
-      // Registration is still in flight — remember to tear it down the moment it lands.
-      this.removeOnArrival = true;
-    }
+    this.teardown();
   }
 
-  private removeWatcher(): void {
+  /** Invalidate the current registration, and remove its watcher if we already hold the id. */
+  private teardown(): void {
+    this.generation++;
+    this.handlers = null;
     const id = this.watcherId;
-    if (id === null) return;
     this.watcherId = null;
-    this.removeOnArrival = false;
+    if (id !== null) this.removeById(id);
+  }
+
+  private removeById(id: string): void {
     // Fire-and-forget: there is nothing useful to do if removal fails, and throwing out of a
     // React effect cleanup would be worse than the leak.
     this.plugin.removeWatcher({ id }).catch(() => {});
   }
 
-  private onWatcherEvent(position?: PluginLocation, error?: WatcherError): void {
-    if (this.stopped || !this.handlers) return;
+  private onWatcherEvent(
+    generation: number,
+    position?: PluginLocation,
+    error?: WatcherError,
+  ): void {
+    // Covers both "stopped" and "superseded by a later start": a stale watcher must never feed
+    // handlers that have moved on.
+    if (generation !== this.generation || !this.handlers) return;
 
     if (error) {
       // Never throttled: a denial the traveller doesn't see is a traveller staring at a map

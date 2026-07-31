@@ -1,6 +1,6 @@
 # Slice 2 — Native background location (survives lock / background / kill)
 
-Status: ready-for-agent
+Status: built 2026-08-01 — code complete and unit-green; ON-DEVICE MATRIX IS THE GATE and is not yet run
 Parent: [.scratch/live-location-stage-2/PRD.md](../PRD.md)
 **Concrete build plan: [PRD-slice-02-native-background.md](../PRD-slice-02-native-background.md)** (scoped 2026-07-26)
 Covers user stories: 1, 2, 3, 4, 5, 13, 14, 18, 17 (regression)
@@ -98,26 +98,92 @@ lands the plugin.
 Still to build: the plugin itself, `toPositionFix`, contextual "always" permission, CapacitorHttp
 POST routing, and the on-device matrix.
 
+## Progress (2026-08-01) — the source is built; the gate is not passed
+
+Code complete and unit-green (180 node-test + 52 vitest). **The on-device matrix has not been
+run, and it — not this test count — is the acceptance gate.** Landed:
+
+- **`toPositionFix`** ([nativePositionFix.ts](../../../src/services/nativePositionFix.ts)) — the
+  pre-agreed pure seam, 16 cases. Refuses non-finite / out-of-range / missing coordinates,
+  exactly-(0,0), bad accuracy, and OS-simulated fixes; falls back to now for a null `time`.
+  The bias is explicit: **a wrong position is worse than no position**, because a dropped fix
+  degrades honestly through the liveness labels while a bad one sends a searcher to the wrong
+  valley.
+- **`NativeBackgroundPositionSource`**
+  ([nativeBackgroundPositionSource.ts](../../../src/services/nativeBackgroundPositionSource.ts))
+  — 14 cases against an injected fake plugin. Covers the two behaviours that are privacy- and
+  safety-critical and would otherwise only be findable on a device: `stop()` removing the
+  watcher **even when called before `addWatcher` resolves** (otherwise "off" leaves the OS
+  collecting location), and `NOT_AUTHORIZED` mapping to `denied` while everything else maps to
+  `error`.
+- **`shouldRetractOnHide`** ([retractOnHide.ts](../../../src/services/retractOnHide.ts)) — 5
+  cases. Stage 1 retracted the live position on `pagehide`; in the native shell that also fires
+  on a mere backgrounding, so retracting would report a false "paused" about a traveller whose
+  phone is in their pocket and being tracked perfectly well. Two lines, tested because getting
+  it wrong is invisible in review and loud in the field.
+- `createPositionSource`'s native branch is real; the Slice-1 throwing guard is gone.
+- **Plugin choice recorded**: [ADR 019](../../../brain/decisions/019-background-geolocation-plugin.md).
+
+### Two PRD items that turned out to need no code
+
+- **CapacitorHttp routing was already done by configuration.** Capacitor's native bridge patches
+  `window.fetch` when `CapacitorHttp.enabled` is true, which `capacitor.config.ts` already sets.
+  Verified in `@capacitor/ios`'s `native-bridge.js` (the patch is gated on that flag), so
+  `api.reportPosition` is already on native HTTP on device. No wrapper written.
+- **Android needs no `ACCESS_BACKGROUND_LOCATION`.** The plugin uses a foreground service typed
+  `location` and never references that permission. Declaring it would invite Play Store review
+  scrutiny for something unused. The plugin's own manifest merges in what it does need; we only
+  renamed the notification channel to "Trip location sharing" so a traveller can tell who is
+  collecting their location from the notification alone.
+
+### Not built — stated plainly rather than quietly dropped
+
+1. **"While using" gets no explicit notice** (PRD user story 5). The plugin exposes no
+   permission-state API, only `NOT_AUTHORIZED` on outright denial, so always-vs-while-using is
+   not observable. A while-using traveller degrades through the existing liveness machinery
+   ("paused, last known N min ago") — honest, but unlabelled. Transistorsoft exposes
+   authorization status; see ADR 019's reconsider path.
+2. **OS-kill relaunch resume is partial** (user story 3). A WebView content-process kill reloads
+   the current URL, so tracking resumes. A full app kill relaunches at the app root, and
+   tracking will not resume until the traveller navigates back to the trip. Fixing that means
+   auto-navigating to an active trip on launch — a product decision about hijacking app launch,
+   not a technical one. **Needs a call before it is built.**
+3. **In-app navigation away from the trip page stops tracking.** The source lives in
+   `ActiveTrip`'s effect, so leaving that screen for, say, Profile tears the watcher down.
+   Backgrounding does *not* do this (React stays mounted), so the primary pocket/lock scenario
+   is unaffected — but it is a real gap. The fix is lifting the source to an app-level service
+   keyed on "a trip is live", which is a bigger change than a source swap.
+
+### The matrix still to run (the actual gate)
+
+{foreground, backgrounded, screen-locked, killed-then-relaunched} × {`off`, `owner-only`,
+`with-trip`}, plus: the "always" prompt appears contextually at trip start; background delivery
+still lands after > 5 min; the iOS blue status-bar indicator shows; a stationary traveller's
+staleness behaviour is tolerable (see ADR 019).
+
 ## Acceptance criteria
 
 - [x] iOS native config persists across builds: `ios/` committed with the location usage
       strings, `UIBackgroundModes`, and export-compliance flag; CI asserts rather than
       regenerates (PRD user story 21).
-- [ ] A Capacitor background-geolocation plugin is chosen and wired behind the
+- [x] A Capacitor background-geolocation plugin is chosen and wired behind the
       `native-background` source; the choice + iOS-"always" rationale is recorded (candidate ADR
       note).
-- [ ] `android.useLegacyBridge: true` and `CapacitorHttp` enabled; the position POST goes
-      through native HTTP (not WebView `fetch`) on native, verified to survive > 5 min
-      backgrounded on a real Android device.
+- [~] `android.useLegacyBridge: true` and `CapacitorHttp` enabled; the position POST goes
+      through native HTTP (not WebView `fetch`) on native — config verified against the native
+      bridge source; the > 5 min backgrounded run still needs a real Android device.
 - [ ] Position keeps updating with the app backgrounded and the screen locked, verified on a
       real iOS device (and Android).
 - [ ] Tracking resumes automatically after an OS-kill relaunch mid-trip.
-- [ ] "Always allow" is requested contextually with a rationale; "while using" degrades to
-      foreground-only with an explicit notice; denial is reflected in the ActiveTrip chip (Stage
-      1 contract).
-- [ ] `off` stops the native sampler entirely (nothing collected); `owner-only` never POSTs;
+- [~] "Always allow" is requested contextually with a rationale — the source only starts when a
+      trip goes live with sharing on, so the prompt is contextual by construction. Denial is
+      reflected in the ActiveTrip chip (the Stage 1 contract, unchanged).
+      **The "while using" notice is NOT built** — the plugin exposes no permission-state API, so
+      always-vs-while-using is not observable. See "Not built", above.
+- [~] `off` stops the native sampler entirely (nothing collected); `owner-only` never POSTs;
       `with-trip` POSTs — verified in the native shell.
-- [ ] Tracking continues while the trip is `overdue`, not only `active`.
+- [x] Tracking continues while the trip is `overdue`, not only `active` (already true since
+      Slice 1 — the consumer effect gates on `active || overdue`; re-confirmed, no change).
 - [ ] Watcher-side liveness labels (fresh / stale / unavailable) behave exactly as Stage 1 —
       background tracking just makes `fresh` more common (regression check, no new rules).
 - [ ] On-device test matrix executed and recorded: {iOS, Android} × {foreground, backgrounded,

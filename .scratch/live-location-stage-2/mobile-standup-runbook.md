@@ -185,7 +185,24 @@ sanity-check the shell without bundling; for a real build, ship the bundled `dis
   (survives lock/background/kill). This is the ADR-011 make-or-break wall; its acceptance gate
   is the on-device background matrix, not a unit suite. `detectPlatform()` + the throwing guard
   in `createPositionSource` are already waiting for it.
-- The iOS permission strings are **already in** `ios/App/App/Info.plist` (see the table above),
-  so Slice 2 starts with the plugin and the contextual-rationale UX rather than the plumbing.
-  Android's `ACCESS_BACKGROUND_LOCATION` + `POST_NOTIFICATIONS` still need adding to the
-  manifest.
+- The iOS permission strings are **already in** `ios/App/App/Info.plist` (see the table above).
+
+## Background-geolocation plugin gotcha (Slice 2, landed 2026-08-01)
+
+`@capacitor-community/background-geolocation` publishes a `Package.swift` pinning
+`capacitor-swift-pm` **`from: "7.0.0"`**, which cannot satisfy our app's `exact: "8.4.1"`.
+`npx cap sync ios` **rewrites it in `node_modules`** to `from: "8.0.0"`, so it resolves — but
+only if sync runs *before* the Xcode build. The Codemagic pipeline does (`npm ci` → build →
+assert → `cap sync ios` → `build-ipa`).
+
+**If you ever build `ios/App/App.xcodeproj` straight after a fresh `npm ci` without syncing,
+SPM resolution fails with a version conflict that looks nothing like this cause.** Run
+`npx cap sync ios` first. The `cap sync` warning "built for Capacitor 7, it might cause issues"
+is expected and is the same underlying fact.
+
+Android needs **no** `ACCESS_BACKGROUND_LOCATION`: the plugin uses a foreground service typed
+`location` and never references that permission, and declaring it would invite Play Store review
+scrutiny for something unused. The plugin's manifest merges in what it does need
+(`ACCESS_FINE/COARSE_LOCATION`, `FOREGROUND_SERVICE*`, `POST_NOTIFICATIONS`, the service). We
+only set the notification channel name in `strings.xml`. See
+[ADR 019](../../brain/decisions/019-background-geolocation-plugin.md).

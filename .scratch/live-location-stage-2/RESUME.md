@@ -1,7 +1,8 @@
 # Live location Stage 2 — RESUME HERE
 
-**Bookmark updated 2026-07-31. Slice 01 is CLOSED on iOS. The next work is Slice 02 —
-native background location, the ADR-011 make-or-break slice. Jump to
+**Bookmark updated 2026-08-01. Slice 01 is CLOSED on iOS. Slice 02 is BUILT and unit-green, but
+its gate — the on-device background matrix — has NOT been run. The next action is a TestFlight
+build and that matrix, not more code. Jump to
 [§ Next: Slice 02](#next-slice-02--native-background-location).**
 
 History below is kept because the constraints it records (no Android device, the device-gated
@@ -88,33 +89,46 @@ Valhalla files. Don't sweep those into a Stage 2 commit.
 - **Native map defect sweep** — all 11 closed.
 - PRD + 5 sliced issues + runbook in `.scratch/live-location-stage-2/`.
 
-## Next: Slice 02 — native background location
+## Next: Slice 02 — native background location (BUILT 2026-08-01, gate NOT passed)
 
 The real Stage 2 work and the **ADR-011 make-or-break slice**: if a locked iPhone in a pocket
-can't keep its watchers informed, the feature doesn't exist. Concrete build plan:
-[PRD-slice-02-native-background.md](PRD-slice-02-native-background.md) ·
-[issue 02](issues/02-native-background-location.md).
+can't keep its watchers informed, the feature doesn't exist. The code is written and unit-green
+(180 node-test + 52 vitest). **That is not the gate.** Full detail:
+[issue 02](issues/02-native-background-location.md) ·
+[ADR 019](../../brain/decisions/019-background-geolocation-plugin.md).
 
-Starting state is better than the plan assumes — the iOS `Info.plist` half is already done, so
-begin at the plugin:
+Built: `@capacitor-community/background-geolocation` behind `NativeBackgroundPositionSource`;
+`toPositionFix` (the pre-agreed pure seam) and `shouldRetractOnHide` TDD'd; the Slice-1 throwing
+guard replaced by the real native branch. **The `pagehide` retraction is now platform-guarded**
+— without that, every time the traveller pocketed their phone the native app would have told
+their watchers tracking had stopped, which would have undone the slice at the last step.
 
-1. **Plugin** — `@capacitor-community/background-geolocation` via SPM (Capacitor 8 iOS is SPM,
-   there is no `pod install`). Fallback if it can't hold iOS "always": Transistorsoft — that is
-   ADR 011's reconsider clause going live, and it's a *slice outcome decided by the device
-   matrix*, not a unit-test result.
-2. **`toPositionFix(pluginLocation)`** — the one new pure seam. TDD under `node --test`.
-3. **Contextual "always" permission** with a rationale, at trip-goes-active; "while using"
-   degrades honestly to foreground-only with a notice.
-4. **CapacitorHttp POST routing** so background delivery survives Android's ~5-min WebView HTTP
-   throttle. Platform-guard the web-only `pagehide` → unavailable beacon: on native,
-   backgrounding must keep publishing, not retract.
-5. **Android manifest** — `ACCESS_BACKGROUND_LOCATION`, `POST_NOTIFICATIONS`.
-6. **The on-device matrix** — {foreground, backgrounded, locked, killed-relaunched} ×
-   {`off`, `owner-only`, `with-trip`}. This is the acceptance gate.
+Two PRD items needed **no code**: CapacitorHttp already patches `window.fetch` via config
+(verified against the native bridge source), and Android needs no `ACCESS_BACKGROUND_LOCATION`
+(foreground-service model; declaring it invites Play Store scrutiny for nothing).
 
-**Red flag to watch for:** if Slice 2 forces edits to `applyLifecycleEvent`,
-`shouldBroadcastPosition` or `describeLiveness`, the source swap has leaked. Slice 1 built the
-seam precisely so this is a source swap plus delivery reliability, nothing more.
+### The immediate next action is a device, not more code
+
+Run the matrix: {foreground, backgrounded, screen-locked, killed-then-relaunched} × {`off`,
+`owner-only`, `with-trip`}, plus the contextual "always" prompt, >5 min background delivery, the
+iOS blue status-bar indicator, and how a *stationary* traveller's staleness reads.
+
+**If iOS "always" doesn't hold, that is the answer, not a bug to chase** — it triggers ADR 011's
+reconsider clause and the move to Transistorsoft. Same seam, one class.
+
+### Three things deliberately not built — decide before building
+
+1. **"While using" gets no explicit notice.** The plugin has no permission-state API. Degrades
+   through the existing liveness labels instead: honest, unlabelled.
+2. **Full-app-kill relaunch doesn't resume tracking** (a WebView process kill does). Fixing it
+   means auto-navigating to a live trip on launch — a product call about hijacking app launch.
+3. **Navigating away from the trip page in-app stops tracking.** Backgrounding does *not*
+   (React stays mounted), so the pocket/lock case is fine. The fix is lifting the source to an
+   app-level service, which is bigger than a source swap.
+
+**Red flag to watch for:** if further Slice 2 work forces edits to `applyLifecycleEvent`,
+`shouldBroadcastPosition` or `describeLiveness`, the source swap has leaked. It hasn't so far —
+those three seams were untouched, which is the evidence the seam did its job.
 
 Still no Android device — the Android half of the matrix stays an open gate; iOS via TestFlight
 is the live verification path.

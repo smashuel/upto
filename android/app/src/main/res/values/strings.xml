@@ -4,4 +4,16 @@
     <string name="title_activity_main">Upto</string>
     <string name="package_name">world.upto.app</string>
     <string name="custom_url_scheme">world.upto.app</string>
+
+    <!--
+        Channel name for the persistent notification @capacitor-community/background-geolocation
+        shows while a background watcher is running (live location Stage 2 Slice 2). The default
+        is "Background Tracking", which tells a traveller nothing about who is tracking them or
+        why. A person must always be able to see, from the notification alone, that this app is
+        collecting their location — that is the honest counterpart to asking for "always"
+        permission, and it is how they turn it off if they didn't mean to leave it on.
+    -->
+    <string name="capacitor_background_geolocation_notification_channel_name">
+        Trip location sharing
+    </string>
 </resources>

@@ -8,6 +8,7 @@ import { TripPlanningMap } from '../components/map/TripPlanningMap';
 import { applyLifecycleEvent } from '../utils/lifecycleReducer';
 import { LIVE_STALE_MS } from '../utils/liveness';
 import { selectPositionSource, createPositionSource, detectPlatform } from '../services/positionSource';
+import { shouldRetractOnHide } from '../services/retractOnHide';
 import { FG_FLOOR_MS } from '../utils/sampleCadence';
 import type { TripLink } from '../types/adventure';
 
@@ -356,9 +357,18 @@ export const ActiveTrip: React.FC = () => {
       },
     });
     // Best-effort "tracking stopped" beacon when the page is closed/hidden — the one
-    // transport that survives unload. Staleness is the floor if it doesn't land. Only meaningful
-    // while broadcasting; owner-only/off aren't publishing anything to retract.
-    const onHide = () => { if (liveSharing === 'with-trip') api.beaconPositionUnavailable(shareToken); };
+    // transport that survives unload. Staleness is the floor if it doesn't land.
+    //
+    // Platform-guarded as of Slice 2 (see shouldRetractOnHide): on the web a hidden document
+    // means the sampler died with it, so saying so is honest. In the native shell `pagehide`
+    // also fires on a mere backgrounding — the phone going into a pocket, which is when the
+    // background watcher takes over and fixes keep flowing. Retracting there would report a
+    // false "paused" about the most ordinary state of a real trip.
+    const onHide = () => {
+      if (shouldRetractOnHide(detectPlatform(), liveSharing)) {
+        api.beaconPositionUnavailable(shareToken);
+      }
+    };
     window.addEventListener('pagehide', onHide);
     return () => {
       source.stop();

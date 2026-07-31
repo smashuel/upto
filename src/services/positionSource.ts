@@ -5,8 +5,10 @@
 // background source with zero downstream change. The source is a *fix producer only* — it
 // knows nothing about privacy, POSTing, or the map; that policy stays in the consumer.
 //
-// See .scratch/live-location-stage-2/ (PRD + issue 01). `selectPositionSource` is the pure,
+// See .scratch/live-location-stage-2/ (PRD + issues 01/02). `selectPositionSource` is the pure,
 // tested branch; the web source's timer/geolocation mechanics are below the seam.
+
+import { NativeBackgroundPositionSource } from './nativeBackgroundPositionSource.ts';
 
 export type Platform = 'ios' | 'android' | 'web';
 export type PositionSourceKind = 'native-background' | 'web-foreground';
@@ -64,8 +66,9 @@ export function detectPlatform(): Platform {
 /**
  * Instantiate the source for a resolved kind. Returns null when the web environment can't
  * supply geolocation at all (SSR / unsupported browser) so the caller simply skips sampling.
- * `native-background` throws until Slice 2 builds it — an explicit, tested guard rather than a
- * silent no-op, so a native build that reaches here fails loudly instead of going dark.
+ *
+ * Both kinds are real as of Slice 2. The native branch keeps producing fixes with the app
+ * backgrounded or the screen locked; the web branch is the Stage-1 foreground loop, unchanged.
  */
 export function createPositionSource(
   kind: PositionSourceKind,
@@ -75,9 +78,7 @@ export function createPositionSource(
     if (typeof navigator === 'undefined' || !('geolocation' in navigator)) return null;
     return new WebForegroundPositionSource(options);
   }
-  throw new Error(
-    'native-background PositionSource is not yet implemented (Live location Stage 2 Slice 2)',
-  );
+  return new NativeBackgroundPositionSource(options);
 }
 
 /**

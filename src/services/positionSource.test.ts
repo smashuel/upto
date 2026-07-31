@@ -19,13 +19,18 @@ test('selectPositionSource: Android → native-background', () => {
 });
 
 // ── createPositionSource: factory guards (the instantiation branch) ──
-// The web source needs a geolocation-capable environment; native isn't built until Slice 2.
+// The web source needs a geolocation-capable environment; native is real as of Slice 2.
 
-test('createPositionSource: native-background is not implemented until Slice 2 (throws)', () => {
-  assert.throws(
-    () => createPositionSource('native-background', { intervalMs: 1000 }),
-    /native-background/,
-  );
+test('createPositionSource: native-background returns a startable source (Slice 2)', () => {
+  // Slice 1 asserted this branch THREW. It no longer does — that guard existed so a native
+  // build reaching here failed loudly instead of going dark, and it has served its purpose.
+  // Constructing it must not touch the plugin (registration happens on start), so this is safe
+  // to build off-device; the source's own behaviour is covered in
+  // nativeBackgroundPositionSource.test.ts against a fake plugin.
+  const source = createPositionSource('native-background', { intervalMs: 1000 });
+  assert.ok(source, 'a native source is returned');
+  assert.equal(typeof source.start, 'function');
+  assert.equal(typeof source.stop, 'function');
 });
 
 test('createPositionSource: web-foreground returns null when geolocation is unavailable', () => {

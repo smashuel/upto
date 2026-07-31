@@ -1,6 +1,6 @@
 # 07 — Simplify the map control set: unclear and redundant buttons
 
-Status: partly done (2026-07-31) — flagged controls removed; wider rethink still open
+Status: done (2026-07-31) — reduced set accepted on device
 Surfaced: on-device (iPhone), 2026-07-31
 Area: TripPlanningMap.tsx (overlay control clusters)
 
@@ -33,14 +33,25 @@ render them.
 
 ## Acceptance criteria
 
-- [ ] Every remaining map control's purpose is evident without hovering (label, or an icon
+- [x] Every remaining map control's purpose is evident without hovering (label, or an icon
       whose meaning is unambiguous in context).
-- [ ] No two controls do substantially the same thing.
-- [ ] Saved TripLinks containing waypoints and notes still display them correctly, even if the
+- [x] No two controls do substantially the same thing.
+- [x] Saved TripLinks containing waypoints and notes still display them correctly, even if the
       authoring control for them is removed.
-- [ ] The reduced set is comfortable to reach one-handed in fullscreen on a phone.
+- [x] The reduced set is comfortable to reach one-handed in fullscreen on a phone.
 
 ## Blocked by
 
 - Needs a product decision from the user on which controls survive. Sequence after issue 06
   (notes crash), since that affects whether Note mode is kept at all.
+
+## Resolved — 2026-07-31
+
+The reduced control set is accepted on device. Removed **Waypoint**, **My location** and
+**Reset view**; **Edit route** is hidden on touch (see issue 08). What survives is Layers,
+Route draw, Note, and fullscreen — each with a distinct job.
+
+Nothing that renders was removed, only authoring controls: saved TripLinks holding waypoints
+still display them, which was the criterion that mattered. The "wider rethink" this issue
+opened with is closed as answered — the smaller set is comfortable one-handed and no two
+controls overlap.

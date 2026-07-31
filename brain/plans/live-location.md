@@ -1,6 +1,6 @@
 ---
 type: plan
-status: done  # Stage 1 complete — all 4 slices shipped + verified 2026-07-07/08 (foreground-web pipeline). Stage 2 (Capacitor background) is the next bet.
+status: in-progress  # Stage 1 done + verified 2026-07-07/08 (foreground-web pipeline). Stage 2: Slice 01 (Capacitor shell) done on iOS 2026-07-31; Slice 02 (native background location) is the current work.
 related: [.scratch/live-location/PRD.md, brain/features/triplink-route-persistence.md, src/utils/lifecycleReducer.ts, backend-server.js, src/pages/ActiveTrip.tsx, src/pages/PublicAdventureView.tsx]
 tags: [live-gps, safety, phase-2, sse, privacy, battery]
 ---
@@ -104,5 +104,32 @@ toggle + server guard, and basemap/framing persistence. Backend deployed to Lino
 prod (they'd been merged only locally). Deploy gotcha fixed en route: `deploy.sh` wasn't
 bundling `backend-server.js`'s sibling ESM modules → 502 crash-loop ([journal](../journal/2026-07-08-deploy-bundle-missing-sibling-modules.md)).
 
-Next bet is **Stage 2 (Capacitor background location + push)** — inherits the battery-cadence
-constraint hard (see above). Not yet scoped into issues.
+## Stage 2 — Capacitor background location + push (in progress)
+
+Scoped into 5 slices in [.scratch/live-location-stage-2/](../../.scratch/live-location-stage-2/)
+— start at `RESUME.md`. Inherits the battery-cadence constraint above hard.
+
+**Slice 01 (Capacitor shell + `PositionSource` seam) — DONE on iOS, 2026-07-31.** Foreground
+live location verified on a real iPhone via TestFlight: marker parity, liveness labels, and the
+`with-trip` / `owner-only` / `off` privacy toggle all behave as on web. The no-Mac build path
+works end to end (Codemagic → App Store Connect → TestFlight), which closes the iOS
+build/signing/store-ops unknown [ADR 011](../decisions/011-capacitor-mobile-shell.md) flagged as
+the project's new risk. Android is build-ready but **unverified** — no device; that gap folds
+into the Slice 2 matrix.
+
+**The finding worth keeping from Slice 01:** the build that reached the device had passed tsc,
+lint and the full suite, and the iPhone surfaced **eleven** map defects anyway — one data-loss
+severity, two of them product gaps rather than bugs. Nothing about the shell caused them; they
+were latent, and only a real user driving a real device found them. Treat on-device time as the
+gate for every remaining slice, not a formality after the suite goes green. Full record:
+[.scratch/native-map-fixes/](../../.scratch/native-map-fixes/README.md);
+[ADR 018](../decisions/018-one-route-per-triplink.md);
+[journal 07-31](../journal/2026-07-31-note-crash-nested-form.md).
+
+Native config is now durable: `ios/` is **committed** (CI used to regenerate it, wiping
+`Info.plist` before compile) with the location usage strings, `UIBackgroundModes: [location]`
+and `ITSAppUsesNonExemptEncryption=false`.
+
+**Next: Slice 02 — native background location.** The ADR-011 make-or-break slice: a locked
+iPhone in a pocket must keep its watchers informed, or the feature doesn't exist. Its acceptance
+gate is the on-device background matrix, not the unit suite.

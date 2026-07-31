@@ -1,6 +1,6 @@
 # 08 — Route edit mode: dragging points pans the map instead on touch
 
-Status: deferred (2026-07-31) — control hidden on touch; drag-on-touch still unimplemented
+Status: closed as deferred (2026-07-31) — Edit hidden on touch, accepted on device; drag-on-touch not built
 Surfaced: on-device (iPhone), 2026-07-31
 Area: TripPlanningMap.tsx (edit mode), src/services/TrackDrawer.ts
 
@@ -26,9 +26,25 @@ keep this issue open as the record.
       does not pan during the drag.
 - [ ] The route's distance/elevation/time stats update after an edit, as they do on desktop.
 - [ ] Desktop mouse drag-to-edit is unchanged.
-- [ ] If deferred instead: the Edit control is hidden on touch devices and this issue stays open
+- [x] If deferred instead: the Edit control is hidden on touch devices and this issue stays open
       with that decision recorded.
 
 ## Blocked by
 
 - None.
+
+## Closed as deferred — 2026-07-31
+
+Accepted on device with the deferral in place: **the Edit control is hidden on touch**, so the
+broken interaction is no longer reachable rather than fixed. Being explicit about what is and
+is not true — dragging a route point on a phone is *still not implemented*. A touch user who
+draws a bad route redraws it (which, since ADR 018, replaces the previous route cleanly), and
+that is now the whole editing story on mobile.
+
+Hiding the control was the honest move over leaving it visible: a pencil icon that pans the map
+instead of moving the point reads as a broken app, not a missing feature.
+
+**Reconsider if** redrawing proves too blunt for long routes — a 40-point route redrawn to move
+one point is a bad trade. The real fix is a touch drag handler that claims the gesture before
+Cesium's camera controller sees it (`ScreenSpaceEventType.PINCH_*` / touch move), which is why
+this was deferred rather than patched: it needs the gesture-priority work, not a tweak.

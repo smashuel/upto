@@ -154,17 +154,25 @@ plugin) and fine for TestFlight, which is upload-only to internal testers with n
 It is **not** fine for a real App Store submission: Apple rejects apps that declare the background
 location mode without demonstrably using it. Do not submit for review until Slice 2 is in.
 
-## Remaining Slice 1 acceptance (verify on device — iOS via TestFlight now; Android still needs a device)
+## Slice 1 acceptance — CLOSED on iOS 2026-07-31
 
-These issue-01 criteria need a running native app to tick:
+Verified on a real iPhone via TestFlight:
 
-- [ ] Capacitor initialised (ios + android) over the existing build; the Vercel web deploy is
-      unchanged and still works (it is — the web build is untouched; `capacitor.config.json`
-      and the ignored native dirs don't affect `vite build`).
-- [ ] The native app builds and runs on a device/simulator and tracks live location in the
-      **foreground** with full Stage 1 parity (marker, liveness labels, privacy toggle).
-- [ ] The `with-trip` / `owner-only` / `off` privacy model behaves identically in the native
+- [x] Capacitor initialised (ios + android) over the existing build; the Vercel web deploy is
+      unchanged and still works (it is — the web build is untouched; `capacitor.config.ts`
+      and the native dirs don't affect `vite build`).
+- [x] The native app builds and runs on a device and tracks live location in the **foreground**
+      with full Stage 1 parity (marker, liveness labels, privacy toggle).
+- [x] The `with-trip` / `owner-only` / `off` privacy model behaves identically in the native
       shell (foreground): `owner-only` renders locally / never POSTs, `off` does not sample.
+
+**Android is still unverified** — no device. `android/` is generated, committed and configured,
+so it is build-ready, but nobody has run it. That gap folds into the Slice 2 on-device matrix,
+which already carries Android as an explicit open gate.
+
+The device run also surfaced eleven map defects that every automated check had passed — all
+closed, see [.scratch/native-map-fixes/](../native-map-fixes/README.md). Budget device time for
+each slice on that basis: the suite is necessary, it is not the gate.
 
 Note on the dev server vs. bundled web: for a first run you can point the native shell at the
 already-deployed web app (set `server.url` in `capacitor.config.json` to the Vercel URL) to
@@ -177,6 +185,7 @@ sanity-check the shell without bundling; for a real build, ship the bundled `dis
   (survives lock/background/kill). This is the ADR-011 make-or-break wall; its acceptance gate
   is the on-device background matrix, not a unit suite. `detectPlatform()` + the throwing guard
   in `createPositionSource` are already waiting for it.
-- Background permission strings (iOS `NSLocation*UsageDescription`, Android
-  `ACCESS_BACKGROUND_LOCATION`) get added to the native projects in Slice 2, with the
-  contextual-rationale UX from the PRD.
+- The iOS permission strings are **already in** `ios/App/App/Info.plist` (see the table above),
+  so Slice 2 starts with the plugin and the contextual-rationale UX rather than the plumbing.
+  Android's `ACCESS_BACKGROUND_LOCATION` + `POST_NOTIFICATIONS` still need adding to the
+  manifest.

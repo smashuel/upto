@@ -36,8 +36,10 @@ Mac for it:
   loud, not silent).
 - **`capacitor.config.json`** — appId `world.upto.app`, appName `Upto`, `webDir: dist` (Vite
   output). Seeded so you skip `npx cap init`.
-- **`.gitignore`** ignores `/ios/` and `/android/` (generated per-machine). Un-ignore + commit
-  if the team decides to version the native projects.
+- **`.gitignore`** — `android/` and `ios/` are both **committed** now (2026-07-31); each carries
+  its own nested `.gitignore` that keeps build output, the copied web bundle, and the generated
+  `capacitor.config.json` out. `keys/`, `*.p8`, `*.p12`, `*.mobileprovision` and `*.cer` are
+  ignored — Apple signing keys never belong in the repo.
 
 ## Prerequisites
 
@@ -77,8 +79,12 @@ Convenience scripts for `package.json` once deps are installed:
 
 ## iOS build (cloud — no Mac)
 
-`npx cap add ios` generates the `ios/` project; it can be generated on the cloud macOS runner
-(or committed once, from any `cap add ios` output) — it does **not** need to be created locally.
+The `ios/` project is **committed** (generated once on Linux by `npx cap add ios` — Xcode is only
+needed to *build* it, not to create it). CI no longer regenerates it: the pipeline asserts it is
+present, with its location permission keys, and fails the build if not. Do not reinstate
+`cap add ios` as a fallback — a fresh project carries none of those keys, so the app would build
+and ship silently unable to ask for location.
+
 The Codemagic pipeline then, on each push:
 
 1. `npm ci && npm run build` (web bundle)
@@ -129,11 +135,24 @@ Hard-won gotchas, in the order they bit us — keep these when touching the pipe
    for **external** testing → demands Test Information (feedback email + reviewer contact) we don't
    need. Add self as internal tester in App Store Connect → TestFlight → Internal Testing.
 5. **Export compliance** on first upload → "None of the algorithms mentioned above" (Upto is HTTPS
-   only, no custom crypto) → exempt. Bake `ITSAppUsesNonExemptEncryption=false` into `Info.plist`
-   at Slice 2 to stop the per-build prompt.
+   only, no custom crypto) → exempt. `ITSAppUsesNonExemptEncryption=false` is now baked into
+   `Info.plist`, so the per-build prompt is gone.
 
-**At Slice 2, start committing `ios/`** (remove it from `.gitignore`): background permission strings
-in `ios/App/App/Info.plist` must persist across builds, which CI-regeneration would wipe.
+**`ios/` is committed as of 2026-07-31** — it had to be before Slice 2, because CI-regeneration
+wiped `ios/App/App/Info.plist` on every build. It now carries:
+
+| Key | Why |
+|-----|-----|
+| `NSLocationWhenInUseUsageDescription` | Foreground map position. Slice 1 already needed it. |
+| `NSLocationAlwaysAndWhenInUseUsageDescription` | The "always" rationale App Review reads. |
+| `UIBackgroundModes: [location]` | Lets fixes keep arriving with the screen locked. |
+| `ITSAppUsesNonExemptEncryption: false` | HTTPS only → export-compliance exempt. |
+
+⚠️ `UIBackgroundModes: [location]` is declared **ahead of** the background-location code that uses
+it. That is inert on device (nothing registers a background watcher until Slice 2 lands the
+plugin) and fine for TestFlight, which is upload-only to internal testers with no Beta App Review.
+It is **not** fine for a real App Store submission: Apple rejects apps that declare the background
+location mode without demonstrably using it. Do not submit for review until Slice 2 is in.
 
 ## Remaining Slice 1 acceptance (verify on device — iOS via TestFlight now; Android still needs a device)
 

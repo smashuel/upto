@@ -1,6 +1,6 @@
 # 10 — Map notes are never persisted to the TripLink
 
-Status: needs-decision
+Status: done (2026-07-31) — notes persist on the TripLink; shipped at 6fcdc50
 Surfaced: while fixing issue 06, 2026-07-31
 Area: TripPlanningMap.tsx, AdventureLocationStep.tsx, src/types/adventure.ts
 

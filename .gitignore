@@ -8,11 +8,23 @@ yarn-error.log*
 dist/
 build/
 
-# Capacitor: the android/ project is generated on Linux and committed (its own nested
-# .gitignore keeps build artifacts out). The ios/ project is generated on cloud macOS
-# (Codemagic) since Xcode is macOS-only, so it's not committed from here. See
-# .scratch/live-location-stage-2/mobile-standup-runbook.md.
-/ios/
+# Capacitor: android/ and ios/ are both generated on Linux and COMMITTED (each has its own
+# nested .gitignore keeping build artifacts, the copied web bundle, and the generated
+# capacitor.config.json out). ios/ used to be regenerated on the Codemagic macOS runner each
+# build, which silently wiped any Info.plist edit — including the location permission strings
+# the background-location feature cannot work without. Committing it is what makes that native
+# config durable. See .scratch/live-location-stage-2/mobile-standup-runbook.md.
+
+# Signing keys and other secrets. keys/ holds Apple .p8 private keys (App Store Connect API
+# key, APNs auth key) — they are downloadable exactly once from Apple, grant API access to the
+# whole developer account, and must never reach the repo. The wildcards below are a backstop so
+# a stray key outside keys/ is still ignored. Real home for these: a password manager / vault;
+# CI reads them from Codemagic's encrypted env, same rule as deploy.sh.
+keys/
+*.p8
+*.p12
+*.mobileprovision
+*.cer
 
 # Environment variables
 .env

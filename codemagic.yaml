@@ -41,11 +41,24 @@ workflows:
             echo "         will be disabled in the native app. Add the vite_env group in Codemagic."
           fi
           npm run build
-      - name: Generate the iOS platform (gitignored — created fresh each build)
+      - name: Assert the committed iOS project and its native permission config are present
+        # ios/ is COMMITTED (it used to be regenerated here, which wiped Info.plist every build).
+        # Do NOT reinstate `cap add ios` as a fallback: a fresh project carries none of the keys
+        # below, so the app would build and ship silently unable to ask for location. Fail loudly
+        # instead — a red build is recoverable, a signed build that can't track someone isn't.
         script: |
-          if [ ! -d "ios" ]; then
-            npx cap add ios
-          fi
+          set -e
+          PLIST="$CM_BUILD_DIR/ios/App/App/Info.plist"
+          test -d "$CM_BUILD_DIR/ios/App/App.xcodeproj" \
+            || { echo "FATAL: ios/ is not in the checkout — it is committed, not generated"; exit 1; }
+          for KEY in NSLocationWhenInUseUsageDescription \
+                     NSLocationAlwaysAndWhenInUseUsageDescription \
+                     UIBackgroundModes \
+                     ITSAppUsesNonExemptEncryption; do
+            /usr/libexec/PlistBuddy -c "Print :$KEY" "$PLIST" >/dev/null 2>&1 \
+              || { echo "FATAL: $KEY missing from Info.plist"; exit 1; }
+          done
+          echo "iOS project + location permission strings present."
       - name: Capacitor sync iOS (copies dist/ + native config into the SPM project)
         # Capacitor 8 iOS is SPM-based: cap sync writes Package.swift; there's no pod install.
         # Xcode resolves the Swift packages during build-ipa. Assert the .xcodeproj exists.

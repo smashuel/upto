@@ -1,6 +1,6 @@
 # 11 — Multiple routes can be drawn on one TripLink
 
-Status: needs-decision
+Status: done (2026-07-31) — one route per TripLink (ADR 018); shipped at 798de68
 Surfaced: on-device (iPhone), 2026-07-31
 Area: src/services/TrackDrawer.ts, TripPlanningMap.tsx, AdventureLocationStep.tsx
 

@@ -1,6 +1,6 @@
 # 06 — Adding a map note along a route crashes the TripLink
 
-Status: still reproducing on abc9aa6 — cause unknown, blast radius now contained
+Status: done (2026-07-31) — root cause was a nested <form>; fixed at 40c3558, verified on device
 Priority: high — data loss
 Surfaced: on-device (iPhone), 2026-07-31
 Area: src/services/NoteManager.ts, TripPlanningMap.tsx

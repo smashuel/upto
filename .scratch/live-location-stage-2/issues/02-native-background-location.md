@@ -71,8 +71,38 @@ confirmed against the code and undercut the whole slice if missed:
   if the community plugin can't hold iOS "always" background. Name both in the ADR note so the
   escalation path is pre-decided, not improvised under pressure.
 
+## Progress (2026-07-31) — native config prerequisite landed
+
+The `ios/` project is now **committed**, with its location permission strings. This had to happen
+before any background-location code: CI regenerated `ios/` on every build, so every `Info.plist`
+edit was wiped before the app was even compiled. Landed:
+
+- `ios/` un-gitignored and committed (19 files; Capacitor's nested `ios/.gitignore` keeps build
+  output, the copied web bundle and the generated `capacitor.config.json` out). Bundle id is
+  unchanged at `world.upto.app`, so signing and the TestFlight upload path are untouched.
+- `Info.plist`: `NSLocationWhenInUseUsageDescription`,
+  `NSLocationAlwaysAndWhenInUseUsageDescription`, `UIBackgroundModes: [location]`,
+  `ITSAppUsesNonExemptEncryption = false` (kills the per-build export-compliance prompt).
+- `codemagic.yaml`: the `cap add ios` regeneration step is replaced by an **assertion** that the
+  project and all four keys are present, failing the build otherwise. Deliberately no fallback —
+  a regenerated project has none of these keys, so the app would build and ship silently unable
+  to ask for location, which is the exact failure that was happening invisibly.
+- `keys/`, `*.p8`, `*.p12`, `*.mobileprovision`, `*.cer` gitignored — the App Store Connect and
+  APNs private keys were sitting untracked and un-ignored, one `git add .` from being published.
+
+⚠️ `UIBackgroundModes: [location]` is declared ahead of the code that uses it. Inert on device and
+fine for TestFlight (upload-only, internal testers, no Beta App Review), but Apple rejects App
+Store submissions that declare it without using it — don't submit for review until this slice
+lands the plugin.
+
+Still to build: the plugin itself, `toPositionFix`, contextual "always" permission, CapacitorHttp
+POST routing, and the on-device matrix.
+
 ## Acceptance criteria
 
+- [x] iOS native config persists across builds: `ios/` committed with the location usage
+      strings, `UIBackgroundModes`, and export-compliance flag; CI asserts rather than
+      regenerates (PRD user story 21).
 - [ ] A Capacitor background-geolocation plugin is chosen and wired behind the
       `native-background` source; the choice + iOS-"always" rationale is recorded (candidate ADR
       note).

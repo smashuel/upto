@@ -730,12 +730,67 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
    Island / status bar and the rounded screen corners in fullscreen on curved-screen phones.
    env(safe-area-inset-*) is 0 unless the element sits at a true screen edge (i.e. fullscreen),
    so these are behaviour-preserving for the in-card web layout. Requires viewport-fit=cover. */
-.map-overlay-tl { top: calc(12px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); }
-.map-overlay-tr { top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); align-items: flex-end; }
-.map-overlay-bl { bottom: calc(12px + env(safe-area-inset-bottom)); left: calc(12px + env(safe-area-inset-left)); }
-.map-overlay-br { bottom: calc(12px + env(safe-area-inset-bottom)); right: calc(12px + env(safe-area-inset-right)); }
-.map-overlay-tc { top: calc(12px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); }
-.map-overlay-bc { bottom: calc(12px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); }
+.map-overlay-tl { top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px)); }
+.map-overlay-tr { top: calc(12px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); align-items: flex-end; }
+.map-overlay-bl { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); left: calc(12px + env(safe-area-inset-left, 0px)); }
+.map-overlay-br { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); }
+.map-overlay-tc { top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); }
+.map-overlay-bc { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); }
+
+/* Offscreen probe whose padding is the four safe-area insets, so JS can read what the
+   device actually reports. Without a Mac there is no Web Inspector on a TestFlight build,
+   and "is env() resolving at all?" is otherwise unanswerable. */
+.safe-area-probe {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  visibility: hidden;
+  pointer-events: none;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+/* Fullscreen corner floors.
+   The safe-area insets alone proved insufficient on a real iPhone: controls still landed
+   too far into the corners to tap reliably. Two things bite here that env() does not cover:
+   the screen's ~55px corner radius clips anything pushed fully into a corner, and
+   env(safe-area-inset-*) can resolve to 0 in a WKWebView that is already laid out inside the
+   safe area — leaving nothing to add. `max()` therefore applies a floor rather than trusting
+   the inset: whichever is larger wins, so a correctly-reporting device is unaffected and a
+   zero-reporting one still gets usable margins. Only fullscreen — the embedded map sits in
+   the page and needs no floor. */
+.map-viewport-fullscreen-fallback .map-overlay-tl,
+.map-viewport:fullscreen .map-overlay-tl {
+  top: max(calc(12px + env(safe-area-inset-top, 0px)), 52px);
+  left: max(calc(12px + env(safe-area-inset-left, 0px)), 20px);
+}
+.map-viewport-fullscreen-fallback .map-overlay-tr,
+.map-viewport:fullscreen .map-overlay-tr {
+  top: max(calc(12px + env(safe-area-inset-top, 0px)), 52px);
+  right: max(calc(12px + env(safe-area-inset-right, 0px)), 20px);
+}
+.map-viewport-fullscreen-fallback .map-overlay-bl,
+.map-viewport:fullscreen .map-overlay-bl {
+  bottom: max(calc(12px + env(safe-area-inset-bottom, 0px)), 44px);
+  left: max(calc(12px + env(safe-area-inset-left, 0px)), 20px);
+}
+.map-viewport-fullscreen-fallback .map-overlay-br,
+.map-viewport:fullscreen .map-overlay-br {
+  bottom: max(calc(12px + env(safe-area-inset-bottom, 0px)), 44px);
+  right: max(calc(12px + env(safe-area-inset-right, 0px)), 20px);
+}
+.map-viewport-fullscreen-fallback .map-overlay-tc,
+.map-viewport:fullscreen .map-overlay-tc {
+  top: max(calc(12px + env(safe-area-inset-top, 0px)), 52px);
+}
+.map-viewport-fullscreen-fallback .map-overlay-bc,
+.map-viewport:fullscreen .map-overlay-bc {
+  bottom: max(calc(12px + env(safe-area-inset-bottom, 0px)), 44px);
+}
 .map-overlay-center {
   position: absolute;
   top: 50%;

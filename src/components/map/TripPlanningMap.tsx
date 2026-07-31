@@ -1333,6 +1333,32 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
     // exited back into fullscreen.
   }, []);
 
+  // Measure what the device actually reports for the safe-area insets, by reading the
+  // computed padding off an offscreen probe. Re-measured whenever fullscreen or orientation
+  // changes, since the insets differ between portrait and landscape.
+  const [safeAreaInsets, setSafeAreaInsets] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const measure = () => {
+      const probe = document.createElement('div');
+      probe.className = 'safe-area-probe';
+      document.body.appendChild(probe);
+      const cs = getComputedStyle(probe);
+      const px = (v: string) => Math.round(parseFloat(v) || 0);
+      setSafeAreaInsets(
+        `${px(cs.paddingTop)}/${px(cs.paddingRight)}/${px(cs.paddingBottom)}/${px(cs.paddingLeft)}`,
+      );
+      probe.remove();
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('orientationchange', measure);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('orientationchange', measure);
+    };
+  }, [isFullscreen]);
+
   /** Leave the immersive/fullscreen map and return to the wizard. */
   const exitImmersive = useCallback(async () => {
     if (document.fullscreenElement) {
@@ -1656,6 +1682,15 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
                   </div>
                 );
               })()}
+
+              {/* Safe-area readout. Only in fullscreen, where the insets actually apply.
+                  Shown because the first safe-area fix didn't work on device and we can't
+                  inspect a TestFlight build — this says whether env() resolves at all. */}
+              {isFullscreen && (
+                <div className="map-layers-sublabel">
+                  Safe area t/r/b/l: {safeAreaInsets ?? 'measuring…'}
+                </div>
+              )}
             </div>
           )}
         </div>

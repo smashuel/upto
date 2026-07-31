@@ -1,6 +1,6 @@
 # 04 — Open the map in its own fullscreen window with a "Done" button
 
-Status: done (2026-07-31)
+Status: reopened — safe-area floors added, needs re-verify
 Surfaced: on-device (iPhone), 2026-07-31
 Area: AdventureLocationStep.tsx / CreateAdventure.tsx (wizard step), TripPlanningMap.tsx (fullscreen)
 

@@ -420,7 +420,9 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   // Fullscreen: tracks both Fullscreen API state and CSS-overlay fallback (when API is unavailable / blocked).
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenFallback, setFullscreenFallback] = useState(false);
-  const noteSubmitRef = useRef<((data: { content: string; title: string; type: MapNote['type'] }) => void) | null>(null);
+  const noteSubmitRef = useRef<
+    ((data: { content: string; title: string; type: MapNote['type'] }) => MapNote | null) | null
+  >(null);
   /** Pulsing dot entity shown on the map when hovering the elevation chart */
   const profileHighlightRef = useRef<any>(null);
   /** "Last check-in" pin entity (view pages) */
@@ -1832,9 +1834,24 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         <NoteModal
           open={noteModalOpen}
           onSubmit={(data) => {
-            noteSubmitRef.current?.(data);
+            const submit = noteSubmitRef.current;
+            // Always clear the pending submit and close, even if placing the note throws.
+            // An exception escaping this handler unmounts the React tree — which is how a
+            // failed note used to take the whole trip-planning wizard down with it.
             noteSubmitRef.current = null;
             setNoteModalOpen(false);
+            try {
+              const note = submit?.(data);
+              if (note === null) {
+                toast.error("Couldn't place that note here — try a spot on the terrain.");
+              }
+            } catch (err) {
+              // Surface the message: there's no console on a TestFlight build without a Mac,
+              // so the toast is the only way this failure can be reported back.
+              const msg = err instanceof Error ? err.message : String(err);
+              console.error('Failed to add map note:', err);
+              toast.error(`Couldn't add that note (${msg.slice(0, 120)}). Your route is safe.`);
+            }
           }}
           onCancel={() => {
             noteSubmitRef.current = null;

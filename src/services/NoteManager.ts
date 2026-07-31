@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as Cesium from 'cesium';
 import { CesiumManager } from './CesiumManager';
+import { noteIcon, escapeHtml, type NoteType } from './noteGraphics';
 
 export interface MapNote {
   id: string;
@@ -8,23 +9,15 @@ export interface MapNote {
   cartographic: any;
   entity?: any;
   content: string;
-  type: 'accommodation' | 'warning' | 'info' | 'photo' | 'general';
+  type: NoteType;
   title: string;
   timestamp: Date;
 }
 
-// Minimal inline SVG icons as data URLs
-const NOTE_ICONS: Record<MapNote['type'], string> = {
-  accommodation: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23007CFF"><rect x="3" y="9" width="18" height="12" rx="1"/><path d="M1 9h22M9 9V5h6v4"/></svg>',
-  warning:       'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23FF6B00"><path d="M12 2L22 20H2z"/><path d="M12 9v4M12 16v2" stroke="white" stroke-width="1.5"/></svg>',
-  info:          'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%2300B8D4"><circle cx="12" cy="12" r="10"/><path d="M12 8v2M12 12v6" stroke="white" stroke-width="2"/></svg>',
-  photo:         'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23007CFF"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="12" r="3" fill="white"/></svg>',
-  general:       'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 12H3M12 3v18" stroke="%236B7280" stroke-width="2"/></svg>',
-};
-
 export type NoteRequestCallback = (
   position: any,
-  onSubmit: (data: { content: string; title: string; type: MapNote['type'] }) => void,
+  /** Returns the placed note, or null if it could not be placed (never throws). */
+  onSubmit: (data: { content: string; title: string; type: NoteType }) => MapNote | null,
 ) => void;
 
 export default class NoteManager extends CesiumManager {
@@ -49,22 +42,14 @@ export default class NoteManager extends CesiumManager {
       const pos = this.pickPosition(event.position);
       if (!pos) return;
 
-      if (this.onRequestNote) {
-        // Delegate to React modal
-        this.onRequestNote(pos, (data) => {
-          this.addNote(pos, data);
-        });
-      } else {
-        // Fallback to window.prompt (for non-React contexts)
-        const content = window.prompt('Note content:');
-        if (!content) return;
-        const title = window.prompt('Note title (optional):') || 'Map Note';
-        const typeRaw = window.prompt('Type: accommodation / warning / info / photo / general') || 'general';
-        const type = (['accommodation', 'warning', 'info', 'photo', 'general'].includes(typeRaw)
-          ? typeRaw
-          : 'general') as MapNote['type'];
-        this.addNote(pos, { content, title, type });
+      if (!this.onRequestNote) {
+        // No UI to collect the note text. There used to be a window.prompt() fallback here,
+        // but WKWebView suspends/blocks prompt() in ways a desktop browser doesn't, so it
+        // was a hang-or-crash on the very platform it would have been reached from.
+        console.error('NoteManager: no note-input handler provided; ignoring note click');
+        return;
       }
+      this.onRequestNote(pos, (data) => this.addNote(pos, data));
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
   }
 
@@ -73,8 +58,22 @@ export default class NoteManager extends CesiumManager {
     this.setCursor(enabled ? 'help' : '');
   }
 
-  addNote(position: any, data: { content: string; title: string; type: MapNote['type'] }): MapNote {
-    const cartographic = Cesium.Cartographic.fromCartesian(position);
+  /**
+   * Add a note at a picked position. Returns null instead of throwing if the note can't be
+   * placed — a failure here used to propagate out through the React submit handler and tear
+   * down the whole trip-planning wizard, losing the user's in-progress route.
+   */
+  addNote(
+    position: any,
+    data: { content: string; title: string; type: NoteType },
+  ): MapNote | null {
+    // fromCartesian returns undefined for a degenerate cartesian (e.g. a pick that landed at
+    // the ellipsoid centre). Reading .latitude off it later is a crash, so bail early.
+    const cartographic = position ? Cesium.Cartographic.fromCartesian(position) : undefined;
+    if (!cartographic) {
+      console.error('NoteManager: could not resolve a position for this note', position);
+      return null;
+    }
 
     const note: MapNote = {
       id: this.generateId('note'),
@@ -86,9 +85,18 @@ export default class NoteManager extends CesiumManager {
       timestamp: new Date(),
     };
 
+    try {
+      note.entity = this.renderNote(note);
+    } catch (err) {
+      // Rendering is the risky half (billboard image decode, entity construction). Keep the
+      // map and the trip alive; the note simply doesn't get placed.
+      console.error('NoteManager: failed to render note', err);
+      return null;
+    }
+
     this.notes.push(note);
-    note.entity = this.renderNote(note);
     this.onAdded?.(note);
+    this.requestRender();
     return note;
   }
 
@@ -99,7 +107,7 @@ export default class NoteManager extends CesiumManager {
     return this.viewer.entities.add({
       position: note.position,
       billboard: {
-        image: NOTE_ICONS[note.type],
+        image: noteIcon(note.type),
         scale: 0.6,
         heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
@@ -115,7 +123,8 @@ export default class NoteManager extends CesiumManager {
         style: Cesium.LabelStyle.FILL_AND_OUTLINE,
         scaleByDistance: new Cesium.NearFarScalar(1.5e2, 1.0, 1.5e7, 0.0),
       },
-      description: `<div><h4>${note.title}</h4><p>${note.content}</p><p>${lat}, ${lng}</p></div>`,
+      // Title and content are user input — escape before interpolating into markup.
+      description: `<div><h4>${escapeHtml(note.title)}</h4><p>${escapeHtml(note.content)}</p><p>${lat}, ${lng}</p></div>`,
     });
   }
 

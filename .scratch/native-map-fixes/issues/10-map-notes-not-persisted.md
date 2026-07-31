@@ -33,3 +33,15 @@ both exist at all.
 ## Blocked by
 
 - Issue 07 (map control set) — decides whether notes survive as a feature.
+
+## Decided and shipped — 2026-07-31, at 6fcdc50
+
+**Notes are part of the TripLink.** The user's framing settles it: "when you send the trip
+link out, the receiver can click on the note. It will say 'car park, aiming to leave around
+8am'." A note is trip information for the recipient, not planning scratch.
+
+`TripNote` on the TripLink, carried in the JSONB `data` (no backend change — the whole
+TripLink is stored wholesale). `NoteManager.getSerializableNotes`/`loadNotes` handle the
+round-trip; `TripPlanningMap` takes `initialNotes`; ActiveTrip and PublicAdventureView pass
+them. Tapping a pin opens Cesium's info box: title as the entity `name` (the header), type,
+body and coordinates as the description.

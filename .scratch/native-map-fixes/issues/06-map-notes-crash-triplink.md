@@ -118,3 +118,20 @@ Place a note, then relaunch and read the yellow banner at the top. It will say e
 "the page navigated or reloaded" or "the app was terminated by the system (most likely out of
 memory)". Those two answers lead to completely different fixes, and this finally distinguishes
 them with evidence.
+
+## Resolved — 2026-07-31, at 40c3558
+
+**Cause: a nested `<form>`.** `NoteModal` rendered a `<form>` inside the trip wizard's
+`<form>`, which HTML forbids. React synthetic events bubble through the React tree, so
+submitting a note also ran the wizard's `handleSubmit(onSubmit)` — which navigates when there
+is no session, throwing away the whole in-progress trip. There was never an exception, which
+is why the error boundary and `scene.renderError` both stayed silent and why three rounds of
+guessing at Cesium-side causes found nothing.
+
+Fixed by portalling the modal to `<body>` (DOM form ownership and native submission) plus
+`stopPropagation` (the React path — a portal alone does not stop synthetic bubbling).
+Confirmed on device: the note submitted and the wizard survived.
+
+Kept regardless, because both earn their place independently of this bug: the error
+boundaries bound the blast radius of any future throw, and the crash breadcrumb distinguishes
+a lost document from a killed runtime — neither of which is otherwise observable on TestFlight.

@@ -15,6 +15,7 @@ import { api } from '../config/api';
 import { hasPendingRouteSettles, routesSettled } from '../services/RouteSettlement';
 import type { MapLayer } from '../services/BasemapSuggest';
 import { useAuth } from '../hooks/useAuth';
+import ErrorBoundary from '../components/ErrorBoundary';
 import type { TripLink, ActivityType, LatLng, TripRoute } from '../types/adventure';
 import type { What3WordsLocation } from '../types/what3words';
 
@@ -333,6 +334,10 @@ export const CreateTripLink: React.FC = () => {
         </header>
 
         <FormProvider {...methods}>
+          {/* Inside FormProvider on purpose: useForm lives in this component, so a throw in a
+              step replaces the form UI without discarding the answers already entered.
+              "Try again" then re-renders it with that state intact. */}
+          <ErrorBoundary label="trip form">
           <form onSubmit={handleSubmit(onSubmit)} noValidate>
 
             {/* ── Activity Type Pills ── */}
@@ -605,6 +610,7 @@ export const CreateTripLink: React.FC = () => {
             </div>
 
           </form>
+          </ErrorBoundary>
         </FormProvider>
       </div>
     </div>

@@ -653,6 +653,57 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   overscroll-behavior: contain;
 }
 
+/* Failure surfaces. Both are deliberately selectable: on a phone, copying the text out is the
+   only way to report an error that doesn't reproduce on a dev machine. */
+.error-boundary-fallback {
+  padding: 20px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  color: #7f1d1d;
+}
+.error-boundary-title { font-weight: 700; margin-bottom: 6px; }
+.error-boundary-body { font-size: 0.9rem; margin-bottom: 10px; }
+.error-boundary-detail,
+.map-render-error-detail {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 8px;
+  border-radius: 6px;
+  margin: 0 0 10px;
+}
+.error-boundary-retry,
+.map-render-error-dismiss {
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.map-render-error {
+  position: absolute;
+  z-index: 30;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: max(calc(16px + env(safe-area-inset-bottom, 0px)), 48px);
+  max-width: min(90%, 420px);
+  padding: 12px 14px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  color: #7f1d1d;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+}
+.map-render-error-title { font-weight: 700; font-size: 0.85rem; margin-bottom: 6px; }
+
 /* Mode buttons carry their label. Icon-only wasn't legible on device — an eye glyph reads
    as a visibility toggle, not "View mode". */
 .map-btn-labelled {

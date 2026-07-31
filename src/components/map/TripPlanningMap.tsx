@@ -34,6 +34,7 @@ import type { DrawingStats, SerializableTrack } from '../../services/TrackDrawer
 import type { TrailSelection } from '../../services/TrailLayerManager';
 import type { MapNote } from '../../services/NoteManager';
 import NoteModal from './NoteModal';
+import ErrorBoundary from '../ErrorBoundary';
 import type { LatLng } from '../../types/adventure';
 
 type SceneMode = '2d' | '3d';
@@ -518,6 +519,19 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
           geocoder: false,
           infoBox: true,
           selectionIndicator: true,
+          // Cesium's own handler replaces the canvas with a full-bleed error panel and stops
+          // the render loop. Handle scene.renderError ourselves instead so the failure is
+          // reportable and the surrounding trip stays usable.
+          showRenderLoopErrors: false,
+        });
+
+        // Render-loop failures are asynchronous — they happen inside scene.render(), long
+        // after whatever call queued the work returned. No try/catch at the call site and no
+        // React error boundary can see them, so this listener is the only way they surface.
+        viewer.scene.renderError.addEventListener((_scene: any, error: unknown) => {
+          const msg = error instanceof Error ? error.message : String(error);
+          console.error('Cesium render loop error:', error);
+          setRenderError(msg);
         });
 
         viewer.scene.globe.enableLighting = false;
@@ -1360,6 +1374,9 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   // Measure what the device actually reports for the safe-area insets, by reading the
   // computed padding off an offscreen probe. Re-measured whenever fullscreen or orientation
   // changes, since the insets differ between portrait and landscape.
+  // Last Cesium render-loop error, if any. Surfaced in the map so a failure on a phone can be
+  // read and reported — there's no console on a TestFlight build without a Mac.
+  const [renderError, setRenderError] = useState<string | null>(null);
   const [safeAreaInsets, setSafeAreaInsets] = useState<string | null>(null);
   useEffect(() => {
     if (!isFullscreen) return;
@@ -1803,6 +1820,23 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
           </div>
         )}
 
+        {/* Render-loop error banner. Persistent rather than a toast: this is the one piece of
+            evidence we have for a failure that only reproduces on the device, so it has to
+            stay on screen long enough to be read and reported. Selectable in CSS. */}
+        {renderError && (
+          <div className="map-render-error" role="alert">
+            <div className="map-render-error-title">Map rendering error</div>
+            <div className="map-render-error-detail">{renderError}</div>
+            <button
+              type="button"
+              className="map-render-error-dismiss"
+              onClick={() => setRenderError(null)}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* Note creation modal */}
         <NoteModal
           open={noteModalOpen}
@@ -1899,4 +1933,15 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   );
 };
 
-export default TripPlanningMap;
+/**
+ * Every call site gets the boundary, so a failure anywhere in the map — Cesium, a manager, a
+ * note — degrades to a message inside the map's own box instead of unmounting the surrounding
+ * trip wizard and discarding the user's route.
+ */
+const TripPlanningMapWithBoundary: React.FC<TripPlanningMapProps> = (props) => (
+  <ErrorBoundary label="map">
+    <TripPlanningMap {...props} />
+  </ErrorBoundary>
+);
+
+export default TripPlanningMapWithBoundary;

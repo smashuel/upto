@@ -18,7 +18,8 @@ import { selectBaseImagery, OSM_TILE_URL } from '../../services/baseImagery';
 import { describeMapDiagnostics } from '../../services/mapDiagnostics';
 import { flyToRouteBounds, prefersReducedMotion } from '../../services/MapCamera';
 import { framingPoints, pointWithinView } from '../../services/mapFraming';
-import { detectDeviceTier, applyPerformanceProfile } from '../../services/MapPerformance';
+import { detectDeviceTier, applyPerformanceProfile, type DeviceTier } from '../../services/MapPerformance';
+import { resolveScreenSpaceError } from '../../services/screenSpaceError';
 import { API_CONFIG } from '../../config/api';
 import type { DrawingStats, SerializableTrack } from '../../services/TrackDrawer';
 import type { TrailSelection } from '../../services/TrailLayerManager';
@@ -335,6 +336,8 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   // Reference to whichever topo imagery layer is currently on top of the satellite base.
   // Only one topo basemap can be active at a time — swap swaps the whole layer.
   const basemapLayerRef = useRef<{ layer: any; kind: Exclude<MapLayer, 'satellite'> } | null>(null);
+  // Device tier resolved once at init; re-read on every 2D↔3D morph to re-pitch globe LOD.
+  const perfTierRef = useRef<DeviceTier>('high');
 
   const [isLoading, setIsLoading] = useState(true);
   const [mapMode, setMapMode] = useState<MapMode>({ type: 'view', active: false });
@@ -497,7 +500,11 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         // resolution/SSE and drop MSAA + atmosphere to recover framerate. All values
         // live in MapPerformance.ts for empirical tuning on real devices.
         const perfTier = detectDeviceTier();
+        perfTierRef.current = perfTier;
         applyPerformanceProfile(viewer, perfTier);
+        // Override the profile's single SSE with the scene-mode-aware value: 2D needs a
+        // sharper setting than 3D to reach the same imagery detail (see screenSpaceError.ts).
+        applyGlobeDetail(viewer, sceneMode);
         console.log(`TripPlanningMap: performance tier = ${perfTier}`);
 
         viewer.cesiumWidget.screenSpaceEventHandler.removeInputAction(
@@ -854,6 +861,19 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
     trailLayerRef.current?.clearSelection();
   };
 
+  /**
+   * Set globe LOD pressure for the given scene mode. Kept separate from the one-shot
+   * performance profile because it has to be re-applied on every 2D↔3D morph.
+   */
+  const applyGlobeDetail = (viewer: any, mode: SceneMode) => {
+    try {
+      viewer.scene.globe.maximumScreenSpaceError = resolveScreenSpaceError(
+        perfTierRef.current,
+        mode === '2d' ? '2d' : '3d',
+      );
+    } catch { /* unsupported / torn down */ }
+  };
+
   const handleSceneModeChange = async (next: SceneMode) => {
     if (next === sceneMode || !viewerRef.current) return;
     const viewer = viewerRef.current;
@@ -910,6 +930,11 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         setTerrainError(error instanceof Error ? error.message : String(error));
       }
     }
+    // 2D refines the globe quadtree less than 3D (flat ellipsoid terrain has almost no
+    // geometric error to drive it), so imagery lands visibly coarser at the same zoom.
+    // Re-pitch LOD for the mode we just morphed into.
+    applyGlobeDetail(viewer, next);
+
     localStorage.setItem(SCENE_MODE_STORAGE_KEY, next);
     setSceneMode(next);
     viewer.scene.requestRender();

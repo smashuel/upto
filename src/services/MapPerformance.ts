@@ -19,7 +19,8 @@
  * follow-up. See brain/plans/compass_artifact.md.
  */
 
-import { classifyDeviceTier, type DeviceTier } from './deviceTier';
+// Explicit .ts extension: value import reachable from node --experimental-strip-types tests.
+import { classifyDeviceTier, type DeviceTier } from './deviceTier.ts';
 
 export type { DeviceTier };
 

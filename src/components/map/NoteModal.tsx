@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { MapNote } from '../../services/NoteManager';
 
 const NOTE_TYPES: Array<{ value: MapNote['type']; label: string; color: string }> = [
@@ -24,6 +25,9 @@ const NoteModal: React.FC<NoteModalProps> = ({ open, onSubmit, onCancel }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // React synthetic events bubble through the *React* tree even across a portal, so without
+    // this the trip wizard's onSubmit still fires when you add a note.
+    e.stopPropagation();
     // Content is optional — a marker (e.g. a camp spot) often needs only a title + type.
     onSubmit({ content: content.trim(), title: title.trim() || 'Map Note', type });
     setTitle('');
@@ -38,7 +42,14 @@ const NoteModal: React.FC<NoteModalProps> = ({ open, onSubmit, onCancel }) => {
     onCancel();
   };
 
-  return (
+  // Portalled to <body> deliberately. The map is rendered inside the trip wizard's <form>,
+  // and this modal has a <form> of its own — HTML forbids nesting them, and React's synthetic
+  // events bubble through the React tree regardless of the portal boundary in the DOM, so
+  // submitting this one also ran the wizard's onSubmit (which can navigate away and take the
+  // whole in-progress trip with it). Portalling moves the inner <form> out of the outer one
+  // in the *DOM*, which is what decides form ownership and native submission; the explicit
+  // stopPropagation below handles the React side.
+  return createPortal(
     <div className="note-modal-backdrop" onClick={handleCancel}>
       <div className="note-modal" onClick={(e) => e.stopPropagation()}>
         <div className="note-modal-header">Add Note</div>
@@ -93,7 +104,8 @@ const NoteModal: React.FC<NoteModalProps> = ({ open, onSubmit, onCancel }) => {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 

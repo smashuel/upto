@@ -704,6 +704,38 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
 }
 .map-render-error-title { font-weight: 700; font-size: 0.85rem; margin-bottom: 6px; }
 
+/* Reports what the app was doing when it last vanished. Sits above everything and clears the
+   status bar, because it is read on a phone that has no console. */
+.crash-report-banner {
+  position: fixed;
+  z-index: 2000;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: max(calc(8px + env(safe-area-inset-top, 0px)), 12px) 14px 10px;
+  background: #fffbeb;
+  border-bottom: 1px solid #fde68a;
+  color: #78350f;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+.crash-report-text {
+  flex: 1;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.crash-report-dismiss {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0 4px;
+}
+
 /* Mode buttons carry their label. Icon-only wasn't legible on device — an eye glyph reads
    as a visibility toggle, not "View mode". */
 .map-btn-labelled {

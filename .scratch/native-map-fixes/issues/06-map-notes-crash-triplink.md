@@ -75,3 +75,46 @@ made legible**:
 **Next step is a report, not a fix**: place a note and read back whichever appears — the red
 "Map rendering error" banner, or the "map stopped working" panel. That message names the
 actual cause and this stops being guesswork.
+
+## Update — 2026-07-31, after 99c7657
+
+Neither surface fired. On a build confirmed to contain both the error boundary and the
+`scene.renderError` listener, placing a note still ends with a fresh "New TripLink" page and
+every entry cleared — no boundary panel, no render-error banner.
+
+**That is the most informative result so far, because it rules out an exception entirely.**
+If anything had thrown in React, the boundary would have caught it. If anything had thrown in
+Cesium's render loop, `renderError` would have caught it. Nothing in JS ever saw a failure —
+so this was never a crash in the sense assumed by issues 06 and its three dead hypotheses.
+
+Losing *all* form state means the whole JS context went away. Only two things do that:
+
+| Cause | Fingerprint |
+|---|---|
+| The document unloaded with JS alive (navigation, reload, stray form submit) | `pagehide` fires |
+| The runtime was destroyed (WKWebView content-process kill, i.e. out of memory) | no JS runs at all |
+
+Capacitor's `webViewWebContentProcessDidTerminate` reloads the current URL, so a process kill
+on `/create` reproduces the reported symptom exactly — as does a navigation back to it.
+
+### Shipped
+
+- **`src/services/crashBreadcrumb.ts`** (10 tests). Records a stage in `localStorage` before
+  a note is placed and clears it `NOTE_SETTLE_MS` later — held open past the synchronous call
+  because Cesium renders the billboard asynchronously. A `pagehide` listener marks the
+  breadcrumb, which is the discriminator above. `CrashReportBanner` reads it at the next boot
+  and names the verdict, since `localStorage` is the only channel that survives both causes.
+- **Nested `<form>` fixed** — a real bug found while investigating, and a live candidate for
+  the "navigation" branch. `NoteModal` rendered a `<form>` inside the wizard's `<form>`
+  (`CreateAdventure.tsx`), which HTML forbids. React synthetic events bubble through the React
+  tree, so submitting the note also ran the wizard's `handleSubmit(onSubmit)` — which calls
+  `navigate('/login')` when there is no session. The modal is now portalled to `<body>` (fixes
+  DOM form ownership and native submission) *and* stops propagation (fixes the React path;
+  the portal alone does not, because synthetic events cross portal boundaries).
+
+### Next step
+
+Place a note, then relaunch and read the yellow banner at the top. It will say either
+"the page navigated or reloaded" or "the app was terminated by the system (most likely out of
+memory)". Those two answers lead to completely different fixes, and this finally distinguishes
+them with evidence.

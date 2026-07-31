@@ -21,6 +21,7 @@ export default defineConfig({
       'src/services/BasemapSuggest.test.ts',
       'src/services/mapPresentation.test.ts',
       'src/services/noteGraphics.test.ts',
+      'src/services/crashBreadcrumb.test.ts',
     ],
     environment: 'node',
   },

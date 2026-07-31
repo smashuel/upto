@@ -35,6 +35,7 @@ import type { TrailSelection } from '../../services/TrailLayerManager';
 import type { MapNote } from '../../services/NoteManager';
 import NoteModal from './NoteModal';
 import ErrorBoundary from '../ErrorBoundary';
+import { beginStage, endStage } from '../../services/crashBreadcrumb';
 import type { LatLng } from '../../types/adventure';
 
 type SceneMode = '2d' | '3d';
@@ -314,6 +315,10 @@ function formatTime(hours: number): string {
   if (m === 0) return `${h}h`;
   return `${h}h ${m}m`;
 }
+
+// How long a placed note is watched for an async failure before the breadcrumb is closed.
+// Long enough to cover Cesium's next render and the billboard's image decode.
+const NOTE_SETTLE_MS = 4000;
 
 // The Topo button is one button, but three different products can sit behind it. Each
 // licence requires attribution by name, so the panel names whichever is actually rendering.
@@ -1847,6 +1852,13 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
             // failed note used to take the whole trip-planning wizard down with it.
             noteSubmitRef.current = null;
             setNoteModalOpen(false);
+            // Breadcrumb around the whole placement. If the app disappears here without any
+            // JS-visible error — which is what has actually been happening — the next boot
+            // reports it, and says whether the document unloaded or the runtime was killed.
+            beginStage(window.localStorage, 'note:place', {
+              at: new Date().toISOString(),
+              url: window.location.pathname,
+            });
             try {
               const note = submit?.(data);
               if (note === null) {
@@ -1859,6 +1871,10 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
               console.error('Failed to add map note:', err);
               toast.error(`Couldn't add that note (${msg.slice(0, 120)}). Your route is safe.`);
             }
+            // Held open past the synchronous call on purpose: Cesium renders the new billboard
+            // asynchronously, so a failure caused by placing the note lands after this handler
+            // has already returned. Close the stage only once that has had time to happen.
+            window.setTimeout(() => endStage(window.localStorage), NOTE_SETTLE_MS);
           }}
           onCancel={() => {
             noteSubmitRef.current = null;

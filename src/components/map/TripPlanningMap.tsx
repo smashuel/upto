@@ -32,7 +32,7 @@ import { resolveScreenSpaceError } from '../../services/screenSpaceError';
 import { API_CONFIG } from '../../config/api';
 import type { DrawingStats, SerializableTrack } from '../../services/TrackDrawer';
 import type { TrailSelection } from '../../services/TrailLayerManager';
-import type { MapNote } from '../../services/NoteManager';
+import type { MapNote, SerializableNote } from '../../services/NoteManager';
 import NoteModal from './NoteModal';
 import ErrorBoundary from '../ErrorBoundary';
 import { recordActivity } from '../../services/crashBreadcrumb';
@@ -45,9 +45,11 @@ interface TripPlanningMapProps {
   center?: [number, number]; // [lat, lng]
   onWaypointAdded?: (waypoint: any) => void;
   onRouteCreated?: (route: SerializableTrack) => void;
-  onNoteAdded?: (note: any) => void;
+  onNoteAdded?: (note: SerializableNote) => void;
   initialWaypoints?: any[];
   initialRoutes?: any[];
+  /** Notes loaded from a saved TripLink — rendered as tappable pins. */
+  initialNotes?: SerializableNote[];
   /** When set to '2d-topo', the map opens flat with the LINZ topo layer applied. Default 3d-satellite. */
   initialMode?: '2d-topo' | '3d-satellite';
   /** Give the map the whole screen on phone-sized touch devices as soon as it mounts (issue 04). */
@@ -356,6 +358,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   onNoteAdded,
   initialWaypoints = [],
   initialRoutes = [],
+  initialNotes = [],
   initialMode = '3d-satellite',
   preselectedTrail,
   fallbackToCurrentLocation = false,
@@ -701,6 +704,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
 
         if (initialWaypoints.length > 0) waypointManagerRef.current.loadWaypoints(initialWaypoints);
         if (initialRoutes.length > 0) trackDrawerRef.current.loadRoutes(initialRoutes);
+        if (initialNotes.length > 0) noteManagerRef.current.loadNotes(initialNotes);
 
         // Restore persisted slope overlay after any initial routes are loaded
         if (slopeOverlayOn) {

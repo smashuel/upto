@@ -304,6 +304,7 @@ export const PublicAdventureView: React.FC = () => {
                     // (Slice 04), not by re-centering the camera on every incoming fix.
                     center={lastCheckInCoords ? [lastCheckInCoords.lat, lastCheckInCoords.lng] : routeCenter}
                     initialRoutes={tripLink.routes ?? []}
+                    initialNotes={tripLink.notes ?? []}
                     checkInMarker={lastCheckInCoords}
                     liveMarker={liveCoords}
                     liveMarkerStale={liveness === 'stale'}

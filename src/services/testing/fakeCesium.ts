@@ -55,6 +55,10 @@ class Cartesian3 {
     );
   }
 
+  static fromRadians(lng: number, lat: number, height = 0): Cartesian3 {
+    return Cartesian3.fromDegrees((lng * 180) / Math.PI, (lat * 180) / Math.PI, height);
+  }
+
   static distance(a: Cartesian3, b: Cartesian3): number {
     return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
   }

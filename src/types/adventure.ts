@@ -37,6 +37,17 @@ export interface TripRoute {
   };
 }
 
+// A map note persisted on the TripLink. Structurally matches NoteManager's SerializableNote
+// (kept here so types don't depend on the services layer).
+export interface TripNote {
+  id: string;
+  title: string;
+  content: string;
+  type: 'accommodation' | 'warning' | 'info' | 'photo' | 'general';
+  lat: number;
+  lng: number;
+}
+
 /** TripLink lifecycle status. Named so seams (e.g. resolveSampleCadence) can type against it. */
 export type TripStatus = 'planned' | 'active' | 'completed' | 'overdue';
 
@@ -56,6 +67,7 @@ export interface TripLink {
   };
   waypoints: TripWaypoint[];
   routes?: TripRoute[];    // drawn routes — rendered read-only on the view pages
+  notes?: TripNote[];      // map notes — tappable on the shared view for their detail
   emergencyContacts: Contact[];
   shareToken: string;
   status: TripStatus;

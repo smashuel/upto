@@ -4,6 +4,7 @@ import { useFormContext } from 'react-hook-form';
 import { Navigation, Globe, Info, Route, TrendingUp } from 'lucide-react';
 import type { MapLayer } from '../../services/BasemapSuggest';
 import type { SerializableTrack } from '../../services/TrackDrawer';
+import type { TripNote } from '../../types/adventure';
 import { upsertRouteById } from '../../services/routeUpsert';
 import { Card, Button } from '../ui';
 import { TripPlanningMap } from '../map/TripPlanningMap';
@@ -157,6 +158,13 @@ export const TripLinkLocationStep: React.FC = () => {
                     handleLocationUpdate({ coordinates: { lat, lng } });
                   }
                 }}
+                onNoteAdded={(note) => {
+                  // Notes ride the TripLink so the share link's recipient can tap a pin and
+                  // read it. Replace-by-id, so re-adding after an edit doesn't duplicate.
+                  const existing: TripNote[] = watch('notes') || [];
+                  setValue('notes', [...existing.filter((n) => n.id !== note.id), note]);
+                }}
+                initialNotes={watch('notes') || []}
                 onWaypointAdded={(waypoint) => {
                   const location: What3WordsLocation = {
                     coordinates: { lat: waypoint.lat, lng: waypoint.lng },

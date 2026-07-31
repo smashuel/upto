@@ -2,74 +2,89 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  svgDataUri,
-  escapeHtml,
-  noteIcon,
-  NOTE_ICONS,
   NOTE_TYPES,
+  emblemSpec,
+  escapeHtml,
+  noteDescriptionHtml,
+  noteTypeLabel,
+  EMBLEM_WIDTH,
+  EMBLEM_HEIGHT,
   type NoteType,
 } from './noteGraphics.ts';
 
-// Characters RFC 3986 excludes from a URI. WebKit is stricter than Chrome about SVG data
-// URIs, so an icon that loads on a desktop browser can fail to decode in iOS WKWebView —
-// and a billboard whose image never loads takes Cesium's render loop down with it.
-const ILLEGAL_IN_URI = /[<>"\s{}|\\^`]/;
+// Emblems are drawn onto a canvas rather than loaded from SVG data URIs. The previous
+// icons carried only a `viewBox` with no width/height, which WebKit refuses to decode, so
+// on iOS every note silently fell back to a bare floating label. Drawing removes the whole
+// decode path: no URI parsing, no async load, nothing to fail on one platform and not another.
 
-test('an encoded SVG data URI contains no characters that are illegal in a URI', () => {
-  const uri = svgDataUri('<svg viewBox="0 0 24 24"><rect x="3" y="9"/></svg>');
-  assert.ok(!ILLEGAL_IN_URI.test(uri), `found illegal character in ${uri}`);
-});
-
-test('the data URI declares a real charset parameter, not the bare ";utf8"', () => {
-  const uri = svgDataUri('<svg/>');
-  assert.ok(uri.startsWith('data:image/svg+xml;charset=utf-8,'), uri);
-  assert.ok(!uri.includes(';utf8,'), '";utf8" is not a valid media-type parameter');
-});
-
-test('the encoded SVG decodes back to exactly the original markup', () => {
-  const svg = '<svg xmlns="http://www.w3.org/2000/svg" fill="#007CFF"><path d="M12 2L22 20H2z"/></svg>';
-  const uri = svgDataUri(svg);
-  const decoded = decodeURIComponent(uri.slice(uri.indexOf(',') + 1));
-  assert.equal(decoded, svg);
-});
-
-test('a hash in a fill colour survives encoding — unescaped it truncates the URI at the fragment', () => {
-  const uri = svgDataUri('<svg fill="#6B7280"/>');
-  assert.ok(!uri.includes('#'), 'a raw # starts a fragment and drops the rest of the SVG');
-  assert.ok(decodeURIComponent(uri.slice(uri.indexOf(',') + 1)).includes('#6B7280'));
-});
-
-test('every shipped note icon is a safely-encoded data URI', () => {
+test('every note type has an emblem spec', () => {
   for (const type of NOTE_TYPES) {
-    const uri = NOTE_ICONS[type];
-    assert.ok(uri, `${type} has no icon`);
-    assert.ok(!ILLEGAL_IN_URI.test(uri), `${type} icon contains an illegal URI character`);
-    assert.ok(uri.startsWith('data:image/svg+xml;charset=utf-8,'), `${type} icon has a bad prefix`);
+    const spec = emblemSpec(type);
+    assert.match(spec.color, /^#[0-9a-f]{6}$/i, `${type} needs a colour`);
   }
 });
 
-test('an unrecognised note type still yields an icon rather than undefined', () => {
-  // A billboard handed image: undefined is a render-loop failure, and note type could come
-  // from older stored data or a future type this build doesn't know about.
-  assert.equal(noteIcon('not-a-real-type' as NoteType), NOTE_ICONS.general);
-  assert.equal(noteIcon(undefined as unknown as NoteType), NOTE_ICONS.general);
+test('an unrecognised type falls back to the general emblem', () => {
+  // A note's type can come from stored data written by an older or newer build. Falling
+  // back keeps the note visible instead of dropping it off the map.
+  const unknown = 'chairlift' as NoteType;
+  assert.deepEqual(emblemSpec(unknown), emblemSpec('general'));
 });
 
-test('a known note type resolves to its own icon', () => {
-  assert.equal(noteIcon('warning'), NOTE_ICONS.warning);
+test('warning is visually distinct from general', () => {
+  assert.notEqual(emblemSpec('warning').color, emblemSpec('general').color);
 });
 
-// Note titles and bodies are user input rendered into the Cesium info-box description.
-test('user text is escaped before going into the description HTML', () => {
-  assert.equal(escapeHtml('<script>alert(1)</script>'), '&lt;script&gt;alert(1)&lt;/script&gt;');
-  assert.equal(escapeHtml('Ridge & "gully"'), 'Ridge &amp; &quot;gully&quot;');
-  assert.equal(escapeHtml("it's steep"), 'it&#39;s steep');
+test('the emblem is taller than it is wide so it reads as a pin', () => {
+  // The billboard is anchored at its bottom edge, so the tip must sit below the head.
+  assert.ok(EMBLEM_HEIGHT > EMBLEM_WIDTH);
 });
 
-test('escaping ampersands first does not double-escape the entities it creates', () => {
-  assert.equal(escapeHtml('a & <b>'), 'a &amp; &lt;b&gt;');
+test('note types have human-readable labels', () => {
+  assert.equal(noteTypeLabel('accommodation'), 'Accommodation');
+  assert.equal(noteTypeLabel('general'), 'General');
 });
 
-test('escaping leaves ordinary text untouched', () => {
-  assert.equal(escapeHtml('Flat sheltered camp spot, 3 tents'), 'Flat sheltered camp spot, 3 tents');
+test('html is escaped, ampersand first', () => {
+  assert.equal(escapeHtml('Tom & <b>Jerry</b>'), 'Tom &amp; &lt;b&gt;Jerry&lt;/b&gt;');
+});
+
+test('a note description escapes the user-written body', () => {
+  // The body is typed by the user and interpolated into the Cesium info box as markup.
+  const html = noteDescriptionHtml({
+    content: '<script>bad</script> a & b',
+    type: 'info',
+    lat: -45.1,
+    lng: 168.7,
+  });
+  assert.ok(!html.includes('<script>'));
+  assert.ok(html.includes('&lt;script&gt;'));
+  assert.ok(html.includes('a &amp; b'));
+});
+
+test('a note description includes the coordinates and type', () => {
+  const html = noteDescriptionHtml({
+    content: 'Aiming to leave around 8am',
+    type: 'accommodation',
+    lat: -45.123456,
+    lng: 168.765432,
+  });
+  assert.match(html, /-45\.123456/);
+  assert.match(html, /168\.765432/);
+  assert.match(html, /Accommodation/);
+  assert.match(html, /Aiming to leave around 8am/);
+});
+
+test('a note with no body produces no empty paragraph', () => {
+  // Content is optional — a marker often needs only a title and a type.
+  const html = noteDescriptionHtml({ content: '', type: 'info', lat: 0, lng: 0 });
+  assert.match(html, /Info/);
+  assert.ok(!html.includes('<p class="note-info-body">'));
+});
+
+test('the description carries no title', () => {
+  // The title is the entity's `name`, which Cesium renders as the info-box header and sets
+  // as text — so it must not be escaped, and must not be repeated in the body.
+  const html = noteDescriptionHtml({ content: 'body', type: 'info', lat: 0, lng: 0 });
+  assert.ok(!html.includes('Car park'));
 });

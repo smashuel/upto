@@ -16,7 +16,7 @@ import { hasPendingRouteSettles, routesSettled } from '../services/RouteSettleme
 import type { MapLayer } from '../services/BasemapSuggest';
 import { useAuth } from '../hooks/useAuth';
 import ErrorBoundary from '../components/ErrorBoundary';
-import type { TripLink, ActivityType, LatLng, TripRoute } from '../types/adventure';
+import type { TripLink, ActivityType, LatLng, TripRoute, TripNote } from '../types/adventure';
 import type { What3WordsLocation } from '../types/what3words';
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -35,6 +35,7 @@ export interface TripLinkFormData {
   };
   waypoints: Array<{ name: string; coordinates: LatLng; elevation?: number }>;
   routes?: TripRoute[];
+  notes?: TripNote[];
   plannedBasemap?: MapLayer;
   emergencyContacts: Array<{
     id: string;
@@ -236,6 +237,9 @@ export const CreateTripLink: React.FC = () => {
         },
         waypoints: data.waypoints,
         routes,
+        // Map notes ride the TripLink so whoever opens the share link can tap a pin and read
+        // it — the car park, the intended camp, the hazard. Omit when none were placed.
+        ...(data.notes?.length ? { notes: data.notes } : {}),
         // Basemap the route was drawn on, so the shared view opens on the same
         // canvas instead of a default world view (Slice 04). Omit when unset.
         ...(data.plannedBasemap ? { plannedBasemap: data.plannedBasemap } : {}),

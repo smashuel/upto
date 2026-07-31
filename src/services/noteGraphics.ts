@@ -1,25 +1,54 @@
-// Icon and text helpers for map notes. Cesium-free so they're unit-testable.
+// Emblem and text helpers for map notes. Cesium-free so they're unit-testable.
 //
-// The icons were previously inline `data:image/svg+xml;utf8,<svg ...>` strings carrying raw
-// `<`, `>`, `"` and space characters, all of which RFC 3986 excludes from a URI, plus a
-// `;utf8` media-type parameter that isn't valid (the parameter is `charset`). Desktop
-// browsers are lenient about both; WebKit is stricter, so an icon that renders fine in
-// development can fail to decode in an iOS WKWebView — and a Cesium billboard whose image
-// fails to load raises inside the render loop rather than degrading quietly.
+// Notes are drawn as a map pin painted onto a canvas, not loaded from an image URL.
+//
+// The previous icons were SVG data URIs carrying only a `viewBox` — no `width`/`height` — so
+// they had no intrinsic size. WebKit refuses to decode such an image, `decode()` rejected on
+// iOS, and `renderNote` fell back to a bare floating label: the note appeared on the phone as
+// text with no emblem. Painting the pin ourselves removes the entire failure path — no URI to
+// parse, no network or decode step, nothing that can behave differently on one platform.
 
 export const NOTE_TYPES = ['accommodation', 'warning', 'info', 'photo', 'general'] as const;
 
 export type NoteType = (typeof NOTE_TYPES)[number];
 
-/** Percent-encode SVG markup into a data URI that survives a strict URI parser. */
-export function svgDataUri(svg: string): string {
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+/**
+ * Drawn at 2x and displayed at half scale, so the pin stays sharp on a retina screen without
+ * relying on the billboard's own filtering.
+ */
+export const EMBLEM_WIDTH = 64;
+export const EMBLEM_HEIGHT = 84;
+/** Billboard scale that renders the 2x artwork at its intended on-screen size. */
+export const EMBLEM_SCALE = 0.5;
+
+export interface EmblemSpec {
+  /** Pin body colour. */
+  color: string;
+  /** Human-readable name, used in the info box. */
+  label: string;
+}
+
+const SPECS: Record<NoteType, EmblemSpec> = {
+  accommodation: { color: '#007cff', label: 'Accommodation' },
+  warning: { color: '#f97316', label: 'Warning' },
+  info: { color: '#0891b2', label: 'Info' },
+  photo: { color: '#8b5cf6', label: 'Photo' },
+  general: { color: '#475569', label: 'General' },
+};
+
+/** Spec for a note type, falling back to `general` for anything unrecognised. */
+export function emblemSpec(type: NoteType): EmblemSpec {
+  return SPECS[type] ?? SPECS.general;
+}
+
+export function noteTypeLabel(type: NoteType): string {
+  return emblemSpec(type).label;
 }
 
 /**
  * Escape user-supplied text for interpolation into HTML. Note titles and bodies are typed
- * by the user and rendered into the Cesium info-box description; unescaped, a stray `<`
- * silently breaks the markup and a crafted string injects into it.
+ * by the user and rendered into the Cesium info box; unescaped, a stray `<` silently breaks
+ * the markup and a crafted string injects into it.
  * Ampersand first, so the entities introduced below aren't re-escaped.
  */
 export function escapeHtml(text: string): string {
@@ -31,66 +60,102 @@ export function escapeHtml(text: string): string {
     .replace(/'/g, '&#39;');
 }
 
-const SVG: Record<NoteType, string> = {
-  accommodation:
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#007CFF"><rect x="3" y="9" width="18" height="12" rx="1"/><path d="M1 9h22M9 9V5h6v4"/></svg>',
-  warning:
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#FF6B00"><path d="M12 2L22 20H2z"/><path d="M12 9v4M12 16v2" stroke="white" stroke-width="1.5"/></svg>',
-  info:
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#00B8D4"><circle cx="12" cy="12" r="10"/><path d="M12 8v2M12 12v6" stroke="white" stroke-width="2"/></svg>',
-  photo:
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#007CFF"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="12" r="3" fill="white"/></svg>',
-  general:
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 12H3M12 3v18" stroke="#6B7280" stroke-width="2"/></svg>',
-};
-
-export const NOTE_ICONS: Record<NoteType, string> = Object.fromEntries(
-  NOTE_TYPES.map((t) => [t, svgDataUri(SVG[t])]),
-) as Record<NoteType, string>;
-
-/**
- * Icon for a note type, falling back to `general` for anything unrecognised. A note's type
- * can come from stored data written by an older or newer build, and handing Cesium a
- * billboard with `image: undefined` fails inside the render loop rather than degrading.
- */
-export function noteIcon(type: NoteType): string {
-  return NOTE_ICONS[type] ?? NOTE_ICONS.general;
-}
-
-// Decoded icon cache.
-//
-// Handing Cesium a URL string makes *Cesium* responsible for fetching and decoding it, and it
-// does that asynchronously inside the render loop — so a decode failure surfaces as an
-// exception in `scene.render()`, which no try/catch around `entities.add()` can ever catch.
-// (WKWebView is stricter about SVG data URIs than desktop browsers, so this is a real risk on
-// the phone and not on a dev machine.) Decoding up front instead moves the failure somewhere
-// catchable: a note either gets an icon that is already proven to render, or it gets no
-// billboard at all — never a pending decode that can take the map down later.
-const decodedIcons = new Map<NoteType, HTMLImageElement>();
-
-async function decodeIcon(type: NoteType): Promise<void> {
-  if (typeof Image === 'undefined') return; // non-DOM (tests, SSR)
-  try {
-    const img = new Image();
-    img.src = noteIcon(type);
-    await img.decode();
-    decodedIcons.set(type, img);
-  } catch (err) {
-    console.error(`noteGraphics: icon for "${type}" failed to decode`, err);
-  }
-}
-
-/** Kick off icon decoding. Safe to call repeatedly; each type is only decoded once. */
-export function preloadNoteIcons(): void {
-  for (const type of NOTE_TYPES) {
-    if (!decodedIcons.has(type)) void decodeIcon(type);
-  }
+export interface NoteDescription {
+  content: string;
+  type: NoteType;
+  lat: number;
+  lng: number;
 }
 
 /**
- * A decoded, known-good image for this note type, or null if it isn't available. Null means
- * "render the note without a billboard" — never "hand Cesium something that might fail".
+ * Body of the Cesium info box — what someone opening a shared TripLink sees when they tap
+ * a note.
+ *
+ * The title is deliberately absent: it is the entity's `name`, which Cesium renders as the
+ * info-box header and assigns as text rather than markup. That means it must *not* be
+ * escaped (escaping would display a literal `&amp;`) and must not be repeated here.
  */
-export function decodedNoteIcon(type: NoteType): HTMLImageElement | null {
-  return decodedIcons.get(type) ?? decodedIcons.get('general') ?? null;
+export function noteDescriptionHtml(note: NoteDescription): string {
+  const body = note.content.trim()
+    ? `<p class="note-info-body">${escapeHtml(note.content)}</p>`
+    : '';
+  return [
+    '<div class="note-info">',
+    `<p class="note-info-type">${escapeHtml(noteTypeLabel(note.type))}</p>`,
+    body,
+    `<p class="note-info-coords">${note.lat.toFixed(6)}, ${note.lng.toFixed(6)}</p>`,
+    '</div>',
+  ].join('');
+}
+
+/**
+ * Paint a map pin carrying a small note sheet.
+ *
+ * Deliberately built from primitives (arcs, rects) rather than text glyphs or an image: no
+ * font has to be present, nothing has to load, and it renders identically everywhere.
+ * Returns null outside a DOM (tests, SSR), where the caller renders without an emblem.
+ */
+export function drawNoteEmblem(type: NoteType): HTMLCanvasElement | null {
+  if (typeof document === 'undefined') return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = EMBLEM_WIDTH;
+  canvas.height = EMBLEM_HEIGHT;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  const { color } = emblemSpec(type);
+  const cx = EMBLEM_WIDTH / 2;
+  const cy = 30;
+  const r = 26;
+
+  // Pin, drawn twice: a white silhouette first, then the coloured body inset within it, which
+  // gives a clean outline without stroking the union of two overlapping shapes.
+  const pin = (radius: number, tipY: number, fill: string) => {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx - radius * 0.45, cy + radius * 0.78);
+    ctx.lineTo(cx + radius * 0.45, cy + radius * 0.78);
+    ctx.lineTo(cx, tipY);
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  pin(r, EMBLEM_HEIGHT - 1, '#ffffff');
+  pin(r - 3, EMBLEM_HEIGHT - 5, color);
+
+  // Note sheet: a white page with three ruled lines.
+  const w = 20;
+  const h = 24;
+  const x = cx - w / 2;
+  const y = cy - h / 2;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = color;
+  for (let i = 0; i < 3; i += 1) {
+    ctx.fillRect(x + 4, y + 6 + i * 6, w - 8, 2);
+  }
+
+  return canvas;
+}
+
+// Emblems are identical for every note of a type, so paint each one once.
+const emblems = new Map<NoteType, HTMLCanvasElement>();
+
+/**
+ * The emblem for a note type, painted on first use. Synchronous by design: the old
+ * asynchronous decode meant a note could be added before its image was ready, and a failure
+ * surfaced inside Cesium's render loop where no caller could catch it.
+ */
+export function noteEmblem(type: NoteType): HTMLCanvasElement | null {
+  const key = type in SPECS ? type : 'general';
+  const cached = emblems.get(key);
+  if (cached) return cached;
+
+  const drawn = drawNoteEmblem(key);
+  if (drawn) emblems.set(key, drawn);
+  return drawn;
 }

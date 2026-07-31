@@ -2,11 +2,22 @@
 import * as Cesium from 'cesium';
 import { CesiumManager } from './CesiumManager';
 import {
-  decodedNoteIcon,
-  preloadNoteIcons,
-  escapeHtml,
+  noteEmblem,
+  noteDescriptionHtml,
+  emblemSpec,
+  EMBLEM_SCALE,
   type NoteType,
 } from './noteGraphics';
+
+/** A note as persisted on a TripLink — plain data, no Cesium objects. */
+export interface SerializableNote {
+  id: string;
+  title: string;
+  content: string;
+  type: NoteType;
+  lat: number;
+  lng: number;
+}
 
 export interface MapNote {
   id: string;
@@ -28,19 +39,19 @@ export type NoteRequestCallback = (
 export default class NoteManager extends CesiumManager {
   private notes: MapNote[] = [];
   private active = false;
-  private onAdded?: (note: MapNote) => void;
+  // Emits plain data, never a MapNote: those carry live Cesium objects, and handing one to
+  // React form state puts an unserialisable (and cyclic) value on the path to the TripLink.
+  private onAdded?: (note: SerializableNote) => void;
   private onRequestNote?: NoteRequestCallback;
 
   constructor(
     viewer: any,
-    onAdded?: (note: MapNote) => void,
+    onAdded?: (note: SerializableNote) => void,
     onRequestNote?: NoteRequestCallback,
   ) {
     super(viewer);
     this.onAdded = onAdded;
     this.onRequestNote = onRequestNote;
-    // Decode icons now, so the first note placed already has a proven-good image.
-    preloadNoteIcons();
   }
 
   protected setup(handler: any) {
@@ -84,7 +95,16 @@ export default class NoteManager extends CesiumManager {
 
     const note: MapNote = {
       id: this.generateId('note'),
-      position,
+      // Stored at zero height, not at the picked height. A pick on terrain returns a
+      // cartesian well above the ellipsoid, and an entity floating at that altitude shifts
+      // laterally against the ground as the camera zooms — which is exactly the "the label
+      // moves around the map" symptom. Anchoring at zero and clamping to ground below pins
+      // it to the coordinate instead.
+      position: Cesium.Cartesian3.fromRadians(
+        cartographic.longitude,
+        cartographic.latitude,
+        0,
+      ),
       cartographic,
       content: data.content,
       type: data.type,
@@ -102,46 +122,97 @@ export default class NoteManager extends CesiumManager {
     }
 
     this.notes.push(note);
-    this.onAdded?.(note);
+    this.onAdded?.(this.serialize(note));
     this.requestRender();
     return note;
   }
 
-  private renderNote(note: MapNote): any {
-    const lat = Cesium.Math.toDegrees(note.cartographic.latitude).toFixed(6);
-    const lng = Cesium.Math.toDegrees(note.cartographic.longitude).toFixed(6);
+  private serialize(note: MapNote): SerializableNote {
+    return {
+      id: note.id,
+      title: note.title,
+      content: note.content,
+      type: note.type,
+      lat: Cesium.Math.toDegrees(note.cartographic.latitude),
+      lng: Cesium.Math.toDegrees(note.cartographic.longitude),
+    };
+  }
 
-    // Only ever hand Cesium an image that has already decoded successfully. Passing a URL
-    // makes Cesium decode it inside the render loop, where a failure throws somewhere no
-    // try/catch here can reach. If no icon decoded, the note still renders — label only.
-    const icon = decodedNoteIcon(note.type);
+  private renderNote(note: MapNote): any {
+    const lat = Cesium.Math.toDegrees(note.cartographic.latitude);
+    const lng = Cesium.Math.toDegrees(note.cartographic.longitude);
+
+    // Painted synchronously onto a canvas — no URL, no decode step, nothing that can fail
+    // asynchronously inside Cesium's render loop. Null only outside a DOM.
+    const emblem = noteEmblem(note.type);
 
     return this.viewer.entities.add({
       position: note.position,
-      ...(icon
+      // Cesium renders `name` as the info-box header, assigned as text rather than markup,
+      // so the title must be passed raw here — escaping it would show a literal entity.
+      name: note.title,
+      description: noteDescriptionHtml({ content: note.content, type: note.type, lat, lng }),
+      ...(emblem
         ? {
             billboard: {
-              image: icon,
-              scale: 0.6,
-              heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+              image: emblem,
+              scale: EMBLEM_SCALE,
+              // Bottom origin puts the pin's tip on the coordinate; clamping keeps it on
+              // the ground however the terrain under it loads or the camera moves.
               verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-              scaleByDistance: new Cesium.NearFarScalar(1.5e2, 1.0, 1.5e7, 0.5),
+              heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+              // Constant on-screen size. `scaleByDistance` made the pin drift and shrink
+              // while zooming, which read as the note not being fixed to its location.
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
             },
           }
-        : {}),
-      label: {
-        text: note.title,
-        font: '11pt sans-serif',
-        pixelOffset: new Cesium.Cartesian2(0, -60),
-        fillColor: Cesium.Color.WHITE,
-        outlineColor: Cesium.Color.BLACK,
-        outlineWidth: 2,
-        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-        scaleByDistance: new Cesium.NearFarScalar(1.5e2, 1.0, 1.5e7, 0.0),
-      },
-      // Title and content are user input — escape before interpolating into markup.
-      description: `<div><h4>${escapeHtml(note.title)}</h4><p>${escapeHtml(note.content)}</p><p>${lat}, ${lng}</p></div>`,
+        : {
+            // No canvas available to paint on. A point needs no image and cannot fail, so
+            // the note stays visible and tappable — an entity with no graphics at all would
+            // be silently missing from the map, which is worse than a plain dot.
+            point: {
+              pixelSize: 14,
+              color: Cesium.Color.fromCssColorString(emblemSpec(note.type).color),
+              outlineColor: Cesium.Color.WHITE,
+              outlineWidth: 2,
+              heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            },
+          }),
     });
+  }
+
+  /** Notes as plain data for persistence on a TripLink. */
+  getSerializableNotes(): SerializableNote[] {
+    return this.notes.map((n) => this.serialize(n));
+  }
+
+  /**
+   * Render notes loaded from a saved TripLink. Replaces whatever is currently shown, so a
+   * re-render of the map doesn't stack duplicates on top of each other.
+   */
+  loadNotes(notes: SerializableNote[]): void {
+    this.clearAll();
+    for (const saved of notes) {
+      const position = Cesium.Cartesian3.fromDegrees(saved.lng, saved.lat, 0);
+      const note: MapNote = {
+        id: saved.id,
+        position,
+        cartographic: Cesium.Cartographic.fromCartesian(position),
+        content: saved.content,
+        type: saved.type,
+        title: saved.title,
+        timestamp: new Date(),
+      };
+      try {
+        note.entity = this.renderNote(note);
+        this.notes.push(note);
+      } catch (err) {
+        // One bad saved note must not stop the rest of the trip rendering.
+        console.error('NoteManager: failed to render saved note', saved.id, err);
+      }
+    }
+    this.requestRender();
   }
 
   getNotes(): MapNote[] {

@@ -1,6 +1,6 @@
 # 09 — 2D imagery sharpness varies across the screen at some zooms
 
-Status: needs-info
+Status: fix attempted (2026-07-31) — confirmed a real LOD stall, not progressive refinement
 Surfaced: on-device (iPhone), 2026-07-31
 Area: TripPlanningMap.tsx, src/services/screenSpaceError.ts
 

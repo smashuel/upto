@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable no-console */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import * as Cesium from 'cesium';
-import { MapPin, Route, StickyNote, Download, RotateCcw, Navigation, Layers, Undo2, Redo2, Footprints, X, Eye, Pencil, Check, Play, Square, TrendingUp, Maximize2, Minimize2 } from 'lucide-react';
+import { Route, StickyNote, Download, Layers, Undo2, Redo2, Footprints, X, Eye, Pencil, Check, Play, Square, TrendingUp, Maximize2, Minimize2 } from 'lucide-react';
 import { getTopoTileUrl, LINZ_CESIUM_RECTANGLE, LINZ_ATTRIBUTION } from '../../services/LinzMapService';
 import {
   AU_CESIUM_RECTANGLE,
@@ -391,6 +391,14 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   // Whether any topo product covers the current viewport centre. Drives the Topo button's
   // unavailable state, so "Topo does nothing here" is explained rather than just inert.
   const [topoAvailableHere, setTopoAvailableHere] = useState(true);
+  // Touch device — used to hide controls that only work with a mouse (issue 08).
+  const isTouchDevice = useMemo(
+    () => resolveMapPresentation(readViewportSignals()) === 'immersive'
+      || (typeof window !== 'undefined'
+        && typeof window.matchMedia === 'function'
+        && window.matchMedia('(pointer: coarse)').matches),
+    [],
+  );
   const [sceneMode, setSceneMode] = useState<SceneMode>(() => {
     if (initialMode === '2d-topo') return '2d';
     const saved = localStorage.getItem(SCENE_MODE_STORAGE_KEY) as SceneMode | null;
@@ -537,6 +545,20 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         viewer.cesiumWidget.screenSpaceEventHandler.removeInputAction(
           Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK,
         );
+
+        // Keep rendering while the globe is still refining tiles.
+        //
+        // With requestRenderMode on, the scene paints on camera moves and explicit requests.
+        // Tile loading is asynchronous and takes several frames to settle, so when the camera
+        // stops the last painted frame can show a partly-refined globe — one band of tiles at
+        // a coarser level than its neighbour. It looked like "the top half is sharper than the
+        // bottom half", and it persisted until a zoom forced fresh frames. Requesting a render
+        // whenever the tile-load queue changes lets refinement finish on its own.
+        try {
+          viewer.scene.globe.tileLoadProgressEvent.addEventListener(() => {
+            try { viewer.scene.requestRender(); } catch { /* torn down */ }
+          });
+        } catch { /* older Cesium without the event */ }
 
         // Only load 3D terrain when actually in 3D mode — in 2D the terrain mesh
         // distorts the flat topo tiles and wastes bandwidth.
@@ -1384,55 +1406,6 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [fullscreenFallback]);
 
-  const resetView = () => {
-    if (viewerRef.current) {
-      viewerRef.current.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(
-          center?.[1] ?? 172.0,
-          center?.[0] ?? -41.5,
-          center ? 10000 : 2500000,
-        ),
-        orientation: {
-          heading: Cesium.Math.toRadians(0),
-          pitch: Cesium.Math.toRadians(-45),
-          roll: 0.0,
-        },
-        duration: prefersReducedMotion() ? 0 : 1.2,
-      });
-    }
-  };
-
-  const goToCurrentLocation = () => {
-    if (navigator.geolocation && viewerRef.current) {
-      navigator.geolocation.getCurrentPosition(
-        ({ coords }) => {
-          viewerRef.current.camera.flyTo({
-            destination: Cesium.Cartesian3.fromDegrees(
-              coords.longitude,
-              coords.latitude,
-              5000,
-            ),
-            orientation: {
-              heading: Cesium.Math.toRadians(0),
-              pitch: Cesium.Math.toRadians(-45),
-              roll: 0.0,
-            },
-            duration: prefersReducedMotion() ? 0 : 1.2,
-          });
-          onWaypointAdded?.({
-            lat: coords.latitude,
-            lng: coords.longitude,
-            name: 'Current Location',
-            description: 'Your current GPS location',
-          });
-        },
-        () => alert('Unable to get your location. Please check location permissions.'),
-      );
-    } else {
-      alert('Geolocation is not supported by this browser.');
-    }
-  };
-
   const exportData = () => {
     const data = {
       waypoints: waypointManagerRef.current?.getWaypoints() || [],
@@ -1489,20 +1462,23 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         {/* ── TOP-LEFT: Mode selector (vertical pill bar) ─────────────── */}
         {!readOnly && (
         <div className="map-overlay map-overlay-tl">
+          {/* Labelled, because icon-only modes weren't legible on device — "what does the
+              eye do?". Waypoint mode is gone: the route drawer already places the points
+              that mattered, so it was a second way to do the same thing (issue 07). */}
           {([
-            { mode: 'view' as const, icon: <Eye size={18} />, label: 'View' },
-            { mode: 'waypoint' as const, icon: <MapPin size={18} />, label: 'Waypoint' },
-            { mode: 'route' as const, icon: <Route size={18} />, label: 'Route' },
-            { mode: 'note' as const, icon: <StickyNote size={18} />, label: 'Note' },
+            { mode: 'view' as const, icon: <Eye size={16} />, label: 'View' },
+            { mode: 'route' as const, icon: <Route size={16} />, label: 'Route' },
+            { mode: 'note' as const, icon: <StickyNote size={16} />, label: 'Note' },
           ]).map(({ mode, icon, label }) => (
             <button
               key={mode}
               type="button"
-              className={`map-btn ${(mode === 'view' ? mapMode.type === 'view' : mapMode.type === mode && mapMode.active) ? 'map-btn-active' : ''}`}
+              className={`map-btn map-btn-labelled ${(mode === 'view' ? mapMode.type === 'view' : mapMode.type === mode && mapMode.active) ? 'map-btn-active' : ''}`}
               onClick={() => handleModeChange(mode)}
               title={label}
             >
               {icon}
+              <span>{label}</span>
             </button>
           ))}
         </div>
@@ -1723,14 +1699,8 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         </div>
 
         {/* ── BOTTOM-LEFT: Locate + Reset ─────────────────────────────── */}
-        <div className="map-overlay map-overlay-bl">
-          <button type="button" className="map-btn" onClick={goToCurrentLocation} title="My location">
-            <Navigation size={18} />
-          </button>
-          <button type="button" className="map-btn" onClick={resetView} title="Reset view">
-            <RotateCcw size={18} />
-          </button>
-        </div>
+        {/* My location + Reset view removed (issue 07): reported as unnecessary clutter on a
+            phone. Their camera helpers had no other callers, so they went too. */}
 
         {/* ── BOTTOM-RIGHT: Flyover + Export + Edit Route ─────────────── */}
         <div className="map-overlay map-overlay-br">
@@ -1744,7 +1714,10 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
               {flyoverRunning ? <Square size={18} /> : <Play size={18} />}
             </button>
           )}
-          {!readOnly && drawingStats?.phase !== 'editing' && (
+          {/* Edit Route is hidden on touch devices (issue 08): drag-to-move-a-point never
+              reaches the point there, so the gesture just pans the map — the control
+              advertised something the app can't currently do. Still available with a mouse. */}
+          {!readOnly && drawingStats?.phase !== 'editing' && !isTouchDevice && (
             <button
               type="button"
               className="map-btn"

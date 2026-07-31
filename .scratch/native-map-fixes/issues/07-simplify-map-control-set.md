@@ -1,6 +1,6 @@
 # 07 — Simplify the map control set: unclear and redundant buttons
 
-Status: needs-decision
+Status: partly done (2026-07-31) — flagged controls removed; wider rethink still open
 Surfaced: on-device (iPhone), 2026-07-31
 Area: TripPlanningMap.tsx (overlay control clusters)
 

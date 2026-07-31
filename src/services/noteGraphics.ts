@@ -56,3 +56,41 @@ export const NOTE_ICONS: Record<NoteType, string> = Object.fromEntries(
 export function noteIcon(type: NoteType): string {
   return NOTE_ICONS[type] ?? NOTE_ICONS.general;
 }
+
+// Decoded icon cache.
+//
+// Handing Cesium a URL string makes *Cesium* responsible for fetching and decoding it, and it
+// does that asynchronously inside the render loop — so a decode failure surfaces as an
+// exception in `scene.render()`, which no try/catch around `entities.add()` can ever catch.
+// (WKWebView is stricter about SVG data URIs than desktop browsers, so this is a real risk on
+// the phone and not on a dev machine.) Decoding up front instead moves the failure somewhere
+// catchable: a note either gets an icon that is already proven to render, or it gets no
+// billboard at all — never a pending decode that can take the map down later.
+const decodedIcons = new Map<NoteType, HTMLImageElement>();
+
+async function decodeIcon(type: NoteType): Promise<void> {
+  if (typeof Image === 'undefined') return; // non-DOM (tests, SSR)
+  try {
+    const img = new Image();
+    img.src = noteIcon(type);
+    await img.decode();
+    decodedIcons.set(type, img);
+  } catch (err) {
+    console.error(`noteGraphics: icon for "${type}" failed to decode`, err);
+  }
+}
+
+/** Kick off icon decoding. Safe to call repeatedly; each type is only decoded once. */
+export function preloadNoteIcons(): void {
+  for (const type of NOTE_TYPES) {
+    if (!decodedIcons.has(type)) void decodeIcon(type);
+  }
+}
+
+/**
+ * A decoded, known-good image for this note type, or null if it isn't available. Null means
+ * "render the note without a billboard" — never "hand Cesium something that might fail".
+ */
+export function decodedNoteIcon(type: NoteType): HTMLImageElement | null {
+  return decodedIcons.get(type) ?? decodedIcons.get('general') ?? null;
+}

@@ -1,6 +1,6 @@
 # 08 — Route edit mode: dragging points pans the map instead on touch
 
-Status: ready-for-agent
+Status: deferred (2026-07-31) — control hidden on touch; drag-on-touch still unimplemented
 Surfaced: on-device (iPhone), 2026-07-31
 Area: TripPlanningMap.tsx (edit mode), src/services/TrackDrawer.ts
 

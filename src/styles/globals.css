@@ -653,6 +653,16 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   overscroll-behavior: contain;
 }
 
+/* Mode buttons carry their label. Icon-only wasn't legible on device — an eye glyph reads
+   as a visibility toggle, not "View mode". */
+.map-btn-labelled {
+  width: auto !important;
+  padding: 0 10px;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
 /* "Done" — the way out of the immersive map. Wider than the icon-only map buttons and
    filled, because it's the primary action when the map owns the screen. */
 .map-btn-done {

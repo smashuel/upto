@@ -1,7 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as Cesium from 'cesium';
 import { CesiumManager } from './CesiumManager';
-import { noteIcon, escapeHtml, type NoteType } from './noteGraphics';
+import {
+  decodedNoteIcon,
+  preloadNoteIcons,
+  escapeHtml,
+  type NoteType,
+} from './noteGraphics';
 
 export interface MapNote {
   id: string;
@@ -34,6 +39,8 @@ export default class NoteManager extends CesiumManager {
     super(viewer);
     this.onAdded = onAdded;
     this.onRequestNote = onRequestNote;
+    // Decode icons now, so the first note placed already has a proven-good image.
+    preloadNoteIcons();
   }
 
   protected setup(handler: any) {
@@ -104,15 +111,24 @@ export default class NoteManager extends CesiumManager {
     const lat = Cesium.Math.toDegrees(note.cartographic.latitude).toFixed(6);
     const lng = Cesium.Math.toDegrees(note.cartographic.longitude).toFixed(6);
 
+    // Only ever hand Cesium an image that has already decoded successfully. Passing a URL
+    // makes Cesium decode it inside the render loop, where a failure throws somewhere no
+    // try/catch here can reach. If no icon decoded, the note still renders — label only.
+    const icon = decodedNoteIcon(note.type);
+
     return this.viewer.entities.add({
       position: note.position,
-      billboard: {
-        image: noteIcon(note.type),
-        scale: 0.6,
-        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-        scaleByDistance: new Cesium.NearFarScalar(1.5e2, 1.0, 1.5e7, 0.5),
-      },
+      ...(icon
+        ? {
+            billboard: {
+              image: icon,
+              scale: 0.6,
+              heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+              verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+              scaleByDistance: new Cesium.NearFarScalar(1.5e2, 1.0, 1.5e7, 0.5),
+            },
+          }
+        : {}),
       label: {
         text: note.title,
         font: '11pt sans-serif',

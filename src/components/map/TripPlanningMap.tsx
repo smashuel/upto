@@ -689,6 +689,11 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
           undefined,
           onTerrainAvailability,
         );
+        // A TripLink describes one trip, so it carries one route (issue 11). Enforced on the
+        // drawer as well as in form state, so the map can never show a route the saved trip
+        // doesn't have. Not applied in readOnly mode: a TripLink written before this rule may
+        // legitimately hold several, and a viewer should see all of them.
+        if (!readOnly) trackDrawerRef.current.setSingleTrackMode(true);
         noteManagerRef.current = new NoteManager(viewer, onNoteAdded, (_position, onSubmit) => {
           // The map tap landed and picked a position. Recorded separately from the submit so
           // a failure *here* is distinguishable from one during placement.

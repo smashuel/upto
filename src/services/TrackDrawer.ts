@@ -90,6 +90,8 @@ export interface DrawingStats {
 
 export default class TrackDrawer extends CesiumManager {
   private tracks: Track[] = [];
+  /** One route per TripLink (issue 11) — a finished route replaces any earlier one. */
+  private singleTrack = false;
   private drawing = false;
   private currentPoints: TrackPoint[] = [];
   private previewEntity: any = null;
@@ -394,6 +396,9 @@ export default class TrackDrawer extends CesiumManager {
   private async settleAndCommit(points: TrackPoint[], preview: any) {
     const committed = await this.runSettlement(points, () => {
       const track = this.buildTrack(points);
+      // Enforced on the map as well as in form state, so what is drawn and what is saved
+      // cannot disagree — a stale second line on screen would misrepresent the trip.
+      if (this.singleTrack) this.removeAllTrackEntities();
       this.tracks.push(track);
       if (preview) this.viewer.entities.remove(preview);
       this.renderTrack(track);
@@ -864,12 +869,26 @@ export default class TrackDrawer extends CesiumManager {
     this.currentPoints = [];
     this.redoStack = [];
     this.lastSnap = null;
+    this.removeAllTrackEntities();
+    this.requestRender(); // entity removals must paint under requestRenderMode
+    this.emitStats([], 'drawing'); // clears the stats panel (emits null)
+  }
+
+  /**
+   * One route per TripLink: finishing a new route discards the previous one.
+   *
+   * Off by default, so loading a TripLink written before this rule still renders every route
+   * it holds rather than silently dropping all but one.
+   */
+  setSingleTrackMode(enabled: boolean) {
+    this.singleTrack = enabled;
+  }
+
+  private removeAllTrackEntities() {
     for (const track of this.tracks) {
       this.removeTrackEntities(track);
     }
     this.tracks = [];
-    this.requestRender(); // entity removals must paint under requestRenderMode
-    this.emitStats([], 'drawing'); // clears the stats panel (emits null)
   }
 
   // ── Edit mode (drag-to-reroute) ───────────────────────────────────────────

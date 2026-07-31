@@ -34,3 +34,16 @@ render without losing data.
 ## Blocked by
 
 - Needs a product decision from the user.
+
+## Decided and shipped — 2026-07-31
+
+**One route per TripLink.** See [ADR 018](../../../brain/decisions/018-one-route-per-triplink.md)
+for the reasoning, the alternatives, and the deferred multi-leg direction.
+
+Enforced in `applyDrawnRoute` (form state) *and* `TrackDrawer.setSingleTrackMode` (the map),
+so the two cannot disagree. A newly drawn route replaces the stored one and says so; an edit
+re-emits the same id and is not announced. Existing TripLinks holding several routes are not
+rewritten and still render in full on read-only maps.
+
+Future direction recorded, explicitly not being built now: a multi-sport trip (paddle, ride,
+run) is one route made of **legs** carrying their own activity type — not several routes.

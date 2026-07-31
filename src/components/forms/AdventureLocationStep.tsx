@@ -5,7 +5,8 @@ import { Navigation, Globe, Info, Route, TrendingUp } from 'lucide-react';
 import type { MapLayer } from '../../services/BasemapSuggest';
 import type { SerializableTrack } from '../../services/TrackDrawer';
 import type { TripNote } from '../../types/adventure';
-import { upsertRouteById } from '../../services/routeUpsert';
+import toast from 'react-hot-toast';
+import { applyDrawnRoute } from '../../services/routeUpsert';
 import { Card, Button } from '../ui';
 import { TripPlanningMap } from '../map/TripPlanningMap';
 import { What3WordsLocation } from '../../types/what3words';
@@ -147,11 +148,15 @@ export const TripLinkLocationStep: React.FC = () => {
                 }
                 fallbackToCurrentLocation={!selectedSuggestion}
                 onRouteCreated={(track: SerializableTrack) => {
-                  // Upsert into form state (stored in TripLink data JSONB):
-                  // an edit-commit re-emits the same id and replaces its stored
-                  // copy; a newly drawn route appends.
+                  // One route per TripLink (issue 11): a newly drawn route replaces the
+                  // stored one; an edit-commit re-emits the same id and replaces in place.
                   const existing: SerializableTrack[] = watch('routes') || [];
-                  setValue('routes', upsertRouteById(existing, track));
+                  const { routes, replaced } = applyDrawnRoute(existing, track);
+                  setValue('routes', routes);
+                  if (replaced) {
+                    // Losing a drawn route silently would be a nasty surprise on a trip plan.
+                    toast('Replaced your previous route — a TripLink holds one route.');
+                  }
                   // If no primary location yet, use the first waypoint of the drawn route
                   if (!primaryLocation && track.waypoints.length > 0) {
                     const [lat, lng] = track.waypoints[0].coordinates;

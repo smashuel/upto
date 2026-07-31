@@ -762,4 +762,54 @@ describe('TrackDrawer', () => {
     expect(created).toHaveLength(1); // the route is in form state before submit reads it
     expect(hasPendingRouteSettles()).toBe(false);
   });
+
+  it('a second drawn route replaces the first when single-track mode is on', async () => {
+    // One route per TripLink (issue 11). Enforced here as well as in form state so the map
+    // can never show two routes while the saved trip holds one.
+    drawer.setSingleTrackMode(true);
+
+    world.clickAt(A.lng, A.lat);
+    await waitForStats(s => s.pointCount === 1);
+    world.clickAt(B.lng, B.lat);
+    await waitForStats(s => s.pointCount === 2);
+    world.doubleClick();
+    await waitFor(() => created.length === 1);
+    const first = created[0].id;
+
+    // Finishing leaves drawing mode; the user re-enters it to draw again.
+    drawer.setMode(true);
+    world.clickAt(B.lng, B.lat);
+    await waitForStats(s => s.pointCount === 1);
+    world.clickAt(C.lng, C.lat);
+    await waitForStats(s => s.pointCount === 2);
+    world.doubleClick();
+    await waitFor(() => created.length === 2);
+
+    const tracks = drawer.getTracks();
+    expect(tracks).toHaveLength(1);
+    expect(tracks[0].id).toBe(created[1].id);
+    expect(tracks[0].id).not.toBe(first);
+  });
+
+  it('keeps both routes when single-track mode is off', async () => {
+    // Default is unchanged, so view pages loading legacy TripLinks with several routes still
+    // render all of them.
+    world.clickAt(A.lng, A.lat);
+    await waitForStats(s => s.pointCount === 1);
+    world.clickAt(B.lng, B.lat);
+    await waitForStats(s => s.pointCount === 2);
+    world.doubleClick();
+    await waitFor(() => created.length === 1);
+
+    // Finishing leaves drawing mode; the user re-enters it to draw again.
+    drawer.setMode(true);
+    world.clickAt(B.lng, B.lat);
+    await waitForStats(s => s.pointCount === 1);
+    world.clickAt(C.lng, C.lat);
+    await waitForStats(s => s.pointCount === 2);
+    world.doubleClick();
+    await waitFor(() => created.length === 2);
+
+    expect(drawer.getTracks()).toHaveLength(2);
+  });
 });

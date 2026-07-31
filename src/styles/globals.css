@@ -642,6 +642,42 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
 
 .map-viewport {
   box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+  /* Gesture containment. Without this, a pan or pinch on an embedded map scrolls the
+     wizard underneath it — and because the browser hands the whole gesture to the
+     scroller once it starts, dragging a finger off the map edge mid-route-draw moved
+     the entire page. `touch-action: none` claims every touch that begins here for the
+     map (Cesium then handles pan/pinch/rotate itself), so the gesture cannot be stolen
+     even when the finger leaves the element. `overscroll-behavior: contain` stops any
+     residual scroll chaining to the page, and blocks iOS pull-to-refresh over the map. */
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
+/* "Done" — the way out of the immersive map. Wider than the icon-only map buttons and
+   filled, because it's the primary action when the map owns the screen. */
+.map-btn-done {
+  width: auto !important;
+  padding: 0 12px;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+.map-btn-done:hover,
+.map-btn-done:focus-visible {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #fff;
+}
+
+/* Controls that are genuinely scrollable inside the map need their touches back —
+   `touch-action: none` on the ancestor would otherwise make the layers popover
+   impossible to scroll on a phone. */
+.map-viewport .map-layers-panel {
+  touch-action: pan-y;
+  overscroll-behavior: contain;
 }
 
 /* Fullscreen — Fullscreen API path. The Cesium canvas inside fills the viewport

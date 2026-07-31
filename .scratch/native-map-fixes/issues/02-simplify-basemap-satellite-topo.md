@@ -1,6 +1,6 @@
 # 02 — Collapse basemap to just "Satellite" + "Topo" (auto-region topo)
 
-Status: ready-for-agent
+Status: done (2026-07-31)
 Surfaced: on-device feedback, 2026-07-31
 Area: src/services/BasemapSuggest.ts (pure resolver + tests), TripPlanningMap.tsx (layers panel)
 

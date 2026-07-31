@@ -131,6 +131,10 @@ export const TripLinkLocationStep: React.FC = () => {
                 }
                 initialMode="2d-topo"
                 onBasemapChange={handleBasemapChange}
+                // Phones get the map as a full screen rather than a 700px box inside the
+                // wizard; Done returns here. Route/waypoint edits are already lifted into
+                // form state as they happen, so nothing needs saving on the way out.
+                autoImmersiveOnMobile
                 preselectedTrail={
                   selectedSuggestion?.source === 'doc' && selectedSuggestion.geometry
                     ? {

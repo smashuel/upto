@@ -13,6 +13,7 @@ import {
   GA_ATTRIBUTION,
   NSW_ATTRIBUTION,
 } from '../../services/AusMapService';
+import { resolveMapPresentation, readViewportSignals } from '../../services/mapPresentation';
 import {
   resolveBasemap,
   regionalTopo,
@@ -47,6 +48,10 @@ interface TripPlanningMapProps {
   initialRoutes?: any[];
   /** When set to '2d-topo', the map opens flat with the LINZ topo layer applied. Default 3d-satellite. */
   initialMode?: '2d-topo' | '3d-satellite';
+  /** Give the map the whole screen on phone-sized touch devices as soon as it mounts (issue 04). */
+  autoImmersiveOnMobile?: boolean;
+  /** Called when the user taps Done to leave the immersive map. */
+  onDone?: () => void;
   /** A DOC track to render and highlight on first mount — camera flies to its bounds */
   preselectedTrail?: { id: string; name: string; geometry: LatLng[] };
   /** If no preselect, fly to the user's geolocation and auto-enable the trail discovery layer */
@@ -347,6 +352,8 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
   liveMarkerStale = false,
   plannedBasemap,
   onBasemapChange,
+  autoImmersiveOnMobile = false,
+  onDone,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -1309,6 +1316,33 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, [fullscreenFallback]);
 
+  // Issue 04: on a phone, opening the route step gives the map the whole screen rather
+  // than a cramped box inside the wizard. Mount == entering the step, because the wizard
+  // lazy-mounts this component when the section is expanded.
+  //
+  // Deliberately the CSS-overlay path, not requestFullscreen(): the Fullscreen API needs a
+  // user gesture and would reject when called on mount, and iOS WKWebView doesn't support
+  // it on non-video elements at all — so the overlay is the only thing that works on the
+  // device this exists for.
+  useEffect(() => {
+    if (!autoImmersiveOnMobile) return;
+    if (resolveMapPresentation(readViewportSignals()) !== 'immersive') return;
+    setFullscreenFallback(true);
+    setIsFullscreen(true);
+    // Mount-only by design: re-running on resize/rotate would drag a user who deliberately
+    // exited back into fullscreen.
+  }, []);
+
+  /** Leave the immersive/fullscreen map and return to the wizard. */
+  const exitImmersive = useCallback(async () => {
+    if (document.fullscreenElement) {
+      try { await document.exitFullscreen(); } catch { /* ignore */ }
+    }
+    setFullscreenFallback(false);
+    setIsFullscreen(false);
+    onDone?.();
+  }, [onDone]);
+
   // Esc-to-exit for the CSS-overlay fallback path. The Fullscreen API handles Esc itself.
   useEffect(() => {
     if (!fullscreenFallback) return;
@@ -1446,8 +1480,23 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         </div>
         )}
 
-        {/* ── TOP-RIGHT: Layers + Fullscreen ──────────────────────────── */}
+        {/* ── TOP-RIGHT: Done + Layers + Fullscreen ───────────────────── */}
         <div className="map-overlay map-overlay-tr">
+          {/* Done is the way back to the wizard when the map owns the screen. Without it
+              there is no obvious exit on a phone — the CSS-overlay fullscreen has no
+              browser chrome and no Esc key. */}
+          {isFullscreen && (
+            <button
+              type="button"
+              className="map-btn map-btn-done"
+              onClick={exitImmersive}
+              title="Done — back to trip details"
+            >
+              <Check size={16} />
+              <span>Done</span>
+            </button>
+          )}
+
           <button
             type="button"
             className={`map-btn ${layersPanelOpen ? 'map-btn-active' : ''}`}

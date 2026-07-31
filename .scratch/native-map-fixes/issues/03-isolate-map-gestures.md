@@ -1,6 +1,6 @@
 # 03 — Isolate map gestures so pan/zoom don't move the wizard
 
-Status: ready-for-agent
+Status: done (2026-07-31)
 Surfaced: on-device (iPhone), 2026-07-31
 Area: TripPlanningMap.tsx / AdventureLocationStep.tsx (map container touch handling)
 

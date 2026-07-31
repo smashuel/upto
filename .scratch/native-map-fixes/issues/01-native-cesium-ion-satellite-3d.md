@@ -1,6 +1,6 @@
 # 01 — Cesium Ion satellite + 3D terrain don't render in the native iOS app
 
-Status: needs-info
+Status: done (2026-07-31) — verified on device
 Surfaced: on-device (TestFlight, iPhone), 2026-07-31
 Area: src/components/map/TripPlanningMap.tsx (Cesium Ion setup, lines ~428–498)
 

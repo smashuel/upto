@@ -1,6 +1,6 @@
 # 04 — Open the map in its own fullscreen window with a "Done" button
 
-Status: ready-for-agent
+Status: done (2026-07-31)
 Surfaced: on-device (iPhone), 2026-07-31
 Area: AdventureLocationStep.tsx / CreateAdventure.tsx (wizard step), TripPlanningMap.tsx (fullscreen)
 

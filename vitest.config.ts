@@ -19,6 +19,7 @@ export default defineConfig({
       'src/services/deviceTier.test.ts',
       'src/services/screenSpaceError.test.ts',
       'src/services/BasemapSuggest.test.ts',
+      'src/services/mapPresentation.test.ts',
     ],
     environment: 'node',
   },

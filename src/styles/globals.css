@@ -712,28 +712,35 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   top: 0;
   left: 0;
   right: 0;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: max(calc(8px + env(safe-area-inset-top, 0px)), 12px) 14px 10px;
-  background: #fffbeb;
-  border-bottom: 1px solid #fde68a;
+  padding: max(calc(10px + env(safe-area-inset-top, 0px)), 14px) 16px 12px;
+  background: #fef3c7;
+  border-bottom: 2px solid #f59e0b;
   color: #78350f;
-  font-size: 0.8rem;
-  line-height: 1.35;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+.crash-report-heading {
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
 }
 .crash-report-text {
-  flex: 1;
   user-select: text;
   -webkit-user-select: text;
+  word-break: break-word;
 }
 .crash-report-dismiss {
-  border: none;
+  margin-top: 8px;
+  border: 1px solid currentColor;
   background: transparent;
   color: inherit;
-  font-size: 1.2rem;
-  line-height: 1;
-  padding: 0 4px;
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
 }
 
 /* Mode buttons carry their label. Icon-only wasn't legible on device — an eye glyph reads

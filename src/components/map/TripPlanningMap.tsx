@@ -35,7 +35,7 @@ import type { TrailSelection } from '../../services/TrailLayerManager';
 import type { MapNote } from '../../services/NoteManager';
 import NoteModal from './NoteModal';
 import ErrorBoundary from '../ErrorBoundary';
-import { beginStage, endStage } from '../../services/crashBreadcrumb';
+import { recordActivity } from '../../services/crashBreadcrumb';
 import type { LatLng } from '../../types/adventure';
 
 type SceneMode = '2d' | '3d';
@@ -316,9 +316,16 @@ function formatTime(hours: number): string {
   return `${h}h ${m}m`;
 }
 
-// How long a placed note is watched for an async failure before the breadcrumb is closed.
-// Long enough to cover Cesium's next render and the billboard's image decode.
-const NOTE_SETTLE_MS = 4000;
+/**
+ * Leave a breadcrumb for the crash reporter. Whatever was recorded last is where the app died,
+ * so these are placed at every step of a flow under investigation rather than around one call
+ * — an earlier version only armed around the note submit and missed the failure entirely.
+ */
+const note = (activity: string) =>
+  recordActivity(window.localStorage, activity, {
+    at: Date.now(),
+    url: window.location.pathname,
+  });
 
 // The Topo button is one button, but three different products can sit behind it. Each
 // licence requires attribution by name, so the panel names whichever is actually rendering.
@@ -680,6 +687,9 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
           onTerrainAvailability,
         );
         noteManagerRef.current = new NoteManager(viewer, onNoteAdded, (_position, onSubmit) => {
+          // The map tap landed and picked a position. Recorded separately from the submit so
+          // a failure *here* is distinguishable from one during placement.
+          note('note:map-tap');
           noteSubmitRef.current = onSubmit;
           setNoteModalOpen(true);
         });
@@ -734,6 +744,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
 
         // Paint the initial scene (loaded routes/waypoints) under requestRenderMode.
         viewer.scene.requestRender();
+        note('map:ready');
         setIsLoading(false);
       } catch (error) {
         console.error('Error initializing Cesium map:', error);
@@ -1050,6 +1061,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
         trackDrawerRef.current?.setMode(isActive);
         break;
       case 'note':
+        note(isActive ? 'note:mode-on' : 'note:mode-off');
         noteManagerRef.current?.setMode(isActive);
         break;
       default:
@@ -1852,13 +1864,7 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
             // failed note used to take the whole trip-planning wizard down with it.
             noteSubmitRef.current = null;
             setNoteModalOpen(false);
-            // Breadcrumb around the whole placement. If the app disappears here without any
-            // JS-visible error — which is what has actually been happening — the next boot
-            // reports it, and says whether the document unloaded or the runtime was killed.
-            beginStage(window.localStorage, 'note:place', {
-              at: new Date().toISOString(),
-              url: window.location.pathname,
-            });
+            note('note:submit');
             try {
               const note = submit?.(data);
               if (note === null) {
@@ -1871,10 +1877,11 @@ export const TripPlanningMap: React.FC<TripPlanningMapProps> = ({
               console.error('Failed to add map note:', err);
               toast.error(`Couldn't add that note (${msg.slice(0, 120)}). Your route is safe.`);
             }
-            // Held open past the synchronous call on purpose: Cesium renders the new billboard
-            // asynchronously, so a failure caused by placing the note lands after this handler
-            // has already returned. Close the stage only once that has had time to happen.
-            window.setTimeout(() => endStage(window.localStorage), NOTE_SETTLE_MS);
+            // Cesium renders the new billboard asynchronously, so a failure caused by this
+            // note lands after the handler returns. These two record whether the app survived
+            // the synchronous placement, the next frame, and a few seconds of settling.
+            requestAnimationFrame(() => note('note:rendered'));
+            window.setTimeout(() => note('note:settled'), 4000);
           }}
           onCancel={() => {
             noteSubmitRef.current = null;

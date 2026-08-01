@@ -25,6 +25,7 @@ export default defineConfig({
       'src/services/nativePositionFix.test.ts',
       'src/services/retractOnHide.test.ts',
       'src/services/nativeBackgroundPositionSource.test.ts',
+      'src/services/oauthReturn.test.ts',
     ],
     environment: 'node',
   },

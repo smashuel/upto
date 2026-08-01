@@ -14,6 +14,7 @@ import {
   createDbRepo,
 } from './triplink-lifecycle.js';
 import { shouldBroadcastPosition } from './live-privacy.js';
+import { resolveOAuthReturnUrl, isAllowedReturnOrigin } from './oauth-origin.js';
 
 const { Pool } = pg;
 
@@ -385,8 +386,14 @@ app.get('/api/auth/google', (req, res) => {
   if (!GOOGLE_CLIENT_ID) {
     return res.status(503).json({ error: 'Google OAuth not configured' });
   }
-  // Encode the frontend origin in state so we can redirect back after auth
-  const origin = req.query.origin || 'https://upto.world';
+  // Encode the frontend origin in state so we can redirect back after auth. Validated HERE as
+  // well as at the callback so a refusal is visible in the logs at the moment it is attempted,
+  // and so the state we sign never carries an origin we would not honour.
+  const requestedOrigin = req.query.origin;
+  if (requestedOrigin !== undefined && !isAllowedReturnOrigin(requestedOrigin)) {
+    console.warn('[auth] refused non-allowlisted OAuth return origin:', String(requestedOrigin));
+  }
+  const origin = isAllowedReturnOrigin(requestedOrigin) ? requestedOrigin : undefined;
   const state = Buffer.from(JSON.stringify({ origin })).toString('base64url');
   const redirectUri = `${BACKEND_URL}/api/auth/google/callback`;
 
@@ -405,14 +412,16 @@ app.get('/api/auth/google', (req, res) => {
 app.get('/api/auth/google/callback', async (req, res) => {
   const { code, state, error } = req.query;
 
-  // Decode origin from state
-  let origin = 'https://upto.world';
+  // Decode the origin from state. `state` is attacker-reachable (it round-trips through the
+  // browser), so it is re-validated by resolveOAuthReturnUrl on every use below — never
+  // interpolated raw. A session token is about to be appended to this URL.
+  let origin;
   try {
     origin = JSON.parse(Buffer.from(String(state), 'base64url').toString()).origin;
-  } catch { /* use default */ }
+  } catch { /* fall through to the default */ }
 
   if (error || !code) {
-    return res.redirect(`${origin}/login?error=google_cancelled`);
+    return res.redirect(resolveOAuthReturnUrl(origin, { error: 'google_cancelled' }));
   }
 
   try {
@@ -435,7 +444,7 @@ app.get('/api/auth/google/callback', async (req, res) => {
     if (!tokens.access_token) {
       // Don't log token material — surface only the provider error code.
       console.error('Google token exchange failed:', tokens.error || 'unknown_error');
-      return res.redirect(`${origin}/login?error=google_failed`);
+      return res.redirect(resolveOAuthReturnUrl(origin, { error: 'google_failed' }));
     }
 
     // Fetch the user's Google profile
@@ -445,7 +454,7 @@ app.get('/api/auth/google/callback', async (req, res) => {
     const gUser = await userRes.json();
 
     if (!gUser.email) {
-      return res.redirect(`${origin}/login?error=google_failed`);
+      return res.redirect(resolveOAuthReturnUrl(origin, { error: 'google_failed' }));
     }
 
     const email = gUser.email.toLowerCase().trim();
@@ -473,11 +482,12 @@ app.get('/api/auth/google/callback', async (req, res) => {
       );
     }
 
-    // Redirect back to frontend with the session token in the URL
-    res.redirect(`${origin}/login?session=${sessionToken}`);
+    // Redirect back to the frontend with the session token in the URL. The origin is
+    // re-checked against the allowlist here — this is the line that hands out the session.
+    res.redirect(resolveOAuthReturnUrl(origin, { session: sessionToken }));
   } catch (err) {
     console.error('Google OAuth callback error:', err.message);
-    res.redirect(`${origin}/login?error=google_failed`);
+    res.redirect(resolveOAuthReturnUrl(origin, { error: 'google_failed' }));
   }
 });
 

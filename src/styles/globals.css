@@ -1731,6 +1731,11 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   background: linear-gradient(135deg, var(--adventure-light-gray) 0%, var(--adventure-off-white) 100%);
   border-top: 2px solid var(--adventure-accent-light);
   margin-top: auto;
+  /* Same edge-to-edge problem at the bottom: the home indicator overlays the last ~34px, which
+     would otherwise sit on top of the footer's final line. Adds to Bootstrap's `py-4` (1.5rem)
+     rather than replacing it — globals.css imports Bootstrap at the top, so this wins the
+     cascade. Zero on desktop and on devices without a home indicator. */
+  padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
 }
 
 /* Share Link Styles */
@@ -1965,12 +1970,21 @@ h6 { font-size: clamp(1rem, 1.5vw, 1.1rem); font-weight: 500; }
   z-index: 1000;
   background: var(--upto-surface);
   border-bottom: 1px solid var(--upto-border);
+  /* The page runs edge-to-edge under the status bar (index.html sets viewport-fit=cover), so
+     without this the whole 56px header row sits beneath the notch / Dynamic Island on an
+     iPhone — the logo, account and sign-out were visible but unreachable. Padding rather than
+     an offset so the header's own background fills the strip behind the status bar instead of
+     leaving a gap. Resolves to 0 on desktop and on non-notched devices, so the web layout is
+     unchanged. */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 .site-header-inner {
   max-width: 960px;
   margin: 0 auto;
-  padding: 0 24px;
+  /* Left/right insets matter in landscape, where the notch and the rounded corners eat into
+     the horizontal edges. */
+  padding: 0 calc(24px + env(safe-area-inset-right, 0px)) 0 calc(24px + env(safe-area-inset-left, 0px));
   height: 56px;
   display: flex;
   align-items: center;

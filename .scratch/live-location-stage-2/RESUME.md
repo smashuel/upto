@@ -109,7 +109,8 @@ Two PRD items needed **no code**: CapacitorHttp already patches `window.fetch` v
 
 ### The immediate next action is a device, not more code
 
-Run the matrix: {foreground, backgrounded, screen-locked, killed-then-relaunched} × {`off`,
+**Fill in [slice-02-device-matrix.md](slice-02-device-matrix.md)** — a step-by-step checklist of the
+nine tests, with what each one proves and what a failure means. Summary: {foreground, backgrounded, screen-locked, killed-then-relaunched} × {`off`,
 `owner-only`, `with-trip`}, plus the contextual "always" prompt, >5 min background delivery, the
 iOS blue status-bar indicator, and how a *stationary* traveller's staleness reads.
 

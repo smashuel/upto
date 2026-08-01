@@ -54,7 +54,8 @@ workflows:
           for KEY in NSLocationWhenInUseUsageDescription \
                      NSLocationAlwaysAndWhenInUseUsageDescription \
                      UIBackgroundModes \
-                     ITSAppUsesNonExemptEncryption; do
+                     ITSAppUsesNonExemptEncryption \
+                     CFBundleURLTypes; do
             /usr/libexec/PlistBuddy -c "Print :$KEY" "$PLIST" >/dev/null 2>&1 \
               || { echo "FATAL: $KEY missing from Info.plist"; exit 1; }
           done

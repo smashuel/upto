@@ -14,6 +14,29 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<!--
+		Custom URL scheme, so iOS can route the Google OAuth callback back INTO the app.
+		Sign-in runs in the system browser (Capacitor hands off any navigation outside the
+		app's own origin), and the WebView's internal `capacitor://localhost` origin is not a
+		registered scheme — redirecting there produced "the application couldn't be opened"
+		with the session token stranded in Safari.
+
+		Must stay identical to NATIVE_RETURN_ORIGIN in oauth-origin.js (the backend's
+		allowlist) and NATIVE_OAUTH_RETURN_ORIGIN in src/services/oauthReturn.ts.
+	-->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>world.upto.app</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>world.upto.app</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>

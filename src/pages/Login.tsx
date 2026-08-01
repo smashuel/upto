@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { API_CONFIG } from '../config/api';
+import { detectPlatform } from '../services/positionSource';
+import { oauthReturnOrigin } from '../services/oauthReturn';
 
 // Google "G" logo as an inline SVG — no external asset needed
 const GoogleLogo = () => (
@@ -82,9 +84,13 @@ export const Login: React.FC = () => {
   };
 
   const handleGoogleSignIn = () => {
-    // Full-page redirect to backend OAuth endpoint — passes current origin
-    // so the backend knows where to redirect back after auth
-    const origin = window.location.origin;
+    // Full-page redirect to the backend OAuth endpoint, passing the address it should send us
+    // back to. On the web that is this origin. In the native shell it must NOT be
+    // window.location.origin: that is `capacitor://localhost`, which no app on the device
+    // registers, so the callback redirect strands the session token on an "application
+    // couldn't be opened" error in Safari. oauthReturnOrigin picks the app's real URL scheme
+    // instead, which useAuthDeepLink then catches. The backend allowlists both.
+    const origin = oauthReturnOrigin(detectPlatform(), window.location.origin);
     window.location.href = `${API_CONFIG.BASE_URL}/api/auth/google?origin=${encodeURIComponent(origin)}`;
   };
 

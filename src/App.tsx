@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import { Layout } from './components/layout/Layout';
 import CrashReportBanner from './components/CrashReportBanner';
+import { useAuthDeepLink } from './hooks/useAuthDeepLink';
 import { Home } from './pages/Home';
 import { CreateTripLink } from './pages/CreateAdventure';
 import { ActiveTrip } from './pages/ActiveTrip';
@@ -24,10 +25,20 @@ const queryClient = new QueryClient({
   },
 });
 
+/**
+ * Renders nothing — it exists so the Google-OAuth deep-link listener sits INSIDE the Router
+ * (it navigates once the session token arrives). Native only; see useAuthDeepLink.
+ */
+function AuthDeepLinkListener() {
+  useAuthDeepLink();
+  return null;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Router>
+        <AuthDeepLinkListener />
         <CrashReportBanner />
         <Layout>
           <Routes>

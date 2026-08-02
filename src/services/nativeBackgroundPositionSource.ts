@@ -54,7 +54,24 @@ const DEFAULT_BACKGROUND_TITLE = 'Upto is sharing your trip location';
 const DEFAULT_BACKGROUND_MESSAGE =
   'Your watchers can see where you are while this trip is running. Stop the trip to stop sharing.';
 
-const DEFAULT_DISTANCE_FILTER_M = 10;
+/**
+ * Zero — report every OS update, and let the time throttle below set the pace.
+ *
+ * This was 10 m, and the device matrix (2026-08-03) showed why that was wrong: a **stationary**
+ * traveller produced no fixes at all. Not a slow trickle — none. Their own marker froze, their
+ * watchers decayed to "paused, last known N min ago" (which reads as *something is wrong*, not
+ * *they stopped for lunch*), and anything waiting for "the next fix" waited forever. That is what
+ * made switching sharing back on unrecoverable rather than merely slow (issue 06).
+ *
+ * A distance filter and a time cadence are different axes, and applying both quietly changed the
+ * contract `describeLiveness` was designed against: Stage 1 produced a fix every cadence whether
+ * or not the traveller moved. This restores that.
+ *
+ * The battery objection does not really apply. A watcher is registered for the whole trip either
+ * way, so the GPS radio — the actual expense — is already on; the filter saves callback volume,
+ * not power. See issue 07.
+ */
+const DEFAULT_DISTANCE_FILTER_M = 0;
 
 const lazyPlugin = (): BackgroundWatcherPlugin =>
   registerPlugin<BackgroundWatcherPlugin>('BackgroundGeolocation');
@@ -63,6 +80,7 @@ export class NativeBackgroundPositionSource implements PositionSource {
   private readonly intervalMs: number;
   private readonly plugin: BackgroundWatcherPlugin;
   private readonly deps: NativeSourceDeps;
+  private readonly onTeardownError?: (error: unknown) => void;
 
   private handlers: PositionSourceHandlers | null = null;
   private watcherId: string | null = null;
@@ -86,6 +104,7 @@ export class NativeBackgroundPositionSource implements PositionSource {
     deps: NativeSourceDeps = {},
   ) {
     this.intervalMs = options.intervalMs;
+    this.onTeardownError = options.onTeardownError;
     this.plugin = plugin;
     this.deps = deps;
   }
@@ -144,9 +163,16 @@ export class NativeBackgroundPositionSource implements PositionSource {
   }
 
   private removeById(id: string): void {
-    // Fire-and-forget: there is nothing useful to do if removal fails, and throwing out of a
-    // React effect cleanup would be worse than the leak.
-    this.plugin.removeWatcher({ id }).catch(() => {});
+    // The rejection must not escape — this runs inside a React effect cleanup, where a throw
+    // would take the app down at exactly the moment the traveller is switching sharing off.
+    // But it must not be *discarded* either: a failed removal means the OS is still collecting
+    // their location after they said stop, and that is the one outcome they need to hear about.
+    // Reporting is best-effort too, so a broken reporter can't resurrect the throw it replaced.
+    this.plugin.removeWatcher({ id }).catch((err: unknown) => {
+      try {
+        this.onTeardownError?.(err);
+      } catch { /* a reporter that throws must not break teardown */ }
+    });
   }
 
   private onWatcherEvent(

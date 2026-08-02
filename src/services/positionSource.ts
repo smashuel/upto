@@ -41,6 +41,15 @@ export interface PositionSourceOptions {
   intervalMs: number;
   /** Passed through to the web geolocation provider; sensible battery-friendly defaults. */
   geolocationOptions?: PositionOptions;
+  /**
+   * Called when tearing the source down fails — currently only the native source, where it means
+   * the OS watcher may still be running **after the traveller chose to stop sharing**.
+   *
+   * This is a privacy signal, not telemetry: the person needs to know their choice didn't take
+   * effect. The rejection itself is still swallowed (this runs inside a React effect cleanup,
+   * where an escaping throw would be worse than the leak) — only the fact of it is reported.
+   */
+  onTeardownError?: (error: unknown) => void;
 }
 
 /**

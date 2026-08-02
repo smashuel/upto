@@ -329,6 +329,67 @@ test('a callback from a superseded watcher is ignored', async () => {
   assert.deepEqual(c.fixes, [], 'the old watcher must not feed the new handlers');
 });
 
+test('a failed watcher removal is reported, not swallowed', async () => {
+  // The privacy guarantee. If removeWatcher fails, the OS keeps collecting the traveller's
+  // location AFTER they chose "off" — and until now that failure was discarded by a bare
+  // .catch(() => {}), making it indistinguishable from success on the one path where the
+  // difference matters most. The rejection must still not escape (this runs in a React effect
+  // cleanup), but the FACT of it has to reach someone.
+  const failures: unknown[] = [];
+  const plugin: BackgroundWatcherPlugin = {
+    addWatcher: () => Promise.resolve('watcher-1'),
+    removeWatcher: () => Promise.reject(new Error('watcher not found')),
+  };
+  const src = new NativeBackgroundPositionSource(
+    { intervalMs: INTERVAL, onTeardownError: (e) => failures.push(e) },
+    plugin,
+  );
+  src.start(collector().handlers);
+  await new Promise((r) => setTimeout(r, 0));
+
+  src.stop();
+  await new Promise((r) => setTimeout(r, 0));
+
+  assert.equal(failures.length, 1, 'the removal failure is surfaced');
+  assert.match(String(failures[0]), /watcher not found/);
+});
+
+test('a successful removal reports nothing', async () => {
+  const failures: unknown[] = [];
+  const { plugin, state } = fakePlugin();
+  const src = new NativeBackgroundPositionSource(
+    { intervalMs: INTERVAL, onTeardownError: (e) => failures.push(e) },
+    plugin,
+  );
+  src.start(collector().handlers);
+  await Promise.resolve();
+  state.resolveAddWatcher!('watcher-1');
+  await Promise.resolve();
+
+  src.stop();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(failures, []);
+});
+
+test('a teardown-error reporter that itself throws cannot break teardown', async () => {
+  // Belt and braces: this path runs during effect cleanup, where an escaping throw would take
+  // the app down at exactly the moment the user is turning sharing off.
+  const plugin: BackgroundWatcherPlugin = {
+    addWatcher: () => Promise.resolve('watcher-1'),
+    removeWatcher: () => Promise.reject(new Error('nope')),
+  };
+  const src = new NativeBackgroundPositionSource(
+    { intervalMs: INTERVAL, onTeardownError: () => { throw new Error('reporter exploded'); } },
+    plugin,
+  );
+  src.start(collector().handlers);
+  await new Promise((r) => setTimeout(r, 0));
+  src.stop();
+  await new Promise((r) => setTimeout(r, 0));
+  // Reaching here without an unhandled rejection is the assertion.
+  assert.ok(true);
+});
+
 test('stop is safe to call without a start, and twice', async () => {
   const { plugin, state } = fakePlugin();
   const src = new NativeBackgroundPositionSource({ intervalMs: INTERVAL }, plugin);

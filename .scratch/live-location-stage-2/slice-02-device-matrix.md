@@ -1,210 +1,114 @@
-# Slice 02 — on-device background matrix (the acceptance gate)
+# Slice 02 — on-device background matrix
 
-Status: RUN 2026-08-03 — tests 1-7 complete, 8 and 9 not run. See Verdict.
-Build tested: 25E253 / 9f98dc1  (Codemagic build number / commit)
-Device / iOS version: iPhone 16 / Version 26.4.1
-Date: 3-Aug-2026
+**Round 1: RUN 2026-08-03** (iPhone 16 / iOS 26.4.1, build 25E253 / `9f98dc1`) — full results and
+verdict archived in [slice-02-device-matrix-round-1.md](slice-02-device-matrix-round-1.md).
 
-Fill this in as you go. A green unit suite is necessary and **not** sufficient — this document
-is what closes the slice. See [issue 02](issues/02-native-background-location.md) and
-[ADR 019](../../brain/decisions/019-background-geolocation-plugin.md).
+**Round 2: NOT RUN.** This is the retest sheet. Fixes for issues 06–10 landed 2026-08-03 and need
+a new TestFlight build to verify.
 
----
-
-## Before you start
-
-- **Two phones is much easier than one.** You are the traveller on the iPhone; the watcher view
-  is the share link open on a laptop or second device. Alone, you can't see what a watcher sees
-  while your phone is locked in your pocket — which is the entire thing being tested.
-- **Go outside, and move.** The plugin reports on movement (`distanceFilter` 10 m). Sitting at a
-  desk produces almost nothing, and you'll wrongly conclude tracking is broken.
-- **Allow about 90 minutes**, mostly waiting. Test 4 alone needs a 20-minute walk.
-- **Expected cadence is one fix per ~3 minutes.** Not instant. Don't judge a test in 30 seconds.
-- Keep the watcher view open the whole time and note the timestamps it shows.
+Build tested: _______   Device / iOS: _______   Date: _______
 
 ---
 
-## Test 1 — Permission prompt is contextual (5 min)
+## Round 1 outcome, in one paragraph
 
-The prompt must appear **when a trip goes live**, never on app launch.
+**Background tracking held.** Locked in a pocket for 20 minutes, steady ~3-minute updates, past
+the 5-minute HTTP-throttle mark. That was the make-or-break question, so
+`@capacitor-community/background-geolocation` stays and ADR 011's reconsider clause is **not**
+triggered. Six defects were found, all in our own consumer logic rather than the plugin.
 
-1. Force-quit and relaunch the app. → **No location prompt should appear.**
-2. Create a TripLink and start it with sharing set to **Share with trip**.
-3. iOS asks for location. Choose **Allow While Using App** if offered, then expect a second,
-   later prompt for **Always Allow** (iOS often defers this until the app actually backgrounds).
+## What changed since round 1
 
-- [X] No prompt on launch
-- [X] Prompt appears at trip start
-- [X] "Always Allow" was granted
-
-Notes: No prompt on launch. Then when trip route was opened on the map to be drawn It asked for never allow, allow while using or always allow. I selected allow while using. Then when i went to start trip, it asked that "upto" uses location in the background, and gave the option to always allow, which i did and it worked.
-
-> If you only ever get "While Using", say so — that path is **known not to be labelled** in the
-> UI (the plugin exposes no permission-state API, ADR 019). Tracking will simply stop when you
-> background the app, and watchers will see "paused". That's expected-but-unlabelled, not a new
-> bug.
+| Issue | Change | Retest |
+|---|---|---|
+| [07](issues/07-stationary-traveller-produces-no-fixes.md) stationary → no fixes | `distanceFilter` 10 m → **0**; the time throttle alone sets the pace | **B** |
+| [10](issues/10-sampling-cadence-too-slow.md) cadence too slow | 3 min → **30 s** ([ADR 020](../../brain/decisions/020-thirty-second-sampling-cadence.md)); battery readout added | **A, D** |
+| [06](issues/06-sharing-resume-does-not-recover-watchers.md) resume never recovers | expected to fall out of 07 — no separate fix | **C** |
+| [09](issues/09-owner-marker-freezes-on-own-map.md) own marker freezes | stale position cleared on teardown; root cause in 07 | **B, C** |
+| [08](issues/08-watcher-removal-failure-is-invisible.md) indicator lingers | a failed removal now **tells you**, instead of being discarded | **C** |
+| [11](issues/11-relaunch-does-not-return-to-live-trip.md) relaunch doesn't resume | **not fixed** — needs a product decision | — |
 
 ---
 
-## Test 2 — Foreground (5 min)
+# Round 2 — the retest (about 60 min)
 
-Walk with the app open on the trip screen.
+Same setup as before: go outside, move, second device for the watcher view. **Fixes now arrive
+every 30 seconds, so everything is far quicker to judge than last time.**
 
-- [X] Your own marker moves on your map
-- [X] Watcher view shows the marker moving
-- [X] Watcher liveness reads "updated N min ago" with N small
+## A — Cadence and battery ⭐ prioritise this one (30+ min)
 
----
+Start a trip with sharing on **Watchers**. Walk. Then leave it running while you do something
+else — the longer the better; the readout won't project a rate until 20 minutes in.
 
-## Test 3 — Backgrounded (10 min)
+- [ ] Watcher updates arrive roughly every **30 seconds**
+- [ ] A **battery line appears under the sharing toggle** on the trip screen
 
-Switch to another app (Camera, Messages) and keep walking.
+Battery line after ~20 min, verbatim: ______________________________
 
-- [X] iOS shows the **blue location indicator** in the status bar
-- [X] Watcher marker keeps moving
-- [X] Watcher does **NOT** flip to "paused" / "unavailable" ← *this is the `shouldRetractOnHide`
-      fix; if it says paused the moment you leave the app, that fix regressed*
+Battery line after an hour or more: ______________________________
 
----
+> **This number decides ADR 020.** 30 s was chosen on a safety argument without its battery cost;
+> the readout exists to settle it with data rather than opinion. Rough bar: a 10-hour day must
+> not need more than about half a charge, because you need battery left for the emergency the app
+> exists for. If it fails, the answer is finishing Slice 3 (traveller-chosen power modes), not
+> simply reverting to 3 minutes.
 
-## Test 4 — Screen locked, phone in pocket (20 min) ⭐ THE ONE THAT MATTERS
+## B — Stationary traveller (10 min) — this was the root cause
 
-**This is the make-or-break test.** If it fails, the slice fails, regardless of everything else.
+Stand still, phone locked, trip live.
 
-Lock the phone, put it in a pocket, walk for 20 minutes. Don't peek.
+- [ ] Watcher keeps updating every ~30 s **while you are not moving**
+- [ ] Your own marker on your phone stays current rather than freezing
+- [ ] Watcher never says "paused" while you're standing there
 
-- [X] Watcher marker updated throughout — **write down the gaps between updates**
-- [X] Still updating at the 20-minute mark (not just the first few)
-- [X] Updates continued past the **5-minute** mark ← the WebView HTTP throttle would show here
+> Round 1 produced **no fixes at all** when stationary — that is what broke tests 6 and 7. This is
+> the direct check that `distanceFilter: 0` fixed it.
 
-Longest gap observed: 3 minutes (i think we should lower this )
+## C — Privacy toggles — the round-1 failures (10 min)
 
-> A steady ~3-minute cadence is a pass. Updates that stop after ~5 minutes point at HTTP
-> delivery; updates that stop after ~10–15 minutes point at iOS suspending the app. **Either
-> one is the ADR 011 reconsider trigger, not a bug to chase** — record it and stop.
+Mid-trip, cycle **Watchers → Only me → Off → Watchers**, pausing on each.
 
----
+- [ ] **Only me**: your own marker keeps updating; watcher stops and says so
+- [ ] **Off**: blue location indicator disappears **within a few seconds, no refresh**
+- [ ] **Off**: your own marker stops
+- [ ] **Back to Watchers**: watcher recovers **within ~30 s** ← round 1 never recovered at all
+- [ ] Do the whole cycle **standing still**, then again **walking**. Both must work.
 
-## Test 5 — Killed and relaunched (10 min)
+If a red toast appears saying background location could not be fully stopped, **write it down
+verbatim**. That is the new issue-08 instrumentation firing, and it means the OS may still be
+collecting your location after you chose Off:
 
-With the trip still active, swipe up to force-quit the app. Wait 2 minutes, walk, then reopen it.
+______________________________________________________________________
 
-- [X] After relaunch, tracking resumes once you're back on the trip screen
-- [X] Does the app reopen **on the trip screen** or at the home screen? home screen, I had to go into past trip, and selected the 'active' trip to get back to the page
+## D — Sanity re-check of what already passed (10 min)
 
-> **Known limitation, expect a partial pass.** A full swipe-kill relaunches at the app root, and
-> tracking will not resume until you navigate back to the trip. Fixing that means auto-opening a
-> live trip on launch — a product decision I flagged rather than guessed at. Just record what it
-> does.
+The cadence change touches the same code path, so confirm nothing regressed.
 
----
+- [ ] Backgrounded (switch to another app): watcher keeps updating, does **not** say "paused"
+- [ ] Screen locked in pocket 10 min: still updating at the end
+- [ ] Permission prompt still appears only when a trip goes live, not on launch
 
-## Test 6 — Privacy: `owner-only` (5 min)
+## E — Overdue keeps tracking (10 min) — never run
 
-Mid-trip, switch sharing to **Just me**.
+Set a short expected-return time and let it lapse.
 
-- [ ] Your own marker still updates on your phone
-      note: it went my location at the start of the trip and stayed there
-- [X] Watcher view stops updating and says so
-      note: although this was extremely delayed
-- [X] Blue location indicator still on (you're still sampling, just not publishing)
-
----
-
-## Test 7 — Privacy: `off` genuinely collects nothing (5 min) ⭐ SECOND MOST IMPORTANT
-
-Mid-trip, switch sharing to **Off**.
-
-- [X] Blue location indicator **disappears within a few seconds** ← proves the native watcher was
-      actually removed, not merely ignored. 
-      note: but this required a refresh and so took longer than a few seconds, it didnt really respond in a 'live' manner
-- [X] Watcher view stops updating
-- [X] Your own marker stops updating too
-      note: my marker just stayed at the beginning of the trip, no change
-- [ ] Turn sharing back to **Share with trip** → indicator returns and updates resume
-      note: this did not recover well, the watcher still only shows live tracking paused - last known 13min ago
-
-> The blue indicator vanishing is the real assertion here. "Off" that keeps the OS collecting
-> location while telling the traveller it isn't would be the worst bug this app could ship.
-
----
-
-## Test 8 — Overdue keeps tracking (10 min)
-
-Let a trip go past its expected return time (or set a short one deliberately).
-
-- [ ] Status goes overdue, and the overdue email arrives
+- [ ] Status goes overdue and the email arrives
 - [ ] Position **keeps updating** while overdue ← the period watchers most need it
 
 ---
 
-## Test 9 — Stationary traveller (10 min) — observation, not pass/fail
+## Not being retested, and why
 
-Stop moving for 10 minutes with the trip live and the phone locked.
+- **[Issue 11](issues/11-relaunch-does-not-return-to-live-trip.md)** — a force-quit doesn't resume
+  tracking. Confirmed in round 1 and deliberately not fixed: the options are auto-opening a live
+  trip on launch (hijacks app launch) or lifting the source above the screen (bigger, and also
+  fixes navigating to Profile stopping tracking). **Your call before I build either.**
+- **Android** — still no device. That half of the matrix stays open.
 
-What does the watcher view say after 10 minutes? ______________________________
+## Round 2 verdict
 
-> By design a stationary phone produces no new fixes, so a traveller resting at a hut will read
-> as stale. Honest, but it may read as alarming. **This is the open question in ADR 019** — your
-> answer decides whether a heartbeat is worth adding in Slice 3. Note that a heartbeat re-sending
-> a last-known position as if it were current is exactly the fabricated freshness this codebase
-> refuses everywhere else, so it would need a different design.
+- [ ] **PASS** — A, B and C all clean → Slice 02 closes.
+- [ ] **Battery fails the bar** → ADR 020 reconsider: finish Slice 3 power modes.
+- [ ] **Something else** — note it below:
 
----
-
-## Battery (record opportunistically)
-
-Battery % at trip start: 28% 8:23am  End: ____  Elapsed: ____ min
-
-> Settings → Battery → find Upto for a per-app figure after a few hours.
-
----
-
-## Verdict — 2026-08-03
-
-- [x] **The ADR-011 bet is validated. Do NOT trigger the reconsider clause.**
-- [ ] PASS — not yet; test 7 was not clean. Slice 02 stays open on six defects.
-- [ ] FAIL — background tracking not held. *(Not this. It held.)*
-
-### What actually happened
-
-**The hard part worked.** Test 3 (backgrounded) and test 4 (locked, in pocket, 20 minutes) were
-both clean, with a steady ~3-minute cadence holding past the 5-minute HTTP-throttle mark and all
-the way to 20 minutes. That was the make-or-break question and the answer is yes: a locked iPhone
-in a pocket keeps its watchers informed.
-
-So `@capacitor-community/background-geolocation` stays. **None of the defects below are in the
-plugin** — they are all in our own consumer logic around the sharing toggle and the cadence
-model. That distinction is the whole point of having run this: it is the difference between
-"change the foundation" and "fix six things we wrote."
-
-`shouldRetractOnHide` also proved out — backgrounding did not flip watchers to "paused", which
-was the one-line fix that would otherwise have undone the slice at the last step.
-
-### The defects, filed
-
-| # | Issue | Why it matters |
-|---|-------|----------------|
-| [06](issues/06-sharing-resume-does-not-recover-watchers.md) | Sharing `off` → back on never recovers watchers | **Worst shape available**: the app says you're being watched and you aren't |
-| [07](issues/07-stationary-traveller-produces-no-fixes.md) | A stationary traveller produces no fixes at all | Root cause behind 06 and 09 |
-| [08](issues/08-watcher-removal-failure-is-invisible.md) | Blue indicator needs a refresh to clear after `off` | We cannot currently tell a privacy failure from OS lag |
-| [09](issues/09-owner-marker-freezes-on-own-map.md) | Traveller's own marker freezes | Probably a symptom of 07 |
-| [10](issues/10-sampling-cadence-too-slow.md) | ~3-min cadence feels too coarse | Battery trade → Slice 3's built seam |
-| [11](issues/11-relaunch-does-not-return-to-live-trip.md) | Relaunch after a kill doesn't resume tracking | Confirmed known limitation; silent |
-
-**Fix 07 first.** It plausibly resolves 06 and 09 on its own, and fixing those before it would
-mean building around a cause instead of removing it.
-
-### Not run
-
-Tests 8 (overdue keeps tracking) and 9 (stationary observation). Test 9 was largely answered
-sideways anyway — issue 07 *is* the stationary finding, discovered because it broke two other
-tests. Test 8 still needs doing; overdue email delivery was separately confirmed working on
-2026-08-01.
-
-### Also noted
-
-Test 1 produced **two** permission prompts, not one: location when the map opened to draw a
-route, then background-location at trip start. Both were contextual and both were granted, so it
-passed — but the first one comes from the map's own current-location lookup, not the trip. Worth
-knowing it exists; not filed.
+______________________________________________________________________

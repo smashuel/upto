@@ -1,6 +1,6 @@
 # 08 — The blue location indicator needs a page refresh to clear after switching sharing off
 
-Status: needs-info — reproduce with instrumentation before changing anything
+Status: INSTRUMENTED 2026-08-03 — a failed removal now tells the traveller. Reproduce and read the result.
 Priority: high — this is the privacy guarantee, and right now we cannot see whether it held
 Surfaced: Slice 02 device matrix test 7, 2026-08-03 (iPhone 16 / iOS 26.4.1, build 25E253 / `9f98dc1`)
 Area: `src/services/nativeBackgroundPositionSource.ts` (`removeById`), `src/pages/ActiveTrip.tsx`

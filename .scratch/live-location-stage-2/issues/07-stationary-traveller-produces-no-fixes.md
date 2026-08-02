@@ -1,6 +1,6 @@
 # 07 — A stationary traveller produces no fixes at all
 
-Status: ready-for-agent — needs a product call on the cadence model first
+Status: FIXED 2026-08-03 (`distanceFilter` 0 + 30 s throttle) — needs device retest
 Priority: high — it is the root cause behind issues 06 and 08, and it misreports safety state
 Surfaced: Slice 02 device matrix, 2026-08-03 (iPhone 16 / iOS 26.4.1, build 25E253 / `9f98dc1`)
 Area: `src/services/nativeBackgroundPositionSource.ts` (`DEFAULT_DISTANCE_FILTER_M`, the throttle)

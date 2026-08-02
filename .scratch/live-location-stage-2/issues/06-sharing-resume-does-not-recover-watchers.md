@@ -1,6 +1,6 @@
 # 06 — Switching sharing back on does not bring watchers back
 
-Status: ready-for-agent
+Status: LIKELY FIXED 2026-08-03 via issue 07 — needs device retest before closing
 Priority: **highest of this batch** — the traveller believes they are sharing and nobody is watching
 Surfaced: Slice 02 device matrix test 7, 2026-08-03 (iPhone 16 / iOS 26.4.1, build 25E253 / `9f98dc1`)
 Area: `src/pages/ActiveTrip.tsx` (`handleSetSharing`)

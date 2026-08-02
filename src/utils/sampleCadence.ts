@@ -6,9 +6,14 @@
 // both derive their cadence here. No React, no plugin, no clocks: pure so it can be exhaustively
 // unit-tested off-device. See .scratch/live-location-stage-2/issues/03-battery-aware-cadence-and-power-mode.md.
 //
-// Battery invariant (grilled 2026-07-05, carried from Stage 1): the coarse floor is a *starting
-// point, not a ceiling*. We only ever widen the interval / lower accuracy from the foreground
-// floor — native capability is never a licence to sample faster.
+// Battery invariant (grilled 2026-07-05, carried from Stage 1): the floor is a *starting point,
+// not a ceiling*. Within this module we only ever widen the interval / lower accuracy from the
+// foreground floor — nothing here samples faster than FG_FLOOR_MS, whatever the inputs say.
+//
+// The floor's VALUE moved from 3 minutes to 30 seconds on 2026-08-03 by explicit decision
+// (ADR 020) after the device matrix. The invariant above is unchanged — the shape of the policy
+// still only widens — but the starting point is six times tighter, and the battery cost of that
+// has not yet been measured. Treat FG_FLOOR_MS as provisional until it has been.
 
 import type { TripStatus } from '../types/adventure';
 
@@ -34,12 +39,27 @@ export interface SampleCadence {
 // --- Tunable constants (single home for the battery-vs-safety tradeoff) ---
 
 /**
- * Foreground floor: the tightest we ever sample (Stage-1 ~3-min foreground cadence). Exported so
- * the web foreground source (ActiveTrip) uses the same single source of truth, not a copy.
+ * Foreground floor: the tightest we ever sample. Exported so the web foreground source
+ * (ActiveTrip) uses the same single source of truth, not a copy.
+ *
+ * **30 s as of 2026-08-03, down from the Stage-1 3-minute floor — see
+ * [ADR 020](../../brain/decisions/020-thirty-second-sampling-cadence.md).** The device matrix
+ * showed 3 minutes held reliably in a pocket but read as too coarse to watch, and a 3-minute-old
+ * marker is a wide search radius for someone moving. The battery cost of that trade is
+ * deliberately **unmeasured so far** — ADR 020 exists to make sure it gets measured rather than
+ * assumed, and this constant is the one place to widen it again if the data says so.
  */
-export const FG_FLOOR_MS = 3 * 60 * 1000;
-/** Backgrounded base: wider than foreground because the screen is off and radios are dear. */
-const BG_BASE_MS = 6 * 60 * 1000;
+export const FG_FLOOR_MS = 30 * 1000;
+/**
+ * Backgrounded base: still wider than foreground, because the screen is off and radios are dear.
+ * Held at 2× the floor, as before.
+ *
+ * Note this is dormant — `resolveSampleCadence` is not yet wired into either source (Slice 3),
+ * so today both foreground and background run at FG_FLOOR_MS. When Slice 3 lands, backgrounded
+ * tracking will drop to this value unless the battery data says otherwise. That is a decision to
+ * take with numbers in hand, not now.
+ */
+const BG_BASE_MS = 60 * 1000;
 
 /** Battery-saver multiplies the interval — the traveller has opted to trade freshness for life. */
 const SAVER_MULTIPLIER = 2;

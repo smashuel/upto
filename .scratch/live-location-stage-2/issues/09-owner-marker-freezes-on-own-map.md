@@ -1,6 +1,6 @@
 # 09 — The traveller's own marker freezes at the start of the trip
 
-Status: needs-info — probably a symptom of issue 07; confirm before treating as separate
+Status: FIXED 2026-08-03 (stale position cleared on teardown; root cause addressed in issue 07) — needs device retest
 Priority: medium — the traveller cannot tell whether tracking is working
 Surfaced: Slice 02 device matrix tests 6 and 7, 2026-08-03
 Area: `src/pages/ActiveTrip.tsx` (`ownPosition`, `liveCoords`)

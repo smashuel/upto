@@ -1,6 +1,6 @@
 # 10 — Sampling cadence feels too slow at ~3 minutes
 
-Status: needs-decision — a battery trade, not a bug
+Status: DONE 2026-08-03 — cadence is now 30 s ([ADR 020](../../../brain/decisions/020-thirty-second-sampling-cadence.md)). Battery cost now measured in-app; provisional until read.
 Priority: medium
 Surfaced: Slice 02 device matrix test 4, 2026-08-03 — *"Longest gap observed: 3 minutes (i think we should lower this)"*
 Area: `LIVE_SAMPLE_INTERVAL_MS` in `src/pages/ActiveTrip.tsx`; `src/utils/sampleCadence.ts` (Slice 3)

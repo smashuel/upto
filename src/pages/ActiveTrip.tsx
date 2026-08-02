@@ -9,6 +9,8 @@ import { applyLifecycleEvent } from '../utils/lifecycleReducer';
 import { LIVE_STALE_MS } from '../utils/liveness';
 import { selectPositionSource, createPositionSource, detectPlatform } from '../services/positionSource';
 import { shouldRetractOnHide } from '../services/retractOnHide';
+import { Device } from '@capacitor/device';
+import { describeBatteryUsage } from '../utils/batteryUsage';
 import { FG_FLOOR_MS } from '../utils/sampleCadence';
 import type { TripLink } from '../types/adventure';
 
@@ -253,6 +255,9 @@ export const ActiveTrip: React.FC = () => {
   // their own location). For owner-only this is the ONLY source — nothing is POSTed.
   const [ownPosition, setOwnPosition] = useState<{ lat: number; lng: number; timestamp: string } | null>(null);
   const [locationDenied, setLocationDenied] = useState(false);
+  // Battery observation for ADR 020 — the 30-second cadence was chosen on a safety argument
+  // without its battery cost, so the trip measures it and reports back.
+  const [battery, setBattery] = useState<{ startPct: number | null; startedAt: number; nowPct: number | null } | null>(null);
 
   const now = useNow(30000);
 
@@ -331,7 +336,15 @@ export const ActiveTrip: React.FC = () => {
 
     const source = createPositionSource(
       selectPositionSource(detectPlatform()),
-      { intervalMs: LIVE_SAMPLE_INTERVAL_MS },
+      {
+        intervalMs: LIVE_SAMPLE_INTERVAL_MS,
+        // A failed teardown means the OS may still be collecting their location after they
+        // chose to stop. That is not a log line — it is something the traveller has to be told,
+        // because only they can act on it (issue 08).
+        onTeardownError: () => {
+          toast.error('Could not fully stop background location. Check Settings › Privacy › Location Services for Upto.');
+        },
+      },
     );
     if (!source) return; // environment can't supply positions (SSR / unsupported browser)
 
@@ -373,8 +386,43 @@ export const ActiveTrip: React.FC = () => {
     return () => {
       source.stop();
       window.removeEventListener('pagehide', onHide);
+      // Drop the last fix along with the source that produced it. Without this, resuming after
+      // a sharing change instantly re-draws the position from BEFORE the change as though it
+      // were current — on the traveller's own map, while the app tells them sharing is back on
+      // (issue 09). The next fix is at most one cadence away; showing nothing until then is the
+      // honest gap.
+      setOwnPosition(null);
     };
   }, [shareToken, tripLink?.status, liveSharing]);
+
+  // Battery observation for ADR 020. Samples when tracking starts and on the same tick as the
+  // clock, so the traveller can read the cost of the 30-second cadence off their own screen
+  // instead of having to remember to check Settings at both ends of a walk. Native only —
+  // browsers either refuse the Battery API or lie about it.
+  useEffect(() => {
+    if (detectPlatform() === 'web') return;
+    const tracking = (tripLink?.status === 'active' || tripLink?.status === 'overdue')
+      && liveSharing !== 'off';
+    if (!tracking) return;
+
+    let cancelled = false;
+    const sample = async () => {
+      try {
+        const info = await Device.getBatteryInfo();
+        if (cancelled) return;
+        const pct = typeof info.batteryLevel === 'number'
+          ? Math.round(info.batteryLevel * 100)
+          : null;
+        setBattery(prev => prev
+          ? { ...prev, nowPct: pct }
+          // First reading of this trip becomes the baseline.
+          : { startPct: pct, startedAt: Date.now(), nowPct: pct });
+      } catch { /* platform can't report it — the readout just stays hidden */ }
+    };
+    sample();
+    const id = setInterval(sample, 60_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [tripLink?.status, liveSharing]);
 
   // Toggle who sees the live position, mid-trip. Optimistic + persisted. When leaving
   // with-trip, immediately tell watchers to stop showing the live point (they don't learn the
@@ -515,6 +563,9 @@ export const ActiveTrip: React.FC = () => {
   // Live location: the traveller's own current position (from this device's sampling loop), so
   // they can confirm tracking is working. Shown for with-trip and owner-only alike — it's their
   // own location — and hidden only when sharing is off. Greyed when the last fix has gone stale.
+  const batteryLine = battery
+    ? describeBatteryUsage({ ...battery, now: now.getTime() })
+    : null;
   const ownFixAgeMs = ownPosition ? now.getTime() - Date.parse(ownPosition.timestamp) : null;
   const ownFixStale = ownFixAgeMs != null && ownFixAgeMs >= LIVE_STALE_MS;
   const liveCoords = liveSharing !== 'off' && ownPosition
@@ -570,6 +621,19 @@ export const ActiveTrip: React.FC = () => {
 
         {/* ── Live-location sharing control ── */}
         <LiveSharingControl value={liveSharing} denied={locationDenied} onChange={handleSetSharing} />
+
+        {/* Battery cost of the 30-second cadence (ADR 020), measured on the trip rather than
+            argued about. Renders only on native, only while tracking, and only once there is
+            something honest to report. */}
+        {batteryLine && (
+          <p style={{
+            marginTop: -16, marginBottom: 24,
+            fontFamily: 'var(--font-ui)', fontSize: '0.75rem',
+            color: 'var(--upto-text-muted)',
+          }}>
+            {batteryLine}
+          </p>
+        )}
 
         {/* ── Overdue banner ── */}
         {isOverdue && (

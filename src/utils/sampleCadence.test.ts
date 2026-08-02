@@ -2,11 +2,13 @@
 // battery-aware sampling policy: given trip status, foreground/background state, battery,
 // and the traveller's power mode, decide how often / how precisely to sample — or null when
 // the device should not sample at all. Tests assert external behaviour only (relative
-// widening/tightening + the null gates), not exact constants. See
+// widening/tightening + the null gates), with one deliberate exception: FG_FLOOR_MS is pinned
+// to its literal, because its value is a safety-vs-battery decision (ADR 020) rather than an
+// implementation detail. See
 // .scratch/live-location-stage-2/issues/03-battery-aware-cadence-and-power-mode.md.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveSampleCadence, type CadenceContext } from './sampleCadence.ts';
+import { resolveSampleCadence, FG_FLOOR_MS, type CadenceContext } from './sampleCadence.ts';
 
 const ctx = (over: Partial<CadenceContext> = {}): CadenceContext => ({
   status: 'active',
@@ -78,11 +80,21 @@ test('monotonic sanity: backgrounded/battery-saver interval >= foreground/adapti
   assert.ok(bgSaver.intervalMs >= fgAdaptive.intervalMs);
 });
 
-test('never samples faster than the coarse foreground floor (battery invariant)', () => {
+test('never samples faster than the foreground floor (battery invariant)', () => {
   // The tightest possible cadence (fg + adaptive + charging + full battery) must not dip below
-  // the Stage-1 ~3-min foreground floor — native capability is not a licence to firehose.
+  // the floor — no combination of favourable inputs is a licence to firehose.
+  //
+  // Asserted against FG_FLOOR_MS rather than a literal on purpose: the floor's *value* is a
+  // decision that has already moved once (3 min → 30 s, ADR 020) and may move again once the
+  // battery cost is measured. What must not change is that nothing dips below it.
   const tightest = resolveSampleCadence(
     ctx({ appState: 'foreground', powerMode: 'adaptive', isCharging: true, batteryLevel: 1 }),
   )!;
-  assert.ok(tightest.intervalMs >= 3 * 60 * 1000);
+  assert.equal(tightest.intervalMs, FG_FLOOR_MS);
+});
+
+test('the foreground floor is 30 seconds (ADR 020)', () => {
+  // Pinned deliberately. This is a safety-vs-battery decision, not an implementation detail:
+  // changing it should require changing a test that says so out loud.
+  assert.equal(FG_FLOOR_MS, 30_000);
 });

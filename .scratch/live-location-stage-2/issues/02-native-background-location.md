@@ -1,6 +1,6 @@
 # Slice 2 — Native background location (survives lock / background / kill)
 
-Status: built 2026-08-01 — code complete and unit-green; ON-DEVICE MATRIX IS THE GATE and is not yet run
+Status: matrix RUN 2026-08-03 — background tracking HOLDS (ADR-011 bet validated, plugin stays). Slice stays open on 6 consumer-side defects: issues 06-11.
 Parent: [.scratch/live-location-stage-2/PRD.md](../PRD.md)
 **Concrete build plan: [PRD-slice-02-native-background.md](../PRD-slice-02-native-background.md)** (scoped 2026-07-26)
 Covers user stories: 1, 2, 3, 4, 5, 13, 14, 18, 17 (regression)
@@ -154,7 +154,23 @@ run, and it — not this test count — is the acceptance gate.** Landed:
    is unaffected — but it is a real gap. The fix is lifting the source to an app-level service
    keyed on "a trip is live", which is a bigger change than a source swap.
 
-### The matrix still to run (the actual gate)
+## Matrix result — 2026-08-03 (iPhone 16 / iOS 26.4.1, build 25E253 / `9f98dc1`)
+
+**The make-or-break question is answered: yes.** Locked in a pocket for 20 minutes, the app kept
+its watchers updated at a steady ~3-minute cadence, past the 5-minute WebView-HTTP-throttle mark.
+Backgrounding did not flip watchers to "paused" (`shouldRetractOnHide` held).
+
+**`@capacitor-community/background-geolocation` stays — do not trigger ADR 011's reconsider
+clause.** Every defect found is in our own consumer logic, not the plugin.
+
+Six filed: [06](06-sharing-resume-does-not-recover-watchers.md) (sharing resume never recovers
+watchers — worst of the batch), [07](07-stationary-traveller-produces-no-fixes.md) (a stationary
+traveller produces no fixes; root cause of 06 and 09),
+[08](08-watcher-removal-failure-is-invisible.md), [09](09-owner-marker-freezes-on-own-map.md),
+[10](10-sampling-cadence-too-slow.md), [11](11-relaunch-does-not-return-to-live-trip.md).
+Fix 07 first. Full run: [slice-02-device-matrix.md](../slice-02-device-matrix.md).
+
+### The matrix still to run
 
 {foreground, backgrounded, screen-locked, killed-then-relaunched} × {`off`, `owner-only`,
 `with-trip`}, plus: the "always" prompt appears contextually at trip start; background delivery
